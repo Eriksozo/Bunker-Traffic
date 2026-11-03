@@ -1,0 +1,57 @@
+{
+  "name": "Bunker · sistema visual a partir do Malva",
+  "reference": {
+    "source": "Malva Dash · referência visual da interface",
+    "url": "https://malvadash.com/",
+    "date": "2026-11-02",
+    "method": "Inspeção de estilos computados e captura da visão geral; referências de tabelas e indicadores fornecidas pelo usuário.",
+    "boundary": "Medições da interface observada. Não representa acesso ao código-fonte nem catálogo interno completo do Malva."
+  },
+  "observed": {
+    "fontSans": "Instrument Sans Variable",
+    "fontMono": "JetBrains Mono Variable",
+    "bodyFontSize": 14,
+    "canvas": "#121016",
+    "surface": "#1b1823",
+    "raised": "#342e45",
+    "text": "#efecf4",
+    "textSecondary": "#b6aec5",
+    "border": "#302a3d",
+    "radiusControl": 9,
+    "radiusCard": 14,
+    "radiusDialog": 18,
+    "navHeight": 36,
+    "navFontSize": 13.5,
+    "navFontWeight": 500,
+    "shadowCard": "0 1px 2px #0006"
+  },
+  "adaptation": {
+    "branding": "Identidade Bunker preservada; sem logo ou ativos proprietários do Malva.",
+    "layout": "Navegação lateral recolhível, barras compactas, conteúdo operacional e seis indicadores responsivos.",
+    "components": [
+      "Navegação desktop e móvel",
+      "Tipografia e números tabulares",
+      "Botões normais, primários, discretos e semânticos",
+      "Campos, busca, seleção, checkbox e dias da semana",
+      "Filtros e seleção de períodos",
+      "Abas e contadores",
+      "Indicadores e tooltips",
+      "Tabelas e paginação",
+      "Cards de decisão, prévias e confirmações",
+      "Histórico e aprendizado",
+      "Alertas, estados vazios e carregamento",
+      "Janelas de detalhe e navegação móvel",
+      "Demandas, relatórios, fontes e cadência",
+      "Painéis de agentes e controles do escritório"
+    ],
+    "behavior": "Apenas apresentação e acesso de interface. Fontes, cálculos, aprovação exata, execução e cadência permanecem sob os contratos existentes.",
+    "office": "Arte, mapa, personagens e lógica da cena mantidos; controles e painéis usam o sistema visual compartilhado."
+  },
+  "implementation": {
+    "tokens": "app/malva-theme.css",
+    "layout": "app/uix.css",
+    "fonts": "@fontsource-variable/instrument-sans e @fontsource-variable/jetbrains-mono",
+    "shell": "app/bunker.tsx",
+    "dialog": "app/workspace-dialog.tsx"
+  }
+}
