@@ -21,6 +21,10 @@ test('a delayed full response cannot overwrite a newer mutation receipt',async()
  let resolve;const h=harness(async url=>url.includes('?')?Response.json({revision:5}):new Promise(done=>{resolve=done;}));
  const pending=h.sync.check();while(!resolve)await new Promise(done=>setImmediate(done));h.current.revision=6;resolve(Response.json(data(5)));await pending;assert.equal(h.updates.length,0);assert.equal(h.current.revision,6);
 });
+test('a head request started before a successful write cannot report a false outage',async()=>{
+ let resolve;const h=harness(()=>new Promise(done=>{resolve=done;}));const pending=h.sync.check();h.current.revision=5;resolve(Response.json({revision:4}));await pending;
+ assert.equal(h.statuses.length,0);assert.equal(h.updates.length,0);assert.equal(h.calls.length,1);
+});
 test('failure preserves the last successful check and recovers without writing',async()=>{
  let broken=false;const h=harness(async()=>{if(broken)throw Error('offline');return Response.json({revision:4});});
  await h.sync.check();const last=h.statuses.at(-1).lastCheckedAt;broken=true;await h.sync.check();assert.equal(h.statuses.at(-1).status,'unavailable');assert.equal(h.statuses.at(-1).lastCheckedAt,last);assert.equal(h.updates.length,0);
