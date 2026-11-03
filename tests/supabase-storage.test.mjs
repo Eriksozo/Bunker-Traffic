@@ -20,3 +20,9 @@ test('missing credentials and provider failures never become empty successful re
  const db=new SupabaseStorage({url:'https://example.supabase.co',key:'test',fetch:async()=>new Response('private details',{status:503})});
  await assert.rejects(db.prepare('SELECT payload FROM bunker_records WHERE key=?').bind('central').first(),/503/);
 });
+test('revision polling requests only revision metadata while full reads retain the payload',async()=>{
+ const calls=[];const db=new SupabaseStorage({url:'https://example.supabase.co',key:'test',fetch:async(_,r)=>{calls.push(JSON.parse(r.body));return Response.json({rows:[{key:'central',revision:9,updated_at:'now'}]});}});
+ const head=await db.prepare('SELECT revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first();
+ assert.equal(head.revision,9);assert.equal(calls[0].input.projection,'revision');
+ await db.prepare('SELECT payload,revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first();assert.equal(calls[1].input.projection,undefined);
+});

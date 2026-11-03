@@ -29,3 +29,11 @@ No Supabase Auth, configure o Site URL para a interface acima e autorize somente
 A cópia de D1 preserva payloads, revisões, horários e arquivos imutáveis. `bunker_import_rows` recusa conflitos e só é executável pelo backend. Confira cada linha após importar e confira que a revisão de origem não mudou antes de direcionar os agentes. Mantenha a origem preservada; não a trate como espelho depois do corte.
 
 As verificações de saúde não provam que uma campanha entregou, que uma aprovação foi executada ou que a coleta está fresca. Permanecem obrigatórios claim/prepare/submit único/confirm, fontes por projeto, cadência e aprovação exata do dono.
+
+## Atualização do fluxo
+
+Uma única rotina da interface confere a revisão da central a cada dez segundos enquanto a aba está visível, e também quando ela volta ao foco. O Supabase retorna apenas revisão e horário nessa checagem; o estado completo é lido quando há uma revisão nova. A checagem é suspensa durante uma gravação e respostas atrasadas não substituem confirmações mais recentes.
+
+Falha de rede, revisão inválida ou regressiva e sessão expirada não são tratadas como atualização concluída. O painel conserva a última base válida e os rascunhos, mostra a limitação e tenta conferir novamente. O horário dessa conferência fica nos detalhes da sincronização, separado dos horários da coleta e da atualização Malva.
+
+Em conflito de edição, a interface tenta reler a central e pede que o operador confira os novos valores. A gravação não é reenviada automaticamente. Uma escolha só sai da fila após sua confirmação exata no histórico; uma execução financeira continua exigindo a autorização e a verificação próprias.
