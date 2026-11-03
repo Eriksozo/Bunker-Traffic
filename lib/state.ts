@@ -3,7 +3,7 @@ import {officeMessageTarget,retainOfficeMessages,assertOfficeQueueCapacity,answe
 import {reportsQuery,reportPage} from './report-archive.mjs';
 import {suggestionHistoryQuery,suggestionHistoryPage} from './suggestion-history.mjs';
 import {verifyDecision} from './reporting.mjs';
-import {storage} from './storage';
+import {storage,storageBackend} from './storage';
 import { z } from 'zod';
 import {bundleSchema} from './snapshot-schema.mjs';
 import {cadenceSchema,updateRun} from './agent-state';
@@ -13,7 +13,7 @@ const label=z.string().max(2500), number=z.number().finite().min(-1e12).max(1e12
 export const empty=()=>({snapshots:[],config:{},tasks:[],decisions:[],jobs:[],messages:[],reports:[],events:[],paused:false});
 export async function readState(){
  const result=await readPersistedState(storage(),empty);
- return {...result,storage:{...result.storage,backend:storage().constructor.name==='SupabaseStorage'?'supabase':'d1'}};
+ return {...result,storage:{...result.storage,backend:storageBackend()}};
 }
 export async function readRevision(){
  const r=await storage().prepare('SELECT revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first<any>();

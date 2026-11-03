@@ -9,3 +9,8 @@ export function storage():D1Database{
  if(!env.DB)throw Error('Armazenamento do Bunker não configurado.');
  return env.DB;
 }
+
+export function storageBackend():'supabase'|'d1'{
+ const config=env as Cloudflare.Env & {SUPABASE_URL?:string;SUPABASE_SERVICE_ROLE_KEY?:string;BUNKER_STORAGE_GATEWAY?:string};
+ return config.BUNKER_STORAGE_GATEWAY||config.SUPABASE_URL||config.SUPABASE_SERVICE_ROLE_KEY?'supabase':'d1';
+}
