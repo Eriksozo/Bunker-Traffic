@@ -1,9 +1,15 @@
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
+import {cloudflareAuth,withSessionCookies} from '../lib/cloudflare-auth.mjs';
 
 const worker = {
-  fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+  async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
+    if((env as any).BUNKER_HOST==='cloudflare'){
+      const authenticated=await cloudflareAuth(request,env);
+      if(authenticated instanceof Response)return authenticated;
+      request=authenticated;
+    }
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.
@@ -23,7 +29,7 @@ const worker = {
         },
       };
     }
-    return runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    return withSessionCookies(request,await runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx)));
   },
 };
 

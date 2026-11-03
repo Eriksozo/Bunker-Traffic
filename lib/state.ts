@@ -3,7 +3,7 @@ import {officeMessageTarget,retainOfficeMessages,assertOfficeQueueCapacity,answe
 import {reportsQuery,reportPage} from './report-archive.mjs';
 import {suggestionHistoryQuery,suggestionHistoryPage} from './suggestion-history.mjs';
 import {verifyDecision} from './reporting.mjs';
-import { env } from 'cloudflare:workers';
+import {storage} from './storage';
 import { z } from 'zod';
 import {bundleSchema} from './snapshot-schema.mjs';
 import {cadenceSchema,updateRun} from './agent-state';
@@ -12,39 +12,35 @@ import {retainKnowledgeMeasurements} from './knowledge.mjs';
 const label=z.string().max(2500), number=z.number().finite().min(-1e12).max(1e12).nullable().optional();
 export const empty=()=>({snapshots:[],config:{},tasks:[],decisions:[],jobs:[],messages:[],reports:[],events:[],paused:false});
 export async function readState(){
- if(!env.DB)throw new Error('Base de dados indisponível.');
- return readPersistedState(env.DB,empty);
+ const result=await readPersistedState(storage(),empty);
+ return {...result,storage:{...result.storage,backend:storage().constructor.name==='SupabaseStorage'?'supabase':'d1'}};
 }
 export async function readRevision(){
- if(!env.DB)throw new Error('Base de dados indisponível.');
- const r=await env.DB.prepare('SELECT revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first<any>();
+ const r=await storage().prepare('SELECT revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first<any>();
  return {revision:r?.revision||0,updatedAt:r?.updated_at||null};
 }
 export async function readReports(project:string,limit=20,cursor:string|null=null){
- if(!env.DB)throw new Error('Base de dados indisponível.');
  const q=reportsQuery(project,limit,cursor);
- const result=await env.DB.prepare(q.sql).bind(...q.params).all<any>();
+ const result=await storage().prepare(q.sql).bind(...q.params).all<any>();
  return reportPage(result.results||[],q.limit);
 }
 export async function commit(state:any,revision:number){
- if(!env.DB)throw new Error('Base de dados indisponível.');
- return commitPersistedState(env.DB,state,revision);
+ return commitPersistedState(storage(),state,revision);
 }
 
 export async function readCollaborationHistory(project:string,limit=10,cursor:string|null=null){
  if(!project||project.length>250)throw new Error('Projeto inválido.');
  const count=Math.max(1,Math.min(20,Number(limit)||10));let anchor:string|null=null;
  if(cursor){if(cursor.length>100)throw new Error('Cursor inválido.');anchor=cursor;}
- const result=await env.DB!.prepare("SELECT key,payload,updated_at FROM bunker_records WHERE key LIKE 'collaboration:%' AND json_extract(payload,'$.round.project')=? AND (? IS NULL OR updated_at || '|' || key < ?) ORDER BY updated_at DESC,key DESC LIMIT ?").bind(project,anchor,anchor,count+1).all<any>();
+ const result=await storage().prepare("SELECT key,payload,updated_at FROM bunker_records WHERE key LIKE 'collaboration:%' AND json_extract(payload,'$.round.project')=? AND (? IS NULL OR updated_at || '|' || key < ?) ORDER BY updated_at DESC,key DESC LIMIT ?").bind(project,anchor,anchor,count+1).all<any>();
  const rows=result.results||[],page=rows.slice(0,count),last=page.at(-1);
  return {items:page.map((r:any)=>JSON.parse(r.payload)),nextCursor:rows.length>count&&last?last.updated_at+'|'+last.key:null};
 }
 export async function readSuggestionHistory(project:string,limit=10,cursor:string|null=null){
- if(!env.DB)throw new Error('Base de dados indisponível.');
  const current=await readState();
  if(!Object.prototype.hasOwnProperty.call(current.state.config||{},project))throw new Error('Projeto não configurado.');
  const query=suggestionHistoryQuery(project,limit,cursor);
- const result=await env.DB.prepare(query.sql).bind(...query.params).all<any>();
+ const result=await storage().prepare(query.sql).bind(...query.params).all<any>();
  if(!Array.isArray(result.results))throw new Error('Histórico de sugestões indisponível.');
  return suggestionHistoryPage(result.results||[],query);
 }
