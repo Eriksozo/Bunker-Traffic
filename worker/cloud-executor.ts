@@ -11,7 +11,7 @@ import {readLiveData,liveDataAction} from '../lib/live-data.mjs';
 import {collectCloudProject} from '../lib/cloud-collector.mjs';
 import {CLOUD_MODEL} from '../lib/cloud-analysis.mjs';
 
-type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastResult?:any;check?:any;history?:any[]};
+type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
  private running=false;
  private async setting():Promise<Runtime>{return await this.ctx.storage.get<Runtime>('runtime')||{enabled:false,history:[]};}
@@ -59,7 +59,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     if(['idle','blocked'].includes(result.kind))break;
    }
    if((await this.setting()).enabled)await this.syncLive();
-  }catch(e:any){const latest=await this.setting(),code=/^[A-Z_]{3,80}$/.test(e.code||'')?e.code:e.message==='CONFLICT'?'CLOUD_REVISION_CONFLICT':'CLOUD_STEP_FAILED';await this.ctx.storage.put('runtime',{...latest,lastError:code,lastUnitAt:new Date().toISOString()});}
+  }catch(e:any){const latest=await this.setting(),code=/^[A-Z_]{3,80}$/.test(e.code||'')?e.code:e.message==='CONFLICT'?'CLOUD_REVISION_CONFLICT':'CLOUD_STEP_FAILED';await this.ctx.storage.put('runtime',{...latest,lastError:code,lastErrorDetail:String(e.message||code).replace(/(?:mck_|mvk_|sb_secret_)[A-Za-z0-9_-]+/g,'[redacted]').replace(/eyJ[A-Za-z0-9_.-]{20,}/g,'[redacted]').slice(0,400),lastUnitAt:new Date().toISOString()});}
   finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+60000);}
  }
 }
