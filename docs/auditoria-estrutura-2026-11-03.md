@@ -8,6 +8,7 @@ Revisão da interface, persistência, autenticação, sincronização, cadência
 | --- | --- | --- |
 | Contas com gasto | Contas acompanhadas com gasto zero entravam no contador e na tabela intitulados “com gasto”. | Separar contas com gasto positivo confirmado, contas acompanhadas e contas com gasto desconhecido. Valores ausentes continuam N/D. |
 | Sinais da visão geral | A triagem tinha quatro categorias, mas apenas três contadores. Quando todos os objetos precisavam de investigação, apareciam três zeros acima de prioridades existentes. | Mostrar também “Investigar dados”, com contador e filtro próprios. |
+| Histórico | Uma escolha de orçamento sem alteração de status mostrava o status seguinte como N/D. | Preservar na apresentação o status conhecido da escolha quando a ação altera somente o orçamento, sem regravar o histórico nem inferir aplicação. |
 | Relógio da triagem | Uma atualização muito à frente do relógio podia ser considerada recente. | Rejeitar esse sinal de atualização e encaminhar para investigação. O instante também passa a ser o mesmo na fila e na triagem. |
 | Dependências | A auditoria inicial de dependências de produção apontou seis alertas, incluindo um crítico. | Atualizar versões compatíveis e o lockfile; validar também a cadeia de renderização que está declarada como dependência de desenvolvimento. |
 | Publicação | O comando de build externo não exigia testes e checagem de tipos. | Fazer `npm run build` executar `npm run verify` antes de empacotar o Worker. |
