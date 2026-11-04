@@ -1,14 +1,11 @@
+import {authenticateServer} from './server-auth.mjs';
 import {callRemoteMcp,cloudReadTools,cloudWriteTools,CloudError} from './cloud-malva.mjs';
 import {authorizeCloudDispatch} from './cloud-dispatch-guard.mjs';
 import {hydrateCoreState} from './core-storage.mjs';
 const result=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
-async function same(a:string,b:string){const hash=async(s:string)=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)));const [x,y]=await Promise.all([hash(a),hash(b)]);let d=0;for(let i=0;i<x.length;i++)d|=x[i]^y[i];return d===0;}
 Deno.serve(async(req:Request)=>{
  const service=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
- const presented=[req.headers.get('apikey')||'',req.headers.get('Authorization')?.replace(/^Bearer /,'')||''].filter(Boolean);
- let modern:string[]=[];try{modern=Object.values(JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')||'{}')).filter((x):x is string=>typeof x==='string'&&x.startsWith('sb_secret_'));}catch{}
- const allowed=[service,...modern].filter(Boolean);let authenticated=false;for(const actual of presented)for(const expected of allowed)if(await same(expected,actual))authenticated=true;
- if(!service||!authenticated)return result({error:'MCP_SERVER_AUTH_REQUIRED'},401);
+ if(!await authenticateServer(req,{service,secretKeys:Deno.env.get('SUPABASE_SECRET_KEYS')}))return result({error:'MCP_SERVER_AUTH_REQUIRED'},401);
  if(req.method!=='POST')return result({error:'Method not allowed'},405);
  try{
   const body=await req.text();if(body.length>20000)throw new CloudError('MCP_REQUEST_LIMIT');const input=JSON.parse(body),{tool,args={}}=input;

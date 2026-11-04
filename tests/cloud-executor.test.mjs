@@ -1,3 +1,4 @@
+import {authenticateServer} from '../supabase/functions/malva-mcp/server-auth.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {callRemoteMcp,cloudMalvaClient} from '../lib/cloud-malva.mjs';
@@ -61,4 +62,12 @@ test('a project with only paused or warmup rows still has real evidence for a no
 });
 test('pausing during preparation prevents submit and provider dispatch',async()=>{
  const f=fixture(),store=memory(f);let checks=0,calls=0;await assert.rejects(cloudDispatch({write:store.write,source:{dispatch:async()=>{calls++;}},prepareGuard:async()=>{if(++checks===2)throw Error('CLOUD_EXECUTOR_PAUSED');},proposal:f.p,executionRef:'cloud-pause',readObservation:async()=>({source:'Malva MCP',complete:true,projectId:project,level:'campaign',fetchedAt:iso(Date.now()),rows:[f.row]})}));assert.equal(calls,0);assert.notEqual(store.state.executions[0].status,'Enviada');
+});
+
+test('MCP edge auth accepts injected server keys and rejects users, public keys and arbitrary credentials',async()=>{
+ const env={service:'server-fixture',secretKeys:JSON.stringify({default:'sb_secret_fixture'})};
+ assert.equal(await authenticateServer(new Request('https://example.test',{headers:{Authorization:'Bearer server-fixture'}}),env),true);
+ assert.equal(await authenticateServer(new Request('https://example.test',{headers:{apikey:'sb_secret_fixture'}}),env),true);
+ for(const key of ['user-jwt','sb_publishable_fixture','sb_secret_forged',''])assert.equal(await authenticateServer(new Request('https://example.test',{headers:{apikey:key}}),env),false);
+ assert.equal(await authenticateServer(new Request('https://example.test',{headers:{apikey:'sb_secret_fixture'}}),{...env,secretKeys:'invalid-json'}),false);
 });
