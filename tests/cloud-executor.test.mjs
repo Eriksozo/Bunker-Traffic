@@ -99,6 +99,11 @@ test('model context omits repeated audit payloads while retaining current knowle
  assert.equal(input.learning[0].revisions.length,30);assert.ok(input.research.details[0].history.items[0].raw);
 });
 
+test('default model packet reserves token headroom and declares deferred advisory learning',()=>{
+ const input={campaigns:[{target:{adAccountId:account,externalId:'123'},windows:{today:{spend:321}},hierarchy:[]}],learning:Array.from({length:5},(_,i)=>({id:'learning-'+i,claim:'x'.repeat(6000),sources:[{reference:'source-'+i}]})),research:{details:[{adAccountId:account,externalId:'123',detail:'x'.repeat(20000)}]}};
+ const out=compactCloudContext(input);assert.ok(new TextEncoder().encode(JSON.stringify(out)).length<=40000);assert.equal(out.campaigns[0].windows.today.spend,321);assert.ok(out.coverage.deferredLearningIds.length>0);assert.equal(out.learning.at(-1).id,'learning-4');assert.equal(input.learning.length,5);
+});
+
 test('today cohort reads active and spent plus exact tracked paused objects, not the dormant archive',async()=>{
  const now=Date.now(),p={id:project,name:'Example',timezone:'UTC',currency:'BRL'},ranges=cloudRanges(now,'UTC'),pausedId='44444444-4444-4444-8444-444444444444';
  const active={id:internal,externalId:'123',adAccountId:account,accountName:'Test',projectId:project,projectName:'Example',name:'Active',level:'campaign',provider:'meta',status:'ACTIVE',spend:5};
