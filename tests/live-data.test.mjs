@@ -38,7 +38,7 @@ test('Compatibility import only writes the live cache and still enforces source 
 
 test('Read lists every configured project, missing cache as unavailable, and never exposes orphaned projects',async()=>{
  const {d,api}=db(),s=state();d.prepare('INSERT INTO bunker_records VALUES (?,?,?,?)').run('live:foreign','{}',1,new Date(now).toISOString());
- const before=JSON.stringify(s),read=await readLiveData(api,s);assert.equal(read.pollIntervalSeconds,60);assert.equal(read.paused,false);assert.deepEqual(read.projects,[{projectId:'nico',projectName:'Nico',trackedTargets:[{provider:'meta',level:'campaign',adAccountId:'account-a',externalId:'campaign'}]},{projectId:'john',projectName:'John',trackedTargets:[]}]);assert.equal(read.items.length,2);assert.ok(read.items.every(i=>i.snapshot===null&&i.error===null&&i.revision===0));assert.equal(JSON.stringify(s),before);d.close();
+ const before=JSON.stringify(s),read=await readLiveData(api,s);assert.equal(read.pollIntervalSeconds,15);assert.equal(read.paused,false);assert.deepEqual(read.projects,[{projectId:'nico',projectName:'Nico',trackedTargets:[{provider:'meta',level:'campaign',adAccountId:'account-a',externalId:'campaign'}]},{projectId:'john',projectName:'John',trackedTargets:[]}]);assert.equal(read.items.length,2);assert.ok(read.items.every(i=>i.snapshot===null&&i.error===null&&i.revision===0));assert.equal(JSON.stringify(s),before);d.close();
 });
 
 test('Tracked identities retain paused campaigns from all four analysis windows and deduplicate exact account scope',async()=>{

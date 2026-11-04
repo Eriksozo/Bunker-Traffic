@@ -111,8 +111,8 @@ test('failure for one campaign does not prevent another requested campaign from 
 test('overlapping laps cannot dispatch duplicate source requests',async()=>{
   const client=new FakeClient([]),r=relay(client);let release;client.ensureReady=()=>new Promise(resolve=>{release=resolve;});const pending=r.runOnce();await assert.rejects(r.runOnce(),{code:'MCP_UNAVAILABLE'});release();await pending;assert.equal(client.calls.some(c=>c.server==='malva'),false);
 });
-test('ten-second checks during the existing wait are sequential and preserve the 60-second campaign interval',async()=>{
-  let clock=0,active=0,max=0;const checks=[],sleeps=[];await waitWithDaily(POLL_INTERVAL_MS,{clock:()=>clock,wait:async ms=>{sleeps.push(ms);clock+=ms;},runDaily:async()=>{active++;max=Math.max(max,active);checks.push(clock);clock+=200;await Promise.resolve();active--;}});assert.equal(DAILY_CHECK_INTERVAL_MS,10000);assert.equal(POLL_INTERVAL_MS,60000);assert.deepEqual(checks,[10000,20200,30400,40600,50800]);assert.equal(clock,60000);assert.equal(max,1);assert.ok(sleeps.every(ms=>ms<=10000));
+test('ten-second daily checks stay sequential while campaign collection targets fifteen seconds',async()=>{
+  let clock=0,active=0,max=0;const checks=[],sleeps=[];await waitWithDaily(POLL_INTERVAL_MS,{clock:()=>clock,wait:async ms=>{sleeps.push(ms);clock+=ms;},runDaily:async()=>{active++;max=Math.max(max,active);checks.push(clock);clock+=200;await Promise.resolve();active--;}});assert.equal(DAILY_CHECK_INTERVAL_MS,10000);assert.equal(POLL_INTERVAL_MS,15000);assert.deepEqual(checks,[10000]);assert.equal(clock,15000);assert.equal(max,1);assert.ok(sleeps.every(ms=>ms<=10000));
 });
 test('shutdown during the wait stops demand checks immediately',async()=>{
   const controller=new AbortController();let checks=0,clock=0;await waitWithDaily(60000,{signal:controller.signal,clock:()=>clock,wait:async ms=>{clock+=ms;controller.abort();},runDaily:async()=>{checks++;}});assert.equal(checks,0);

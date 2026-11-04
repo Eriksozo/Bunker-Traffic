@@ -52,7 +52,7 @@ node scripts/local-live-sync.mjs \
   --once
 ```
 
-Sem `--check` ou `--once`, o mesmo comando mantém um processo com ciclos com início previsto a cada 60 segundos, sem sobreposição. O tempo gasto na coleta é descontado da espera; se ela ultrapassar um minuto, o ciclo seguinte aguarda a conclusão. Falhas de conexão aumentam o intervalo de reinício de 60 segundos até cinco minutos. Uma falha de projeto preserva a leitura anterior e permite atualizar os demais projetos.
+Sem `--check` ou `--once`, o mesmo comando mantém um processo com ciclos com início previsto a cada 15 segundos, sem sobreposição. O tempo gasto na coleta é descontado da espera; se ela ultrapassar o intervalo alvo, o ciclo seguinte aguarda a conclusão. Falhas de conexão aumentam o intervalo de reinício de 15 segundos até cinco minutos. Uma falha de projeto preserva a leitura anterior e permite atualizar os demais projetos.
 
 O arquivo PID/nonce em `TMPDIR` impede duas instâncias locais. `--lock-file /caminho/arquivo` permite escolher o caminho, sem alterar configuração global. Não execute `--once` em paralelo ao serviço; pare o serviço primeiro. Não remova um lock cujo PID ainda esteja ativo.
 
@@ -134,3 +134,18 @@ node --test tests/local-live-sync.test.mjs
 Cobertura: fuso e horário de verão, preservação de métricas, resposta vazia legítima, rejeição de erros, identidade, fonte conectada versus catálogo em inicialização, partição acima de 100 linhas, cobertura divergente, conta sem paginação, pausa, concorrência, isolamento de falhas, confirmação persistida, importação ambígua sem reenvio e instância única.
 
 Referências oficiais: [app-server](https://learn.chatgpt.com/docs/app-server) e [allowlists MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli). A allowlist do Malva é aplicada somente ao processo app-server deste relay; o código também permite apenas a ferramenta Bunker indicada e suas três ações. Nenhum arquivo global de configuração é alterado.
+
+
+## Acompanhamento contínuo e Órbita
+
+O serviço existente consulta até três projetos Malva em paralelo, em lotes. Cada projeto relê sua própria revisão do cache antes e depois da coleta e confirma o snapshot persistido. Os pedidos de diário são atendidos entre lotes; orçamento/status e a cadência de análises não mudam. O intervalo de 15s é um alvo entre inícios de ciclos, não um SLA por projeto; tempo de consultas e fontes aumenta o intervalo efetivo.
+
+A Órbita é consultada pelo mesmo processo, em uma tarefa independente do resultado financeiro, no máximo uma vez por minuto, sem iniciar modelos. A identidade da pessoa precisa coincidir com a conexão Malva; o catálogo de squads/experts determina o vínculo de cada projeto. A exceção nominal John/Jhon é explícita. Falta de vínculo ou vínculo ambíguo recusa o projeto, sem escolher outro cliente por aproximação.
+
+A allowlist da Órbita contém somente `quem_sou_eu`, `listar_cadastros`, `listar_producoes` e `listar_lateralizacoes`. Apenas IDs, nomenclaturas, etapas, vínculos e relógios são preservados; não copia briefing, copy, contatos ou links privados. O snapshot tem `coverage: returned-items-only`: as listagens da API são limitadas e não oferecem paginação aqui. Nunca apresentar esse recorte como inventário completo, inferir exclusão por ausência ou usar etapa editorial como prova de vendas/entrega Meta. Os nomes das variantes permanecem intactos.
+
+O contrato privado de compatibilidade é `bunker_atualizar_rodada` com `id: creative-data`, `status: Pendente`, `revision: 0` e JSON em note: `action: read/import/failure`, `projectId`, `expectedRevision`, `snapshot` ou `error`. Ele escreve somente `creative:<projectId>`, separado do cache Malva, da central e das aprovações. Timeout ou resposta ambígua após envio resulta apenas em conferência; não reenvia nem grava falha por cima do resultado desconhecido.
+
+O navegador consulta `/api/sync` autenticado a cada 2s enquanto visível. A consulta usa somente key/revision/updated_at do banco. Alterações de revisão disparam a leitura dos dados correspondentes; sinais iguais não baixam novamente todo o payload. As abas retomam a leitura ao recuperar foco. Fonte anterior não substitui revisão mais recente, rascunhos permanecem locais e uma falha preserva o último resultado. Se o sinal falhar, o cache completo é conferido a cada 30s e a limitação aparece no painel.
+
+Os relógios são distintos: consulta do Bunker, sincronização que o Malva informa e última mudança da produção informada pela Órbita. As variações que não retornam esse relógio permanecem com sourceUpdatedAt null; datas de pedido/publicação não são usadas como substituto. A Órbita não informa um relógio global de sincronização nesta listagem; `lastSyncAt` fica null. Nenhuma dessas consultas força uma leitura da Meta nem elimina atraso de atribuição ou checkout. A conexão MCP consultada não fornece assinatura de eventos de campanhas/produção. Webhooks de conversão existentes não são substituídos nem duplicados por este serviço.

@@ -299,3 +299,5 @@ body .app.is-nav-collapsed .nav { justify-content:center; padding:0; height:38px
 @media(max-width:360px) { body .app .kpis,.workspace-dialog .kpis,.workspace-dialog:not(.wide) .kpis { grid-template-columns:1fr; } }
 @media(prefers-reduced-motion:no-preference) { body .app .dc-tab-content[data-state=active] { animation:uix-enter .16s ease-out; } @keyframes uix-enter { from { opacity:.5; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } } }
 @media print { body .app .sidebar,.uix-menu-toggle,.uix-skip-link { display:none!important; } body .app .main { margin:0; width:100%; } }
+
+body .app .live-sync-creative{font-size:11px;color:var(--ink-muted);white-space:nowrap;}

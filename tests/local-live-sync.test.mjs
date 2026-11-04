@@ -368,7 +368,7 @@ test('singleton rejects a second live instance, releases only its own lock and r
   }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('CLI pins site/workspace and offers only check, once or a fixed 60-second loop',()=>{
-  const options=parseOptions(['--workspace-id',WORKSPACE,'--site-id',SITE,'--check']);assert.equal(options.check,true);assert.equal(POLL_INTERVAL_MS,60000);
+  const options=parseOptions(['--workspace-id',WORKSPACE,'--site-id',SITE,'--check']);assert.equal(options.check,true);assert.equal(POLL_INTERVAL_MS,15000);
   for(const args of [[],['--workspace-id',WORKSPACE],['--workspace-id',WORKSPACE,'--site-id',SITE,'--once','--check'],['--workspace-id',WORKSPACE,'--site-id',SITE,'--tool','arbitrary']])assert.throws(()=>parseOptions(args),{code:'INVALID_OPTIONS'});
 });
 test('a three-minute live cycle services daily demand between projects without parallel source calls',async()=>{
@@ -384,7 +384,7 @@ test('a three-minute live cycle services daily demand between projects without p
   assert.deepEqual(await r.runOnce(),{paused:false,imported:6,failed:0});
   assert.equal(clock-NOW,180000);assert.equal(dailyChecks.length,6);assert.deepEqual(dailyChecks.map(at=>at-NOW),[0,30000,60000,90000,120000,150000]);
   assert.ok(trace.indexOf('daily',trace.indexOf('project:Project 0'))<trace.indexOf('project:Project 1'));
-  assert.equal(client.calls.filter(c=>c.args?.action==='import').length,6);assert.equal(POLL_INTERVAL_MS,60000);
+  assert.equal(client.calls.filter(c=>c.args?.action==='import').length,6);assert.equal(POLL_INTERVAL_MS,15000);
 });
 test('daily boundary failure is independent from live source failures and does not starve later projects',async()=>{
   const client=new FakeClient([PROJECT,SECOND]),events=[],boundaries=[];
@@ -399,4 +399,25 @@ test('daily service throttles boundary checks, backs off independently and never
   clock=9999;await service();assert.equal(runs,1);clock=10000;fail=true;assert.deepEqual(await service(),{failed:1});assert.equal(runs,2);
   clock=69999;await service();assert.equal(runs,2);clock=70000;fail=false;await service();assert.equal(runs,3);
   controller.abort();clock=100000;await service();assert.equal(runs,3);assert.equal(events.length,1);assert.equal(JSON.stringify(events).includes('private'),false);
+});
+
+test('bounded parallel project batches avoid head-of-line blocking while preserving isolated CAS writes',async()=>{
+ const third={...PROJECT,id:'77777777-7777-4777-8777-777777777777',name:'Gabe'},client=new FakeClient([PROJECT,SECOND,third]);
+ let running=0,max=0,release;const blocked=new Promise(resolve=>release=resolve),started=new Set();
+ client.reportHandler=async args=>{running++;max=Math.max(max,running);started.add(args.projectId);if(args.projectId===PROJECT.id&&args.status==='active')await blocked;else await Promise.resolve();running--;return report([row(1,ACCOUNT[0],client.projects.find(p=>p.id===args.projectId))],client.projects.find(p=>p.id===args.projectId));};
+ const r=new LiveRelay({client,workspaceId:WORKSPACE,siteId:SITE,now:()=>NOW,concurrency:3}),work=r.runOnce();
+ while(!started.has(SECOND.id))await new Promise(done=>setImmediate(done));
+ assert.ok(started.has(PROJECT.id));assert.ok(max<=3);release();const result=await work;assert.equal(result.imported,3);assert.equal(result.failed,0);assert.ok(max>=2);
+ assert.equal(client.calls.filter(c=>c.args?.action==='import').length,3);assert.ok(client.calls.filter(c=>c.args?.action==='read').some(c=>c.args.projectId===SECOND.id));
+});
+
+test('Órbita extension allows only source reads and isolated cache actions, never production or ad transitions',async()=>{
+ const client=new CodexMcpClient();client.ready=true;client.sourceReady=true;client.orbitaReady=true;client.threadId='connected';let sent;
+ client.request=async(_method,params)=>{sent=params;return {structuredContent:[{id:'piece'}]};};
+ assert.deepEqual(await client.callTool('dashops','listar_producoes',{squad:'SQ1'}),[{id:'piece'}]);assert.equal(sent.server,'dashops');
+ await assert.rejects(client.callTool('dashops','mover_producao',{id:'piece'}),{code:'TOOL_NOT_ALLOWED'});
+ await assert.rejects(client.callTool('malva','tracking_set_ad_budget',{}),{code:'TOOL_NOT_ALLOWED'});
+ client.request=async(_method,params)=>{sent=params;return {structuredContent:{projects:[],items:[]}};};
+ await client.callTool('codex_apps','bunker_otimiza_o_de_campanhas.bunker_dados_criativos',{action:'read'});assert.equal(sent.tool,BUNKER_COMPAT_TOOL);assert.equal(sent.arguments.id,'creative-data');
+ await assert.rejects(client.callTool('codex_apps','bunker_otimiza_o_de_campanhas.bunker_dados_criativos',{action:'executionSubmit'}),{code:'TOOL_NOT_ALLOWED'});
 });

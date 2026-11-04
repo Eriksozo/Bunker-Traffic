@@ -1,5 +1,6 @@
 import {readState,readReports,readSuggestionHistory,commit,apply} from '@/lib/state';
 import {agentView,reserveRequest} from '@/lib/mcp-run';
+import {updateCreativeState} from '@/lib/creative-state';
 import {agentAutonomy,collaborationRead} from '@/lib/autonomy';
 import {autonomyTools} from '@/lib/autonomy-tools';
 import {readDecisionExamples} from '@/lib/decision-learning-view.mjs';
@@ -35,6 +36,7 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
  }
  else if(name==='bunker_dados_atuais')result={content:[{type:'text',text:JSON.stringify(await updateLiveState(a,cur.state))}]};
  else if(name==='bunker_atualizar_rodada'&&a.id==='live-data')result={content:[{type:'text',text:JSON.stringify(await updateLiveState(parseLiveDataEnvelope(a),cur.state))}]};
+ else if(name==='bunker_atualizar_rodada'&&a.id==='creative-data'){if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope Órbita inválido.');result={content:[{type:'text',text:JSON.stringify(await updateCreativeState(JSON.parse(a.note||'{}'),cur.state))}]};}
  else if(name==='bunker_relatorios')result={content:[{type:'text',text:JSON.stringify(await readReports(a.projectId,a.limit??5,a.cursor||null))}]};
  else if(name==='bunker_ler')result={content:[{type:'text',text:JSON.stringify(agentView(cur))}]};
  else if(name==='bunker_colaboracao'||(name==='bunker_atualizar_rodada'&&a.id==='collaboration')){

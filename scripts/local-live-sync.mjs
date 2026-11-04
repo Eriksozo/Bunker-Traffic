@@ -7,13 +7,14 @@ import {dirname, join, resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
+import {CREATIVE_TOOL,ORBITA_TOOLS,CreativeRelay} from './local-creative-sync.mjs';
 import {bundleSchema, validTimeZone} from '../lib/snapshot-schema.mjs';
 import {BUNKER_DAILY_TOOL,DAILY_CHECK_INTERVAL_MS,DailyRelay,dailyPublicError,waitWithDaily} from './local-daily-sync.mjs';
 
 export const MALVA_TOOLS=Object.freeze(['workspace_whoami','tracking_list_projects','tracking_campaigns','tracking_ad_accounts','tracking_ad_detail']);
 export const BUNKER_TOOL='bunker_otimiza_o_de_campanhas.bunker_dados_atuais';
 export const BUNKER_COMPAT_TOOL='bunker_otimiza_o_de_campanhas.bunker_atualizar_rodada';
-export const POLL_INTERVAL_MS=60_000;
+export const POLL_INTERVAL_MS=15_000;
 const MAX_ROWS=3000, MAX_BYTES=1_450_000, MAX_SOURCE_CALLS=500, MAX_MESSAGE_BYTES=20_000_000;
 const UTC_INSTANT=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -95,7 +96,7 @@ export class CodexMcpClient{
     try{await pending;}finally{if(this.startPromise===pending)this.startPromise=null;}
   }
   async startSession(){
-    const args=['app-server','--stdio','-c',`mcp_servers.malva.enabled_tools=${JSON.stringify(MALVA_TOOLS)}`];
+    const args=['app-server','--stdio','-c',`mcp_servers.malva.enabled_tools=${JSON.stringify(MALVA_TOOLS)}`,'-c',`mcp_servers.dashops.enabled_tools=${JSON.stringify(ORBITA_TOOLS)}`];
     // Credentials stay inside the CLI's supported auth machinery, never extracted or copied.
     const child=this.child=this.spawnImpl(this.codexBin,args,{stdio:['pipe','pipe','pipe'],env:process.env});
     child.stdout.setEncoding('utf8');child.stdout.on('data',chunk=>{if(this.child===child)this.receive(chunk);});
@@ -139,7 +140,7 @@ export class CodexMcpClient{
   }
   disconnected(code){
     for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(new SyncError(code));}
-    this.pending.clear();this.threadId=null;this.ready=false;this.sourceReady=false;
+    this.pending.clear();this.threadId=null;this.ready=false;this.sourceReady=false;this.orbitaReady=false;
   }
   async ensureReady({source=true}={}){
     await this.start();const deadline=Date.now()+this.startupTimeoutMs;
@@ -150,7 +151,8 @@ export class CodexMcpClient{
         if(!Array.isArray(page?.data))fail('MCP_PROTOCOL');servers.push(...page.data);cursor=page.nextCursor;
         if(servers.length>1000)fail('MCP_PROTOCOL');
       }while(cursor);
-      const malva=servers.find(s=>s.name==='malva'),bunker=servers.find(s=>s.name==='codex_apps');
+      const malva=servers.find(s=>s.name==='malva'),bunker=servers.find(s=>s.name==='codex_apps'),orbita=servers.find(s=>s.name==='dashops');
+      this.orbitaReady=orbita?.runtimeStatus==='connected'&&ORBITA_TOOLS.every(t=>Object.hasOwn(orbita.tools||{},t));
       if(bunker?.runtimeStatus==='connected'){
         this.bunkerTransportTool=Object.hasOwn(bunker.tools||{},BUNKER_TOOL)?BUNKER_TOOL:Object.hasOwn(bunker.tools||{},BUNKER_COMPAT_TOOL)?BUNKER_COMPAT_TOOL:null;
         this.dailyTransportTool=Object.hasOwn(bunker.tools||{},BUNKER_DAILY_TOOL)?BUNKER_DAILY_TOOL:Object.hasOwn(bunker.tools||{},BUNKER_COMPAT_TOOL)?BUNKER_COMPAT_TOOL:null;
@@ -165,15 +167,17 @@ export class CodexMcpClient{
     fail('MCP_UNAVAILABLE');
   }
   async callTool(server,tool,args){
-    if(!(server==='malva'&&MALVA_TOOLS.includes(tool)||server==='codex_apps'&&[BUNKER_TOOL,BUNKER_DAILY_TOOL].includes(tool)))fail('TOOL_NOT_ALLOWED');
+    if(!(server==='malva'&&MALVA_TOOLS.includes(tool)||server==='dashops'&&ORBITA_TOOLS.includes(tool)||server==='codex_apps'&&[BUNKER_TOOL,BUNKER_DAILY_TOOL,CREATIVE_TOOL].includes(tool)))fail('TOOL_NOT_ALLOWED');
     if(server==='codex_apps'&&!(tool===BUNKER_DAILY_TOOL?['read','pending','import','failure']:['read','import','failure']).includes(args?.action))fail('TOOL_NOT_ALLOWED');
-    if(!this.threadId||!this.ready||server==='malva'&&!this.sourceReady)fail('MCP_UNAVAILABLE');
-    const selected=tool===BUNKER_DAILY_TOOL?this.dailyTransportTool:this.bunkerTransportTool;
+    if(!this.threadId||!this.ready||server==='malva'&&!this.sourceReady||server==='dashops'&&!this.orbitaReady)fail('MCP_UNAVAILABLE');
+    const selected=tool===CREATIVE_TOOL?BUNKER_COMPAT_TOOL:tool===BUNKER_DAILY_TOOL?this.dailyTransportTool:this.bunkerTransportTool;
     if(server==='codex_apps'&&tool===BUNKER_DAILY_TOOL&&!selected)fail('MCP_UNAVAILABLE');
     const compatibility=server==='codex_apps'&&selected===BUNKER_COMPAT_TOOL;
     const transportTool=compatibility?BUNKER_COMPAT_TOOL:tool;
-    const transportArgs=compatibility?{id:tool===BUNKER_DAILY_TOOL?'daily-data':'live-data',status:'Pendente',revision:0,note:JSON.stringify(args)}:args;
-    return unpackToolResult(await this.request('mcpServer/tool/call',{threadId:this.threadId,server,tool:transportTool,arguments:transportArgs}));
+    const transportArgs=compatibility?{id:tool===CREATIVE_TOOL?'creative-data':tool===BUNKER_DAILY_TOOL?'daily-data':'live-data',status:'Pendente',revision:0,note:JSON.stringify(args)}:args;
+    const result=await this.request('mcpServer/tool/call',{threadId:this.threadId,server,tool:transportTool,arguments:transportArgs});
+    if(server==='dashops'&&!result?.isError){let data=result.structuredContent;if(data==null){try{data=JSON.parse(result.content?.find(c=>c.type==='text')?.text);}catch{fail('MCP_PROTOCOL');}}if(Array.isArray(data))return data;}
+    return unpackToolResult(result);
   }
   close(){this.ready=false;this.disconnected('SHUTDOWN');const child=this.child;this.child=null;this.buffer='';if(child){child.stdin?.end();child.kill('SIGTERM');}}
 }
@@ -348,13 +352,13 @@ export function confirmImport(state,projectId,snapshot,revision){
 }
 
 export class LiveRelay{
-  constructor({client,workspaceId,siteId,now=Date.now,log=()=>{},serviceDaily=async()=>{}}){this.client=client;this.workspaceId=workspaceId;this.siteId=siteId;this.now=now;this.log=log;this.serviceDaily=serviceDaily;this.running=false;}
+  constructor({client,workspaceId,siteId,now=Date.now,log=()=>{},serviceDaily=async()=>{},concurrency=1}){this.client=client;this.workspaceId=workspaceId;this.siteId=siteId;this.now=now;this.log=log;this.serviceDaily=serviceDaily;this.running=false;this.concurrency=Math.max(1,Math.min(3,Math.trunc(concurrency)||1));}
   async yieldToDaily(){
     // A project cycle can last minutes. Yield only between projects, after the
     // preceding cache transaction has finished, and never race the MCP client.
     try{await this.serviceDaily();}catch(error){this.log({event:'daily_boundary_unavailable',code:dailyPublicError(error).code});}
   }
-  async read(){return validateLiveState(await this.client.callTool('codex_apps',BUNKER_TOOL,{action:'read'}),this.siteId);}
+  async read(projectId){return validateLiveState(await this.client.callTool('codex_apps',BUNKER_TOOL,{action:'read',...(projectId?{projectId}:{})}),this.siteId);}
   async identities(){
     const who=await this.client.callTool('malva','workspace_whoami',{});
     if(who?.workspace?.id!==this.workspaceId)fail('SOURCE_IDENTITY');
@@ -370,7 +374,7 @@ export class LiveRelay{
     return {paused:false,projects:state.projects.length,sourceChecked:true};
   }
   async recordFailure(project,revision,error){
-    const latest=await this.read();if(latest.paused)return;
+    const latest=await this.read(project.projectId);if(latest.paused)return;
     const item=latest.items.find(i=>i.projectId===project.projectId);
     if(!latest.projects.some(p=>p.projectId===project.projectId&&p.projectName===project.projectName)||item?.revision!==revision)return;
     await this.client.callTool('codex_apps',BUNKER_TOOL,{action:'failure',projectId:project.projectId,expectedRevision:revision,error:publicError(error)});
@@ -386,10 +390,11 @@ export class LiveRelay{
         throw error;
       }
       let imported=0,failed=0;
-      for(const project of state.projects){
-        await this.yieldToDaily();
-        const before=await this.read();if(before.paused)return {paused:true,imported,failed};
-        if(!before.projects.some(p=>p.projectId===project.projectId&&p.projectName===project.projectName))continue;
+      let paused=false;
+      const processProject=async(project)=>{
+        const started=this.now();
+        const before=await this.read(project.projectId);if(before.paused){paused=true;return;}
+        if(!before.projects.some(p=>p.projectId===project.projectId&&p.projectName===project.projectName))return;
         const priorItem=before.items.find(i=>i.projectId===project.projectId),revision=priorItem.revision;
         let snapshot;
         try{
@@ -400,21 +405,27 @@ export class LiveRelay{
         }catch(error){
           failed++;this.log({event:'project_failed',projectId:project.projectId,code:publicError(error).code});
           try{await this.recordFailure(project,revision,error);}catch(recordError){this.log({event:'failure_record_unconfirmed',projectId:project.projectId,code:publicError(recordError,'BUNKER_UNAVAILABLE').code});}
-          continue;
+          return;
         }
-        const latest=await this.read();if(latest.paused)return {paused:true,imported,failed};
+        const latest=await this.read(project.projectId);if(latest.paused){paused=true;return;}
         const current=latest.items.find(i=>i.projectId===project.projectId);
-        if(!latest.projects.some(p=>p.projectId===project.projectId&&p.projectName===project.projectName)||current?.revision!==revision){this.log({event:'cache_changed',projectId:project.projectId});continue;}
+        if(!latest.projects.some(p=>p.projectId===project.projectId&&p.projectName===project.projectName)||current?.revision!==revision){this.log({event:'cache_changed',projectId:project.projectId});return;}
         try{
           const result=await this.client.callTool('codex_apps',BUNKER_TOOL,{action:'import',projectId:project.projectId,snapshot,expectedRevision:revision});
           if(result.ok!==true||result.item?.projectId!==project.projectId||!Number.isInteger(result.revision))fail('BUNKER_WRITE_UNCONFIRMED');
-          const observed=confirmImport(await this.read(),project.projectId,snapshot,result.revision);
-          imported++;this.log({event:'project_synced',projectId:project.projectId,rows:snapshot.rows.length,fetchedAt:snapshot.fetchedAt,lastSyncAt:snapshot.lastSyncAt,revision:observed.revision});
+          const observed=confirmImport(await this.read(project.projectId),project.projectId,snapshot,result.revision);
+          imported++;this.log({event:'project_synced',projectId:project.projectId,rows:snapshot.rows.length,fetchedAt:snapshot.fetchedAt,lastSyncAt:snapshot.lastSyncAt,revision:observed.revision,durationMs:Math.max(0,this.now()-started)});
         }catch(error){
           failed++;this.log({event:'cache_write_unconfirmed',projectId:project.projectId,code:publicError(error,'BUNKER_WRITE_UNCONFIRMED').code});
           // An ambiguous import is never resent, nor overwritten by a failure record.
         }
+      };
+      for(let offset=0;offset<state.projects.length&&!paused;offset+=this.concurrency){
+        await this.yieldToDaily();
+        const batch=await Promise.allSettled(state.projects.slice(offset,offset+this.concurrency).map(processProject));
+        for(const result of batch)if(result.status==='rejected')throw result.reason;
       }
+      if(paused)return {paused:true,imported,failed};
       return {paused:false,imported,failed};
     }finally{this.running=false;}
   }
@@ -455,11 +466,11 @@ export function parseOptions(argv){
 }
 /** One shared, bounded queue reader across project boundaries and idle checks. */
 export function createDailyService({daily,signal,clock=()=>performance.now(),log=()=>{}}){
-  let backoff=POLL_INTERVAL_MS,retryAt=0,nextCheckAt=0,running=false;
+  let backoff=60_000,retryAt=0,nextCheckAt=0,running=false;
   return async()=>{
     if(signal?.aborted||running||clock()<retryAt||clock()<nextCheckAt)return {failed:0};
     running=true;nextCheckAt=clock()+DAILY_CHECK_INTERVAL_MS;
-    try{const result=await daily.runOnce();backoff=POLL_INTERVAL_MS;return result;}
+    try{const result=await daily.runOnce();backoff=60_000;return result;}
     catch(error){log({event:'daily_unavailable',code:dailyPublicError(error).code});retryAt=clock()+backoff;backoff=Math.min(backoff*2,300_000);return {failed:1};}
     finally{running=false;}
   };
@@ -471,13 +482,14 @@ export async function main(argv=process.argv.slice(2)){
   try{
     const options=parseOptions(argv);release=await acquireLock(options.lockFile);client=new CodexMcpClient({codexBin:options.codexBin});
     const daily=new DailyRelay({...options,client,log}),runDaily=createDailyService({daily,signal:controller.signal,log});
-    const relay=new LiveRelay({...options,client,log,serviceDaily:runDaily});
+    const creative=new CreativeRelay({...options,client,log});
+    const relay=new LiveRelay({...options,client,log,serviceDaily:runDaily,concurrency:3});
     if(options.check){log({event:'check_complete',...await relay.check()});return 0;}
     let backoff=POLL_INTERVAL_MS;
     while(!controller.signal.aborted){
       let failed=0;failed+=(await runDaily()).failed;
       const cycleStarted=performance.now();let nextCycleAt=cycleStarted+POLL_INTERVAL_MS;
-      try{failed+=(await relay.runOnce()).failed;backoff=POLL_INTERVAL_MS;}
+      try{const results=await Promise.allSettled([relay.runOnce(),creative.runOnce()]);for(const result of results){if(result.status==='rejected')throw result.reason;failed+=result.value.failed;}log({event:'cycle_complete',durationMs:Math.round(performance.now()-cycleStarted)});backoff=POLL_INTERVAL_MS;}
       catch(error){if(controller.signal.aborted)break;log({event:'sync_unavailable',code:publicError(error).code});client.close();nextCycleAt=performance.now()+backoff;backoff=Math.min(backoff*2,300_000);failed++;}
       if(controller.signal.aborted)break;failed+=(await runDaily()).failed;
       if(options.once)return failed?1:0;
