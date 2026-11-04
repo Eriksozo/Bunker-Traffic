@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {callRemoteMcp,cloudMalvaClient,unpackMcp} from '../lib/cloud-malva.mjs';
 import {cloudNext,cloudDispatch,cloudProposalPayload,failCloudOpinion,createCloudEngine} from '../lib/cloud-engine.mjs';
 import {authorizeCloudDispatch} from '../lib/cloud-dispatch-guard.mjs';
-import {runCloudAnalyst,cloudFocus,cloudEvidence,compactCloudContext} from '../lib/cloud-analysis.mjs';
+import {runCloudAnalyst,cloudFocus,cloudEvidence,compactCloudContext,cloudLearningContext,cloudHistoryContext,cloudAnalysisContext} from '../lib/cloud-analysis.mjs';
 import {collectCloudProject,cloudRanges} from '../lib/cloud-collector.mjs';
 import {ensureCollaboration,claimCollaboration,postCollaboration,submitProposal,reviewProposal} from '../lib/collaboration.mjs';
 const project='11111111-1111-4111-8111-111111111111',account='22222222-2222-4222-8222-222222222222',internal='33333333-3333-4333-8333-333333333333';
@@ -136,4 +136,48 @@ test('visual cache coverage stays rejected; analytic operative scope requires al
 
 test('vendor refusal diagnostics preserve only safe status/code metadata, never response content',()=>{
  assert.throws(()=>unpackMcp({isError:true,structuredContent:{status:404,code:'NOT_FOUND',message:'private response body'}}),e=>e.code==='MCP_TOOL_FAILED'&&e.providerStatus===404&&e.providerCode==='NOT_FOUND'&&!e.message.includes('private'));
+});
+
+test('learning packets preserve current claims and locators while bounding repeated source/case journals',()=>{
+ const entry={id:'learning',project,claim:'An isolated sale does not require keeping an unprofitable test',status:'Hipótese',confidence:0.5,revision:3,updatedAt:iso(Date.now()),sources:Array.from({length:12},(_,i)=>({system:'Bunker',reference:'source-'+i,observedAt:iso(Date.now()),summary:'x'.repeat(800)})),supportCases:Array.from({length:40},(_,i)=>({objectId:String(i),reference:'source-'+(i%12)})),revisions:Array.from({length:30},()=>({claim:'x'.repeat(1600)}))};
+ const before=structuredClone(entry),out=cloudLearningContext([entry])[0];
+ assert.equal(out.claim,entry.claim);assert.equal(out.status,'Hipótese');assert.equal(out.sources.length,3);assert.equal(out.omittedSources,9);assert.equal(out.omittedRevisions,30);assert.equal(out.omittedSupportCases,40-out.supportCases.length);assert.ok(out.supportCases.every(c=>out.sources.some(s=>s.reference===c.reference)));assert.deepEqual(entry,before);
+});
+
+test('edit context retains the latest budget/creative evidence despite status noise and declares omitted events',()=>{
+ const items=Array.from({length:20},(_,i)=>({id:'event-'+i,at:iso(Date.now()-i*60000),category:i===15?'budget':i===18?'creative':'status',values:i===15?{kind:'money',field:'daily_budget',currency:'USD',from:100,to:150}:{kind:'status',from:'processing',to:'active'},actor:{name:'Manager',kind:'human',profile:'x'.repeat(2000)},object:{level:'campaign',externalId:'123',objectId:internal,name:'Campaign'},raw:{duplicate:'x'.repeat(4000)}}));
+ const history={items,nextCursor:'cursor',truncated:true},out=cloudHistoryContext(history);
+ assert.ok(out.items.length<=8);assert.ok(out.items.some(e=>e.id==='event-15'&&e.values.currency==='USD'&&e.values.to===150));assert.ok(out.items.some(e=>e.id==='event-18'));assert.equal(out.availableItemCount,20);assert.equal(out.omittedItemCount,20-out.items.length);assert.equal(out.hasNextPage,true);assert.equal(out.truncated,true);assert.equal(out.items[0].actor.name,'Manager');assert.ok(out.items.every(e=>!e.raw));assert.ok(history.items[0].raw);
+});
+
+test('a rejected AI context can shrink once, with new target enums and actual coverage; financial calls do not exist here',async()=>{
+ const input={campaigns:[0,1].map(i=>({target:{adAccountId:account,externalId:String(i)},hierarchy:[],windows:{today:{spend:100}}})),research:{details:[0,1].map(i=>({adAccountId:account,externalId:String(i),detail:'x'.repeat(15000)}))},coverage:{individuallyPrioritized:2}};
+ const requests=[],value={decision:'Investigar',reason:'Sem aquisição nova',nextStep:'Conferir edições',text:'Somente uma campanha na amostra reduzida.',suggestions:[],question:null};
+ const result=await runCloudAnalyst({run:async(_m,r)=>{requests.push(r);if(requests.length===1)throw Error("This model's maximum context length is 24000 tokens");return {response:value};}},'ops',input);
+ assert.equal(requests.length,2);assert.equal(result.analysisTargets.length,1);assert.deepEqual(requests[1].response_format.json_schema.properties.suggestions.items.properties.objectId.enum,['0']);assert.equal(JSON.parse(requests[1].messages[1].content).context.coverage.deferredPrioritized,1);assert.equal(input.campaigns.length,2);
+ let calls=0;await assert.rejects(runCloudAnalyst({run:async()=>{calls++;throw Error('Unavailable');}},'ops',input));assert.equal(calls,1);
+});
+
+test('model context includes only local learning and the revised pause/reduce reasoning without inventing front counts',async()=>{
+ const f=fixture(),round=f.state.collaborationRounds[0];f.state.knowledge=[{id:'foreign',project:'other',claim:'foreign threshold'}, {id:'local',project,claim:'Owner prefers pause in this loss scenario',updatedAt:iso(Date.now()),sources:[],supportCases:[]}];
+ const context=cloudAnalysisContext(f.state,round,[f.row],'traffic');assert.equal(context.learning.length,1);assert.equal(context.learning[0].id,'local');assert.equal(context.campaigns[0].windows.today.calculated.frontOrders,null);
+ let req;await runCloudAnalyst({run:async(_m,r)=>{req=r;return {response:{decision:'Investigar',reason:'Dados insuficientes',nextStep:'Conferir entrega',text:'A preferência não é uma execução.',suggestions:[],question:null}};}},'traffic',context);
+ assert.match(req.messages[0].content,/uma venda isolada não obriga manter/i);assert.match(req.messages[0].content,/config.testHours/);assert.match(req.messages[0].content,/Omissões.*lacunas/);
+});
+
+test('research collection reads daily history and today separately and retains an older budget amid status noise',async()=>{
+ const f=fixture();f.state.jobs[0].status='Em análise';f.state.jobs[0].executor='cloudflare';f.state.collaborationRounds=[];f.state.proposals=[];f.state.executions=[];f.state.snapshots=[];
+ const store=memory(f),now=Date.now(),ranges=cloudRanges(now,'UTC'),detailPresets=[];
+ const r={...f.row,projectId:project,projectName:'Example',spend:100,frontOrders:0};
+ const source={read:async(tool,a)=>{
+  if(tool==='workspace_whoami')return {workspace:{id:'workspace'},platforms:[{platform:'tracking',read:true}]};
+  if(tool==='tracking_list_projects')return {items:[{id:project,name:'Example',timezone:'UTC',currency:'BRL'}]};
+  if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};
+  if(tool==='tracking_campaigns')return {level:a.level,salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:a.from+'T00:00:00.000Z',to:iso(Date.parse(a.to+'T00:00:00Z')+86400000),days:a.from===a.to?[a.from]:[a.from,a.to]},rows:[{...r,level:a.level,campaignExternalId:a.level==='campaign'?null:'123'}]};
+  if(tool==='tracking_ad_changes')return {timezone:'UTC',items:Array.from({length:50},(_,i)=>({id:String(i),category:i===40?'budget':'status',at:iso(now-i*1000),values:{kind:'money',field:'daily_budget',from:100,to:150}})),nextCursor:null};
+  if(tool==='tracking_ad_detail'){detailPresets.push(a.preset);return {row:r,currency:'BRL',daily:[],period:{timezone:'UTC',from:ranges.today.from+'T00:00:00Z',to:iso(Date.parse(ranges.today.to+'T00:00:00Z')+86400000),days:a.preset==='today'?[ranges.today.from]:['previous',ranges.today.from]},hourly:[{hour:1,spend:10,orders:0}]};}
+  throw Error('Unexpected tool');
+ }};
+ const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source,now:()=>now,ops:{liveItems:async()=>[],importBundle:(s,b)=>{s.snapshots=b.snapshots;},updateRun:(_s,j,status)=>{j.status=status;}}});
+ const result=await engine.step();assert.equal(result.kind,'collection');assert.deepEqual(detailPresets,['14d','today']);const research=store.state.cloudResearch[project].details[0];assert.equal(research.detail.intraday.period.days.length,1);assert.equal(research.detail.period.days.length,2);assert.ok(research.history.items.some(e=>e.category==='budget'));assert.equal(research.history.returnedCount,50);assert.equal(research.history.truncated,true);
 });

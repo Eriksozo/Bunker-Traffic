@@ -59,3 +59,9 @@ A comparação observa ROI, resultado econômico e front em conjunto. Sinais mis
 - Uso: padrões que podem apoiar uma nova análise local, sempre com fontes atuais e ressalvas.
 
 Nenhum indicador muda orçamento, status Meta, metas, proteções de teste, limites ou cadência. A execução continua vinculada à proposta exata aprovada pelo dono e ao protocolo de envio único. O processo é entregue no runbook publicado; os agentes o consultam nas rotinas já existentes, sem criar outro agendador ou alegar aprendizado concluído antes das medições.
+
+## Preferências por exemplos de pausa
+
+Exemplos enviados pelo dono são evidência da escolha que ele faria, com campanha, período, gasto e aquisição conforme a fonte. Uma venda isolada não implica preservar uma campanha deficitária; métricas de clique/retenção favoráveis também não demonstram aquisição rentável. Registrar a preferência no projeto correto, sem transformar os valores de um print em limite universal ou registrar uma pausa como aplicada. A preferência pode orientar a discussão; sua eficácia permanece em estudo até haver comparação verificável e revisão.
+
+Separar pausa por aquisição sem sustentação, redução de exposição preservando aquisição útil e observação quando faltam dados novos ou existe retomada de incidente. A escolha depende do contexto próprio. O recorte pós-ajuste deve declarar a janela real e a fonte: horas de vários dias, hora que cruza a edição, hora ainda aberta e pedidos com upsells não comprovam novas vendas front após o ajuste.

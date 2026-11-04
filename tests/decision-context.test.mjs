@@ -151,3 +151,17 @@ test('Callers cannot corrupt the shared checklist by changing a previous returne
  const next=decisionContext(metrics);
  assert.deepEqual(next.checks,contextChecks);assert.notEqual(first.checks,next.checks);
 });
+
+test('zero or isolated front acquisition with losses becomes a pause/reduce review, never a financial instruction',()=>{
+ for(const frontOrders of [0,1]){
+  const state=fixture({roi:{'7d':0.7,'3d':0.6,yesterday:0.5,today:0.4},row:{frontOrders,orders:frontOrders+3}}),before=structuredClone(state),card=buildDecisionCards(state,project,now)[0],signal=candidates(state,project)[0];
+  assert.equal(card.context.kind,'weak-acquisition');assert.equal(card.context.automaticAction,false);assert.match(card.context.summary,/uma venda isolada/);assert.equal(signal.decision,'Avaliar pausa ou redução');assert.equal(card.suggestion.origin,'diagnostic');assert.deepEqual(state,before);assert.equal(state.proposals,undefined);
+ }
+});
+
+test('missing front data, protected tests and profitable history cannot be converted into automatic pause cases',()=>{
+ const loss={roi:{'7d':0.7,'3d':0.6,yesterday:0.5,today:0.4}};
+ for(const frontOrders of [null,undefined,NaN,'0'])assert.equal(decisionContext(windows(fixture({...loss,row:{frontOrders}}))).kind,'negative-history');
+ const protectedState=fixture({...loss,row:{frontOrders:0,name:'[TESTE] young',deliveryStartedAt:date(now-3600000)}});assert.equal(candidates(protectedState,project)[0].decision,'Teste protegido');assert.equal(protectedState.config[project].testHours,24);
+ assert.equal(decisionContext(windows(fixture({row:{frontOrders:1}}))).kind,'mixed-return');
+});
