@@ -2,7 +2,7 @@ import {authenticateServer} from '../supabase/functions/malva-mcp/server-auth.mj
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {callRemoteMcp,cloudMalvaClient} from '../lib/cloud-malva.mjs';
-import {cloudNext,cloudDispatch,cloudProposalPayload} from '../lib/cloud-engine.mjs';
+import {cloudNext,cloudDispatch,cloudProposalPayload,failCloudOpinion} from '../lib/cloud-engine.mjs';
 import {authorizeCloudDispatch} from '../lib/cloud-dispatch-guard.mjs';
 import {runCloudAnalyst,cloudFocus,cloudEvidence} from '../lib/cloud-analysis.mjs';
 import {collectCloudProject,cloudRanges} from '../lib/cloud-collector.mjs';
@@ -70,4 +70,15 @@ test('MCP edge auth accepts injected server keys and rejects users, public keys 
  assert.equal(await authenticateServer(new Request('https://example.test',{headers:{apikey:'sb_secret_fixture'}}),env),true);
  for(const key of ['user-jwt','sb_publishable_fixture','sb_secret_forged',''])assert.equal(await authenticateServer(new Request('https://example.test',{headers:{apikey:key}}),env),false);
  assert.equal(await authenticateServer(new Request('https://example.test',{headers:{apikey:'sb_secret_fixture'}}),{...env,secretKeys:'invalid-json'}),false);
+});
+
+test('structured cloud generation forbids targets with no candidates and uses exact current ID enums',async()=>{
+ const value={decision:'Observar',reason:'Sem candidatos',nextStep:'Aguardar',text:'Sem campanha elegível neste recorte.',suggestions:[],question:null};
+ for(const role of ['traffic','ops']){let request;await runCloudAnalyst({run:async(_model,r)=>{request=r;return {response:value};}},role,{campaigns:[]});assert.equal(request.response_format.type,'json_schema');assert.equal(request.response_format.json_schema.properties.suggestions.maxItems,0);}
+ let req;await runCloudAnalyst({run:async(_m,r)=>{req=r;return {response:value};}},'ops',{campaigns:[{target:{adAccountId:account,externalId:'123'}}]});assert.deepEqual(req.response_format.json_schema.properties.suggestions.items.properties.objectId.enum,['123']);
+});
+test('generation failure releases only its own claim, preserves attempt evidence and never records a conclusion',()=>{
+ const f=fixture(),round=f.state.collaborationRounds[0],stage=round.stages[3],args={roundId:round.id,agentId:stage.agentId,claimId:stage.claimId,executionRef:stage.executionRef};
+ assert.throws(()=>failCloudOpinion(f.state,{...args,executionRef:'other'},'CLOUD_AI_SCOPE'));
+ failCloudOpinion(f.state,args,'CLOUD_AI_SCOPE');assert.equal(stage.status,'Falhou');assert.equal(f.state.cloudAttemptFailures[stage.claimId].attempt,stage.attempt);assert.equal(stage.conclusionId,undefined);
 });
