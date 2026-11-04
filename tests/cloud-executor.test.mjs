@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {callRemoteMcp,cloudMalvaClient} from '../lib/cloud-malva.mjs';
 import {cloudNext,cloudDispatch,cloudProposalPayload,failCloudOpinion} from '../lib/cloud-engine.mjs';
 import {authorizeCloudDispatch} from '../lib/cloud-dispatch-guard.mjs';
-import {runCloudAnalyst,cloudFocus,cloudEvidence} from '../lib/cloud-analysis.mjs';
+import {runCloudAnalyst,cloudFocus,cloudEvidence,compactCloudContext} from '../lib/cloud-analysis.mjs';
 import {collectCloudProject,cloudRanges} from '../lib/cloud-collector.mjs';
 import {ensureCollaboration,claimCollaboration,postCollaboration,submitProposal,reviewProposal} from '../lib/collaboration.mjs';
 const project='11111111-1111-4111-8111-111111111111',account='22222222-2222-4222-8222-222222222222',internal='33333333-3333-4333-8333-333333333333';
@@ -53,7 +53,7 @@ test('a paused central admits no collection and cannot inherit a due slot',()=>{
 test('full collector validates identities and produces twelve independent source windows without summing overlaps',async()=>{
  const now=Date.now(),p={id:project,name:'Example',timezone:'UTC',currency:'BRL'},ranges=cloudRanges(now,'UTC');let calls=0;
  const source={read:async(tool,a)=>{if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};calls++;return {level:a.level,salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:a.from+'T00:00:00.000Z',to:iso(Date.parse(a.to+'T00:00:00Z')+86400000),days:a.from===a.to?[a.from]:[a.from,a.to]},rows:[{id:internal,projectId:project,projectName:'Example',externalId:'123',adAccountId:account,accountName:'Test',name:'Example',level:a.level,provider:'meta',spend:100}]};}};
- const out=await collectCloudProject(source,p,{now:()=>now,startedAt:iso(now-1000)});assert.equal(calls,12);assert.equal(out.snapshots.length,12);assert.equal(out.snapshots.find(s=>s.period==='7d').from,ranges['7d'].from+'T00:00:00.000Z');
+ const out=await collectCloudProject(source,p,{now:()=>now,startedAt:iso(now-1000)});assert.equal(out.snapshots.length,12);assert.equal(out.snapshots.find(s=>s.period==='today'&&s.level==='campaign').coverage.kind,'active-spent-tracked');assert.equal(out.snapshots.find(s=>s.period==='7d').from,ranges['7d'].from+'T00:00:00.000Z');
  const bad={read:async(tool,a)=>tool==='tracking_ad_accounts'?{items:[]}: {...await source.read(tool,a),truncated:{shown:1,total:2}}};await assert.rejects(collectCloudProject(bad,p,{now:()=>now}),e=>e.code==='SOURCE_INCOMPLETE');
 });
 
@@ -81,4 +81,18 @@ test('generation failure releases only its own claim, preserves attempt evidence
  const f=fixture(),round=f.state.collaborationRounds[0],stage=round.stages[3],args={roundId:round.id,agentId:stage.agentId,claimId:stage.claimId,executionRef:stage.executionRef};
  assert.throws(()=>failCloudOpinion(f.state,{...args,executionRef:'other'},'CLOUD_AI_SCOPE'));
  failCloudOpinion(f.state,args,'CLOUD_AI_SCOPE');assert.equal(stage.status,'Falhou');assert.equal(f.state.cloudAttemptFailures[stage.claimId].attempt,stage.attempt);assert.equal(stage.conclusionId,undefined);
+});
+
+test('large model packets preserve numbers and mark reduced hierarchy and deferred campaign coverage',()=>{
+ const campaigns=Array.from({length:6},(_,i)=>({target:{adAccountId:account,externalId:String(i)},windows:{today:{spend:100+i}},hierarchy:[{total:4,rows:Array.from({length:4},()=>({spend:123,name:'x'.repeat(600)}))}]}));
+ const input={campaigns,coverage:{individuallyPrioritized:6},priorOpinions:[],research:{details:campaigns.map(c=>({adAccountId:account,externalId:c.target.externalId,detail:'x'.repeat(1600)}))}};
+ const out=compactCloudContext(input,6000);assert.ok(JSON.stringify(out).length<=6000);assert.equal(out.coverage.contextCompacted,true);assert.equal(out.campaigns[0].windows.today.spend,100);assert.ok(out.campaigns[0].hierarchy[0].omittedRows>0);assert.ok(out.coverage.deferredPrioritized>0);assert.equal(input.campaigns.length,6);
+});
+
+test('today cohort reads active and spent plus exact tracked paused objects, not the dormant archive',async()=>{
+ const now=Date.now(),p={id:project,name:'Example',timezone:'UTC',currency:'BRL'},ranges=cloudRanges(now,'UTC'),pausedId='44444444-4444-4444-8444-444444444444';
+ const active={id:internal,externalId:'123',adAccountId:account,accountName:'Test',projectId:project,projectName:'Example',name:'Active',level:'campaign',provider:'meta',status:'ACTIVE',spend:5};
+ const paused={...active,id:pausedId,externalId:'456',status:'PAUSED',spend:0};let details=0;
+ const source={read:async(tool,a)=>{if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};if(tool==='tracking_ad_detail'){details++;assert.equal(a.objectId,pausedId);return {row:paused,currency:'BRL',period:{timezone:'UTC'}};}assert.ok(['active','spent'].includes(a.status));return {level:'campaign',salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:ranges.today.from+'T00:00:00.000Z',to:iso(Date.parse(ranges.today.to+'T00:00:00Z')+86400000),days:[ranges.today.from]},rows:[active]};}};
+ const out=await collectCloudProject(source,p,{now:()=>now,levels:['campaign'],periodsWanted:['today'],tracked:[paused]});assert.equal(details,1);assert.equal(out.snapshots[0].rows.length,2);assert.equal(out.snapshots[0].coverage.trackedComplete,true);assert.equal(out.snapshots[0].rows.find(r=>r.externalId==='456').status,'PAUSED');
 });
