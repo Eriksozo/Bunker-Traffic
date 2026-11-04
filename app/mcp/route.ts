@@ -1,3 +1,4 @@
+import {readReviewContext} from '@/lib/review-pipeline.mjs';
 import {readState,readReports,readSuggestionHistory,commit,apply} from '@/lib/state';
 import {agentView,reserveRequest} from '@/lib/mcp-run';
 import {readLiveData} from '@/lib/live-data.mjs';
@@ -30,7 +31,11 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
  else if(r.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'bunker-trafego',version:'1.2.0'}};
  else if(r.method==='tools/list')result={tools};
  else if(r.method==='tools/call'){const {name,arguments:a={}}=r.params||{};const cur=await readState();
- if(name==='bunker_dados_diarios'){
+ if(name==='bunker_atualizar_rodada'&&a.id==='review-data'){
+  if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope de revisão inválido.');
+  const args=JSON.parse(a.note||'{}');result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...readReviewContext(cur.state,args)})}]};
+ }
+ else if(name==='bunker_dados_diarios'){
   if(a.action==='request')throw new Error('Pedidos de diário são feitos pela interface autenticada.');
   result={content:[{type:'text',text:JSON.stringify(await updateDailyState(a,cur.state))}]};
  }

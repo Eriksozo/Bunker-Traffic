@@ -1,3 +1,4 @@
+import {requestReviewBatch} from './review-pipeline.mjs';
 import {recordIncident} from './campaign-incidents.mjs';
 import {invalidateIncidentContext} from './campaign-reassessment.mjs';
 import {apply} from './state';
@@ -13,6 +14,7 @@ import {learningCyclePlan,recordLearningReview} from './learning-cycle.mjs';
 import {autonomousWorkPlan} from './autonomous-work.mjs';
 
 export function ownerAutonomy(state:any,input:any,ownerId:string){
+ if(input.op==='reviewBatch')return requestReviewBatch(state,input,ownerId);
  if(['incidentReport','incidentUpdate'].includes(input.op)){const record=recordIncident(state,input,ownerId);invalidateIncidentContext(state,record);return record;}
  if(input.op==='cardReopen')return reopenDecision(state,input,ownerId);
  if(input.op==='cardDecision'){
