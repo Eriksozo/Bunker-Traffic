@@ -3,7 +3,7 @@ import {invalidateIncidentContext} from './campaign-reassessment.mjs';
 import {apply} from './state';
 import {ensureCollaboration,collaborationPlan,claimCollaboration,postCollaboration,submitProposal,reviewProposal} from './collaboration.mjs';
 import {recordKnowledge,readKnowledgePlan,recordOutcome} from './knowledge.mjs';
-import {claimExecution,prepareExecution,submitExecution,confirmExecution,failExecution,executionPlan} from './execution.mjs';
+import {claimExecution,prepareExecution,submitExecution,confirmExecution,failExecution,monitorExecution,executionPlan} from './execution.mjs';
 import {recordOwnerChoice,decisionLearningPlan,importDecisionHistory,linkChoiceProposal,recordCardSuggestion} from './decision-cards.mjs';
 import {recordDecisionHistoryOutcome} from './decision-history-outcomes.mjs';
 import {shouldQueueChoiceReview} from './decision-review-queue.mjs';
@@ -75,5 +75,6 @@ export function agentAutonomy(state:any,args:any){
  if(action==='executionSubmit')return submitExecution(state,args);
  if(action==='executionConfirm')return confirmExecution(state,args);
  if(action==='executionFail')return failExecution(state,args);
+ if(action==='executionMonitor')return monitorExecution(state,args);
  throw Error('Operação de colaboração não permitida.');
 }

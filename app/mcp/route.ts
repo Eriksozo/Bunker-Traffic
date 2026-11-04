@@ -3,11 +3,12 @@ import {agentView,reserveRequest} from '@/lib/mcp-run';
 import {readLiveData} from '@/lib/live-data.mjs';
 import {storage} from '@/lib/storage';
 import {campaignWatchPlan} from '@/lib/campaign-watch.mjs';
+import {contingencyObservation} from '@/lib/decision-contingency.mjs';
 import {updateCreativeState} from '@/lib/creative-state';
 import {agentAutonomy,collaborationRead} from '@/lib/autonomy';
 import {autonomyTools} from '@/lib/autonomy-tools';
 import {readDecisionExamples} from '@/lib/decision-learning-view.mjs';
-import {updateLiveState} from '@/lib/live-state';
+import {updateLiveState,assertCurrentExecutionContingency} from '@/lib/live-state';
 import {parseLiveDataEnvelope} from '@/lib/live-data.mjs';
 import {updateDailyState} from '@/lib/campaign-daily-state';
 import {parseDailyDataEnvelope} from '@/lib/campaign-daily-data.mjs';
@@ -42,6 +43,11 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
  else if(name==='bunker_atualizar_rodada'&&a.id==='creative-data'){if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope Órbita inválido.');result={content:[{type:'text',text:JSON.stringify(await updateCreativeState(JSON.parse(a.note||'{}'),cur.state))}]};}
  else if(name==='bunker_relatorios')result={content:[{type:'text',text:JSON.stringify(await readReports(a.projectId,a.limit??5,a.cursor||null))}]};
  else if(name==='bunker_ler'){const live=await readLiveData(storage(),cur.state).catch(()=>({items:[],error:'Leitura de acompanhamento indisponível; análise anterior preservada.'}));result={content:[{type:'text',text:JSON.stringify(agentView(cur,live))}]};}
+ else if(name==='bunker_atualizar_rodada'&&a.id==='contingency-data'){
+  const input=JSON.parse(a.note||'{}');if(a.revision!==0||a.status!=='Pendente'||input.action!=='read'||typeof input.executionId!=='string'||Object.keys(input).some(k=>!['action','executionId'].includes(k)))throw Error('Envelope de contingência inválido.');
+  const execution=(cur.state.executions||[]).find((e:any)=>e.id===input.executionId);if(!execution)throw Error('Execução não encontrada.');
+  const live=await readLiveData(storage(),cur.state,execution.project);result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,observation:contingencyObservation(cur.state,live.items,input.executionId)})}]};
+ }
  else if(name==='bunker_atualizar_rodada'&&a.id==='watch-data'){
   const input=JSON.parse(a.note||'{}');if(a.revision!==0||a.status!=='Pendente'||input.action!=='read'||Object.keys(input).some(k=>!['action','projectId','offset','limit'].includes(k)))throw Error('Envelope de acompanhamento inválido.');
   const live=await readLiveData(storage(),cur.state);result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...campaignWatchPlan(cur.state,live,Date.now(),input)})}]};
@@ -53,7 +59,7 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
    result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...await readSuggestionHistory(args.projectId,args.limit??10,args.cursor||null)})}]};
   }
   else if(args.action==='read'||args.action==='learningRead'||args.action==='decisionRead')result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...(args.action==='decisionRead'?readDecisionExamples(cur.state,args):collaborationRead(cur.state,args))})}]};
-  else{if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');const record=agentAutonomy(cur.state,args);const saved=await commit(cur.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({ok:true,revision:saved.revision,record})}]};}
+  else{if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');await assertCurrentExecutionContingency(cur.state,args);const record=agentAutonomy(cur.state,args);const saved=await commit(cur.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({ok:true,revision:saved.revision,record})}]};}
  }
  else if(name==='bunker_iniciar_rodada'||(name==='bunker_atualizar_rodada'&&a.status==='Em análise'&&(a.id?.startsWith('project:')||a.id==='projects:due'))){if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');const c=reserveRequest(cur.state,a);const saved=await commit(c.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({revision:saved.revision,...('jobs' in c?{jobs:c.jobs}:{job:c.job})})}]};}
  else{if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');const op=name==='bunker_importar_leituras'?'import':name==='bunker_atualizar_rodada'?'jobStatus':name==='bunker_responder'?'answer':null;if(!op)throw new Error('Ferramenta não permitida.');const s=await commit(apply(cur.state,{...a,op}),cur.revision);result={content:[{type:'text',text:JSON.stringify({ok:true,revision:s.revision,updatedAt:s.updatedAt})}]};}}

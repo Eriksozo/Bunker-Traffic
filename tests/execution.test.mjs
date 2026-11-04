@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ensureCollaboration,compactCollaboration,claimCollaboration,postCollaboration,submitProposal,reviewProposal} from '../lib/collaboration.mjs';
-import {claimExecution,prepareExecution,submitExecution,confirmExecution,failExecution,executionPlan,executionLimits} from '../lib/execution.mjs';
+import {claimExecution,prepareExecution,submitExecution,confirmExecution,failExecution,executionPlan,executionLimits,monitorExecution} from '../lib/execution.mjs';
 const now=Date.parse('2026-11-02T18:00:00Z'),project='11111111-1111-4111-8111-111111111111',internal='22222222-2222-4222-8222-222222222222';
 const date=t=>new Date(t).toISOString();
 function fixture(action='budget',options={}){
@@ -119,4 +119,41 @@ test('An expired pre-dispatch lease can be reclaimed three times at most, fencin
  failExecution(f.state,{id:second.id,claimId:second.claimId,executionRef:second.executionRef,clientId:'before-send-failed',reason:'Read unavailable before any dispatch'},later+1);
  later+=executionLimits.leaseMs;const third=claimExecution(f.state,{...f.args,executionRef:'third-run',clientId:'third-claim'},later);assert.equal(third.attempt,3);assert.equal(third.attemptHistory[1].status,'Falhou');
  assert.throws(()=>claimExecution(f.state,{...f.args,executionRef:'fourth-run',clientId:'fourth-claim'},later+executionLimits.leaseMs),/Limite de tentativas/);assert.equal(executionPlan(f.state,later+executionLimits.leaseMs).executions[0].canReclaim,false);
+});
+
+function confirmedWithPerformance(){
+ const f=prepared();submitExecution(f.state,f.submitArgs,now+1);
+ const metrics={spend:100,revenueNet:200,adCosts:0,productCost:0,saleTax:0,frontOrders:2,orders:3,checkouts:4};
+ const observed=(t,patch={})=>({...f.observation(t,{dailyBudget:150,...metrics,...patch}),metricsCurrency:'BRL',from:'2026-11-02T04:00:00Z',to:'2026-11-03T04:00:00Z',timezone:'America/Boa_Vista'});
+ confirmExecution(f.state,{id:f.e.id,clientId:'confirm-with-metrics',executionRef:'real-verifier',observation:observed(now+2)},now+2);
+ return {...f,observed};
+}
+test('Post-action checkpoints require fresh new exact evidence, preserve late timing and never authorize dispatch',()=>{
+ const f=confirmedWithPerformance(),t=now+20*60000;
+ const args={id:f.e.id,entry:{checkpointMinutes:15},clientId:'monitor-15',executionRef:'real-follow-up',observation:f.observed(t,{spend:150,revenueNet:230,frontOrders:3})};
+ const c=monitorExecution(f.state,args,t);assert.equal(c.delta.spend,50);assert.equal(c.delta.result,-20);assert.equal(c.delta.frontOrders,1);assert.equal(c.status,'Observado');assert.ok(c.lateByMs>4*60000);assert.equal(c.automaticAction,false);assert.equal(f.e.status,'Confirmada');assert.equal(f.e.command.arguments.dailyBudget,150);
+ assert.equal(monitorExecution(f.state,args,t+1),c);assert.equal(f.e.monitorChecks.length,1);
+ assert.throws(()=>monitorExecution(f.state,{...args,clientId:'duplicate-new-id'},t+1),/já foi registrada/);
+ assert.throws(()=>monitorExecution(f.state,{...args,observation:f.observed(t,{spend:999})},t+1),/clientId/);
+});
+test('Monitoring cannot skip checkpoints, backdate a read, borrow another identity or use a future timestamp',()=>{
+ for(const mode of ['early','skip','wrong-id','future','wrong-project']){
+  const f=confirmedWithPerformance(),t=now+20*60000,args={id:f.e.id,entry:{checkpointMinutes:15},clientId:'check',executionRef:'reviewer',observation:f.observed(t)};
+  if(mode==='early')args.observation=f.observed(now+10*60000);
+  if(mode==='skip')args.entry.checkpointMinutes=30;
+  if(mode==='wrong-id')args.observation.rows[0].id='33333333-3333-4333-8333-333333333333';
+  if(mode==='future')args.observation.fetchedAt=date(t+1000);
+  if(mode==='wrong-project')args.observation.rows[0].projectId='other';
+  assert.throws(()=>monitorExecution(f.state,args,t));assert.equal(f.e.monitorChecks,undefined);
+ }
+});
+test('Post-action financial delta is unavailable after external native change or day rollover; original readback remains',()=>{
+ for(const mode of ['edit','day','currency']){const f=confirmedWithPerformance(),baseline=JSON.stringify(f.e.readback),t=now+20*60000,args={id:f.e.id,entry:{checkpointMinutes:15},clientId:'check',executionRef:'reviewer',observation:f.observed(t)};
+  if(mode==='edit')args.observation.rows[0].dailyBudget=120;if(mode==='day')args.observation.from='2026-11-02T05:00:00Z';if(mode==='currency')delete args.observation.metricsCurrency;
+  const c=monitorExecution(f.state,args,t);assert.equal(c.delta,null);assert.equal(JSON.stringify(f.e.readback),baseline);assert.equal(c.automaticAction,false);
+ }
+});
+test('A post-action review never takes the place of confirming an ambiguous dispatch and respects Bunker pause',()=>{
+ const f=prepared(),t=now+20*60000;submitExecution(f.state,f.submitArgs,now+1);assert.throws(()=>monitorExecution(f.state,{id:f.e.id,entry:{checkpointMinutes:15},clientId:'m',executionRef:'r',observation:f.observation(t)},t),/já confirmada/);
+ const g=confirmedWithPerformance();g.state.paused=true;assert.throws(()=>monitorExecution(g.state,{id:g.e.id,entry:{checkpointMinutes:15},clientId:'m',executionRef:'r',observation:g.observed(t)},t),/pausado/);
 });

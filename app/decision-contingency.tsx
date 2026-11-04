@@ -1,0 +1,21 @@
+'use client';
+import {useMemo} from 'react';
+import {ShieldCheck,Clock3,AlertTriangle} from 'lucide-react';
+import {decisionContingency,financialScope} from '../lib/decision-contingency.mjs';
+import './decision-contingency.css';
+const money=(v:any)=>Number.isFinite(v)?v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:2}):'N/D';
+export default function DecisionContingency({state,card,proposal,action,percent,liveItems,now}:{state:any;card:any;proposal:any;action:string;percent:number|null;liveItems:any[];now:number}){
+ const row=card.observedRow||card.row||{},at=Math.max(now,Date.now());
+ const guard=useMemo(()=>decisionContingency({state,project:card.project,row,proposal,action,percent,liveItems,now:at}),[state,card,proposal,action,percent,liveItems,at]);
+ const scope=financialScope(state,{project:card.project,payload:{...row,provider:row.provider,level:'campaign',objectId:row.externalId}});
+ const executions=(state.executions||[]).filter((e:any)=>{const p=(state.proposals||[]).find((p:any)=>p.id===e.proposalId);return e.project===card.project&&p&&financialScope(state,p)===scope;}).slice(0,3);
+ return <section className="decision-contingency" aria-label="Contingência da decisão">
+  <header><ShieldCheck size={17}/><div><h4>Proteção da operação</h4><p>{guard.blocked?'Resolver antes de ampliar ou enviar.':guard.warnings.length?'Há pontos para conferir antes da ação.':'Conferências e acompanhamento da decisão.'}</p></div><span>{guard.blocked?'Bloqueio':guard.warnings.length?'Atenção':'Conferir'}</span></header>
+  <ol className="contingency-stages">{guard.checks.map((check:any)=><li key={check.phase}><strong>{check.title}</strong><p>{check.detail}</p></li>)}</ol>
+  {guard.blockers.length>0&&<div className="contingency-alert"><AlertTriangle size={14}/><div>{guard.blockers.map((s:string)=><p key={s}>{s}</p>)}</div></div>}
+  <details><summary>Exposição e limites em reais</summary><dl className="contingency-exposure"><div><dt>Gasto observado · hoje</dt><dd>{money(guard.exposure.spend)}</dd></div><div><dt>Teto diário configurado</dt><dd>{guard.exposure.dailyCap===null?'Não definido':money(guard.exposure.dailyCap)}</dd></div><div><dt>Diário ativo identificado*</dt><dd>{money(guard.exposure.activeDaily)}</dd></div><div><dt>Aumentos pendentes reservados*</dt><dd>{money(guard.exposure.reservedExtra)}</dd></div><div><dt>Diário após esta ação*</dt><dd>{money(guard.exposure.projectedDaily)}</dd></div><div><dt>Perda limite · rodada</dt><dd>{guard.exposure.lossCap===null?'Não definida':money(guard.exposure.lossCap)}</dd></div><div><dt>Variação do resultado · rodada</dt><dd>{money(guard.exposure.roundResultDelta)}</dd></div></dl><small>* Inclui equivalências pela cotação da leitura. {guard.exposure.completeExposure?'Recorte de orçamentos identificado.':'Exposição parcial; não é a verba total garantida.'} Reduções prometidas não liberam saldo antes da aplicação.</small></details>
+  {guard.warnings.length>0&&<details><summary>{guard.warnings.length} pontos de atenção</summary><ul>{guard.warnings.map((w:string)=><li key={w}>{w}</li>)}</ul></details>}
+  <details><summary><Clock3 size={13}/> Conferências após a ação</summary>{!executions.length?<p>Após uma aplicação confirmada, a equipe acompanha os dados de 15, 30 e 60 minutos. Ainda não há aplicação registrada nesta instância.</p>:executions.map((e:any)=><article key={e.id}><strong>{e.status}</strong>{e.status!=='Confirmada'?<p>Confirmar o envio na plataforma antes de outra ação neste orçamento.</p>:<><p>Aplicação confirmada em {new Date(e.confirmedAt).toLocaleString('pt-BR',{timeZone:'America/Boa_Vista'})}. Resultado financeiro posterior é uma conferência separada.</p>{[15,30,60].map(n=>{const c=e.monitorChecks?.find((c:any)=>c.checkpointMinutes===n),due=Date.parse(e.confirmedAt)+n*60000;return <div className="contingency-checkpoint" key={n}><span>{n} min</span><span>{c?c.status:due<=at?'Conferência devida':'Aguardar horário'}</span>{c&&<small>{c.lateByMs>=60000?'Registrada após o horário previsto. ':''}Gasto novo: {money(c.delta?.spend)} · Resultado novo: {money(c.delta?.result)}</small>}</div>})}</>}</article>)}</details>
+  <footer>{guard.rule}</footer>
+ </section>;
+}
