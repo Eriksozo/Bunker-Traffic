@@ -1,0 +1,34 @@
+{
+  "reviewedAt": "2026-11-04",
+  "mode": "Independent JavaScript adaptation of documented design patterns; no upstream runtime dependency or copied implementation",
+  "sources": [
+    {
+      "repository": "https://github.com/langchain-ai/langmem",
+      "commit": "8620b986af5b0c7593e6b7fbece2998690d22d15",
+      "files": [
+        "https://github.com/langchain-ai/langmem/blob/8620b986af5b0c7593e6b7fbece2998690d22d15/src/langmem/knowledge/extraction.py",
+        "https://github.com/langchain-ai/langmem/blob/8620b986af5b0c7593e6b7fbece2998690d22d15/src/langmem/prompts/optimization.py"
+      ],
+      "adaptation": "Separate project/role namespaces, episodic recall and procedural hypotheses; bounded deferred memory.",
+      "upstreamLicense": "MIT"
+    },
+    {
+      "repository": "https://github.com/microsoft/autogen",
+      "commit": "d07c667a3239ea4ab7af62a53b0f4ff205a1f23d",
+      "files": [
+        "https://github.com/microsoft/autogen/blob/d07c667a3239ea4ab7af62a53b0f4ff205a1f23d/python/packages/autogen-agentchat/src/autogen_agentchat/conditions/_terminations.py"
+      ],
+      "adaptation": "Explicit limits and stopping conditions for agent discussions; real peer critique, no invented debate.",
+      "upstreamLicense": "MIT code; repository documentation CC-BY-4.0"
+    },
+    {
+      "repository": "https://github.com/stanfordnlp/dspy",
+      "commit": "b8485dde4a7abc239a204eea612d296a89f53ccc",
+      "files": [
+        "https://github.com/stanfordnlp/dspy/blob/b8485dde4a7abc239a204eea612d296a89f53ccc/dspy/evaluate/evaluate.py"
+      ],
+      "adaptation": "Evaluate against explicit metrics and examples; distinguish test measurements from business efficacy.",
+      "upstreamLicense": "MIT"
+    }
+  ]
+}

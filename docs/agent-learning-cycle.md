@@ -65,3 +65,30 @@ Nenhum indicador muda orçamento, status Meta, metas, proteções de teste, limi
 Exemplos enviados pelo dono são evidência da escolha que ele faria, com campanha, período, gasto e aquisição conforme a fonte. Uma venda isolada não implica preservar uma campanha deficitária; métricas de clique/retenção favoráveis também não demonstram aquisição rentável. Registrar a preferência no projeto correto, sem transformar os valores de um print em limite universal ou registrar uma pausa como aplicada. A preferência pode orientar a discussão; sua eficácia permanece em estudo até haver comparação verificável e revisão.
 
 Separar pausa por aquisição sem sustentação, redução de exposição preservando aquisição útil e observação quando faltam dados novos ou existe retomada de incidente. A escolha depende do contexto próprio. O recorte pós-ajuste deve declarar a janela real e a fonte: horas de vários dias, hora que cruza a edição, hora ainda aberta e pedidos com upsells não comprovam novas vendas front após o ajuste.
+
+## Evolução individual e contrapontos — versão 2
+
+Cada chamada real do analista na Cloudflare produz uma reflexão curta: hipótese, incerteza, próxima conferência, até oito citações numéricas e até três contrapontos. O autor é a função da reserva autenticada. Não existe campo para o agente se dar nota ou liberar execução.
+
+- **Lia:** aquisição front, CPA, checkout e dados após a última edição.
+- **Nina:** conjuntos/anúncios, identidade da peça, origem das vendas e incidentes do funil.
+- **Theo:** moeda nativa, exposição, tetos e alterações recentes. Aprovação de um colega não equivale à do dono.
+- **Cai:** confronta os três pareceres, explicita incerteza e sintetiza uma sugestão revisável.
+
+As citações precisam existir no pacote efetivamente apresentado ao modelo, com número bruto exato, período, conta e objeto. Na gravação são novamente conferidas nas fontes congeladas. Métrica ausente, arredondada, repetida, omitida na compactação ou de outra conta invalida a reflexão. Filhos precisam pertencer à campanha referenciada. Conferir o número não comprova que a interpretação está certa.
+
+Cada contraponto aponta para uma conclusão real, de outro papel, na mesma rodada. Não se inventam conversas nem se permite autoconsenso. A síntese financeira fica retida quando faltar o confronto dos três papéis, houver dúvida/contestação material ou pergunta pendente. O dado atual continua obrigatório; lembranças de outra rodada não substituem uma releitura. Os limites de mensagens, tentativas e leases já existentes continuam valendo. Uma discussão inconclusiva exige nova leitura elegível, não um loop sem fim.
+
+A memória fica separada por projeto e papel. Recupera até três episódios recentes e diversos, priorizando o mesmo objeto/conta, com no máximo trinta dias. Inclui contrapontos recebidos, escolhas pertinentes do dono e revisões reais das propostas. Escolhas e rejeições são feedback de processo, não resultado financeiro. Casos contrários e hipóteses invalidadas continuam sinalizados; nenhum texto gerado promove a si próprio a regra validada.
+
+O histórico completo da reflexão é arquivado atomicamente com a colaboração. Um cache mantém até oito episódios arquivados por projeto/papel para a próxima rodada; isso é amostragem declarada, não remoção do histórico. Repetir a gravação pelo mesmo clientId não gera episódio novo. A UI mostra reflexões com números conferidos e contrapontos; não exibe uma taxa de acerto financeiro inventada. A validação econômica continua no ciclo prospectivo da versão 1.
+
+### Referências externas consultadas
+
+Os repositórios foram baixados apenas para revisão, fora da aplicação. A implementação JavaScript é própria, sem instalar os runtimes Python ou executar scripts desses repositórios. Commits, arquivos e licenças consultados estão em `docs/references/agent-learning-sources.json`.
+
+- [LangMem](https://github.com/langchain-ai/langmem): separação de memórias e namespaces; reflexão e recuperação delimitada.
+- [AutoGen](https://github.com/microsoft/autogen): críticas entre papéis com condições de encerramento. O README indica evolução para Agent Framework; a referência aqui é o mecanismo delimitado no commit consultado, não adoção do runtime.
+- [DSPy](https://github.com/stanfordnlp/dspy): avaliações com métricas e exemplos explícitos. Não há otimização automática dos prompts em produção; mudanças desse tipo precisam superar a avaliação de regressão.
+
+As referências não são evidência de lucro do Bunker nem fonte de metas de clientes. Os testes de regressão cobrem números inventados, falta de dados, identidade, autoria, replay, isolamento de projetos, memória antiga, cache/histórico e retenção de sugestões em desacordo. Nada disso constitui promessa de decisão perfeita.

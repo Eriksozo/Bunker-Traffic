@@ -116,7 +116,7 @@ test('cloud perspectives and synthesis complete a real domain round without manu
  const f=fixture();f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];f.state.executions=[];
  for(const cut of f.state.snapshots)for(const r of cut.rows){r.spend=100;r.revenueNet=200;r.frontOrders=2;}
  const round=ensureCollaboration(f.state,f.state.jobs[0]),store=memory(f);let generations=0;
- const ai={run:async()=>{generations++;return {response:{decision:'Manter',reason:'Aguardar aquisição nova',nextStep:'Conferir evolução',text:'Uma campanha priorizada; os demais objetos não receberam leitura individual.',suggestions:[],question:null}};}};
+ const ai={run:async()=>{generations++;return {response:{decision:'Manter',reason:'Aguardar aquisição nova',nextStep:'Conferir evolução',text:'Uma campanha priorizada; os demais objetos não receberam leitura individual.',reflection:{lesson:'Conferir aquisição nova',uncertainty:'Efeito ainda não medido',nextCheck:'Comparar período fechado',citations:[],peerChecks:[]},suggestions:[],question:null}};}};
  const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{},ai,ops:{}});
  for(let i=0;i<4;i++){const result=await engine.step();assert.equal(result.kind,'stage');}
  assert.equal(generations,4);assert.equal(store.state.collaborationRounds.find(r=>r.id===round.id).status,'Concluída');assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,4);assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);
@@ -163,7 +163,7 @@ test('a rejected AI context can shrink once, with new target enums and actual co
 test('model context includes only local learning and the revised pause/reduce reasoning without inventing front counts',async()=>{
  const f=fixture(),round=f.state.collaborationRounds[0];f.state.knowledge=[{id:'foreign',project:'other',claim:'foreign threshold'}, {id:'local',project,claim:'Owner prefers pause in this loss scenario',updatedAt:iso(Date.now()),sources:[],supportCases:[]}];
  const context=cloudAnalysisContext(f.state,round,[f.row],'traffic');assert.equal(context.learning.length,1);assert.equal(context.learning[0].id,'local');assert.equal(context.campaigns[0].windows.today.calculated.frontOrders,null);
- let req;await runCloudAnalyst({run:async(_m,r)=>{req=r;return {response:{decision:'Investigar',reason:'Dados insuficientes',nextStep:'Conferir entrega',text:'A preferência não é uma execução.',suggestions:[],question:null}};}},'traffic',context);
+ let req;await runCloudAnalyst({run:async(_m,r)=>{req=r;return {response:{decision:'Investigar',reason:'Dados insuficientes',nextStep:'Conferir entrega',text:'A preferência não é uma execução.',reflection:{lesson:'Preferência não prova lucro',uncertainty:'Sem front conhecido',nextCheck:'Conferir dados ausentes',citations:[],peerChecks:[]},suggestions:[],question:null}};}},'traffic',context);
  assert.match(req.messages[0].content,/uma venda isolada não obriga manter/i);assert.match(req.messages[0].content,/config.testHours/);assert.match(req.messages[0].content,/Omissões.*lacunas/);
 });
 
