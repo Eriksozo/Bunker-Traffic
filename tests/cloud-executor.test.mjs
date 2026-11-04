@@ -1,7 +1,7 @@
 import {authenticateServer} from '../supabase/functions/malva-mcp/server-auth.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {callRemoteMcp,cloudMalvaClient} from '../lib/cloud-malva.mjs';
+import {callRemoteMcp,cloudMalvaClient,unpackMcp} from '../lib/cloud-malva.mjs';
 import {cloudNext,cloudDispatch,cloudProposalPayload,failCloudOpinion,createCloudEngine} from '../lib/cloud-engine.mjs';
 import {authorizeCloudDispatch} from '../lib/cloud-dispatch-guard.mjs';
 import {runCloudAnalyst,cloudFocus,cloudEvidence,compactCloudContext} from '../lib/cloud-analysis.mjs';
@@ -89,6 +89,16 @@ test('large model packets preserve numbers and mark reduced hierarchy and deferr
  const out=compactCloudContext(input,6000);assert.ok(JSON.stringify(out).length<=6000);assert.equal(out.coverage.contextCompacted,true);assert.equal(out.campaigns[0].windows.today.spend,100);assert.ok(out.campaigns[0].hierarchy[0].omittedRows>0);assert.ok(out.coverage.deferredPrioritized>0);assert.equal(input.campaigns.length,6);
 });
 
+test('model context omits repeated audit payloads while retaining current knowledge and edit evidence',()=>{
+ const input={campaigns:[{target:{adAccountId:account,externalId:'123'},windows:{today:{spend:321}},hierarchy:[]}],learning:[{id:'learning',claim:'Do not repeat an increase from the same acquisition',confidence:0.4,status:'Hipótese',sources:[{reference:'source',observedAt:iso(Date.now())}],supportCases:[{objectId:'123',reference:'source'}],revisions:Array.from({length:30},()=>({claim:'x'.repeat(5000)}))}],incidents:[{id:'incident',status:'Em retomada',note:'Checkout restored; compare new acquisition',scope:{objectIds:[{adAccountId:account,objectId:'123'}]},reportedAt:iso(Date.now()),history:[{note:'x'.repeat(10000)}]}],research:{details:[{adAccountId:account,externalId:'123',history:{items:[{at:iso(Date.now()),eventType:'budget',actor:{name:'Manager'},values:{before:100,after:80},raw:{duplicate:'x'.repeat(10000)},echo:{duplicate:'x'.repeat(10000)}}],truncated:true}}]}};
+ const out=compactCloudContext(input,5000);
+ assert.ok(new TextEncoder().encode(JSON.stringify(out)).length<=5000);
+ assert.equal(out.learning[0].claim,input.learning[0].claim);assert.equal(out.learning[0].confidence,0.4);assert.deepEqual(out.learning[0].sources,input.learning[0].sources);assert.deepEqual(out.learning[0].supportCases,input.learning[0].supportCases);assert.equal(out.learning[0].omittedRevisions,30);
+ assert.equal(out.incidents[0].status,'Em retomada');assert.deepEqual(out.incidents[0].scope,input.incidents[0].scope);assert.equal(out.incidents[0].omittedHistoryEntries,1);
+ assert.deepEqual(out.research.details[0].history.items[0].values,{before:100,after:80});assert.deepEqual(out.research.details[0].history.items[0].omittedFields,['raw','echo']);assert.equal(out.research.details[0].history.truncated,true);
+ assert.equal(input.learning[0].revisions.length,30);assert.ok(input.research.details[0].history.items[0].raw);
+});
+
 test('today cohort reads active and spent plus exact tracked paused objects, not the dormant archive',async()=>{
  const now=Date.now(),p={id:project,name:'Example',timezone:'UTC',currency:'BRL'},ranges=cloudRanges(now,'UTC'),pausedId='44444444-4444-4444-8444-444444444444';
  const active={id:internal,externalId:'123',adAccountId:account,accountName:'Test',projectId:project,projectName:'Example',name:'Active',level:'campaign',provider:'meta',status:'ACTIVE',spend:5};
@@ -117,4 +127,8 @@ test('visual cache coverage stays rejected; analytic operative scope requires al
  const {validateAnalysisBundle}=await import('../lib/analysis-validation.mjs');const f=fixture();const sources=f.state.snapshots.flatMap(s=>['campaign','adset','ad'].map(level=>({...s,level,rows:[]})));const today=sources.find(s=>s.period==='today'&&s.level==='campaign');today.analysisScope={kind:'meta-operating-cohort',activeComplete:true,spentComplete:true,trackedComplete:true,trackedCount:0,inactiveArchiveExcluded:true,parentCampaignCount:null};
  assert.equal(validateAnalysisBundle({snapshots:sources},{snapshots:[]}).snapshots.length,12);assert.throws(()=>validateAnalysisBundle({snapshots:[today]},{snapshots:[]}));
  today.coverage={kind:'active-spent-tracked',activeComplete:true,spentComplete:true,trackedComplete:true,trackedCount:0};assert.throws(()=>validateAnalysisBundle({snapshots:sources},{snapshots:[]}),/acompanhamento/);
+});
+
+test('vendor refusal diagnostics preserve only safe status/code metadata, never response content',()=>{
+ assert.throws(()=>unpackMcp({isError:true,structuredContent:{status:404,code:'NOT_FOUND',message:'private response body'}}),e=>e.code==='MCP_TOOL_FAILED'&&e.providerStatus===404&&e.providerCode==='NOT_FOUND'&&!e.message.includes('private'));
 });

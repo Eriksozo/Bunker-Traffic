@@ -3,7 +3,7 @@ export const cloudReadTools=Object.freeze(['workspace_whoami','tracking_list_pro
 export const cloudWriteTools=Object.freeze(['tracking_set_ad_budget','tracking_set_ad_status']);
 export class CloudError extends Error{constructor(code){super(code);this.code=code;}}
 export function unpackMcp(result){
- if(!result||typeof result!=='object'||result.isError)throw new CloudError('MCP_TOOL_FAILED');
+ if(!result||typeof result!=='object'||result.isError){let data=result?.structuredContent;try{data||=JSON.parse(result?.content?.find(c=>c.type==='text')?.text);}catch{}const e=new CloudError('MCP_TOOL_FAILED');e.providerCode=typeof data?.code==='string'&&/^[A-Za-z0-9_-]{1,70}$/.test(data.code)&&!/(?:mck_|mvk_|sb_secret_)/.test(data.code)?data.code:null;e.providerStatus=Number.isInteger(data?.status)?data.status:null;throw e;}
  let data=result.structuredContent;if(data==null){try{data=JSON.parse(result.content?.find(c=>c.type==='text')?.text);}catch{throw new CloudError('MCP_PROTOCOL');}}
  if(!data||typeof data!=='object'||data.error||data.ok===false||typeof data.status==='number'&&data.status>=400)throw new CloudError('MCP_TOOL_FAILED');return data;
 }

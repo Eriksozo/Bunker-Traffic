@@ -4,11 +4,12 @@ import {authorizeCloudDispatch} from './cloud-dispatch-guard.mjs';
 import {hydrateCoreState} from './core-storage.mjs';
 const result=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 Deno.serve(async(req:Request)=>{
+ let requestedTool='';
  const service=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'';
  if(!await authenticateServer(req,{service,secretKeys:Deno.env.get('SUPABASE_SECRET_KEYS')}))return result({error:'MCP_SERVER_AUTH_REQUIRED'},401);
  if(req.method!=='POST')return result({error:'Method not allowed'},405);
  try{
-  const body=await req.text();if(body.length>20000)throw new CloudError('MCP_REQUEST_LIMIT');const input=JSON.parse(body),{tool,args={}}=input;
+  const body=await req.text();if(body.length>20000)throw new CloudError('MCP_REQUEST_LIMIT');const input=JSON.parse(body),{tool,args={}}=input;requestedTool=tool;
   if(![...cloudReadTools,...cloudWriteTools].includes(tool)||!args||typeof args!=='object'||Array.isArray(args))throw new CloudError('MCP_TOOL_NOT_ALLOWED');
   const rpc=async(operation:string,input:unknown)=>{const r=await fetch(Deno.env.get('SUPABASE_URL')+'/rest/v1/rpc/bunker_store',{method:'POST',headers:{apikey:service,'Content-Type':'application/json'},body:JSON.stringify({operation,input}),signal:AbortSignal.timeout(20000)});if(!r.ok)throw new CloudError('MCP_JOURNAL_FAILED');return r.json();};
   if(cloudWriteTools.includes(tool)){
@@ -22,5 +23,5 @@ Deno.serve(async(req:Request)=>{
   }
   const key=Deno.env.get('MALVA_MCP')||Deno.env.get('MALVA_API');
   return result(await callRemoteMcp({key,tool,args}));
- }catch(e){return result({error:e instanceof CloudError?e.code:'MCP_BRIDGE_FAILED'},502);}
+ }catch(e){if(e instanceof CloudError&&cloudReadTools.includes(requestedTool))console.warn(JSON.stringify({event:'mcp_read_failure',tool:requestedTool,code:e.code,providerCode:e.providerCode||null,providerStatus:e.providerStatus||null}));return result({error:e instanceof CloudError?e.code:'MCP_BRIDGE_FAILED'},502);}
 });
