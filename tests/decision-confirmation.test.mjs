@@ -8,7 +8,7 @@ const now=Date.parse('2026-11-02T20:00:00Z'),date=n=>new Date(n).toISOString(),p
 function fixture({choice='keep',percent,reason='',team=false}={}){
  const row={id:'22222222-2222-4222-8222-222222222222',externalId:'campaign',adAccountId:'account',provider:'Meta',name:'Campanha de mesmo nome',accountName:'Conta',budgetCurrency:'USD',budgetRate:5.4,dailyBudget:100,lifetimeBudget:null,status:'ACTIVE',effectiveStatus:'ACTIVE',accountStatus:{active:true},spend:100,revenue:280,revenueNet:250,adCosts:4,productCost:0,saleTax:0,frontOrders:3,orders:4,checkouts:10,impressions:1000,linkClicks:20,refundedRevenue:0};
  const job={id:'collection',project,status:'Concluída',startedAt:date(now-60000),completedAt:date(now-1000)};
- const state={config:{[project]:{projectName:'Test',targetRoas:2,dailyCap:1000}},jobs:[job],agents:{[project]:{jobId:job.id}},snapshots:['7d','3d','yesterday','today'].map(period=>({projectId:project,projectName:'Test',period,level:'campaign',source:'Malva MCP',complete:true,from:period==='today'?'2026-11-02T03:00:00.000Z':'2026-10-26T03:00:00.000Z',to:period==='today'?'2026-11-03T03:00:00.000Z':'2026-11-02T03:00:00.000Z',timezone:'America/Sao_Paulo',fetchedAt:date(now-2000),lastSyncAt:date(now-5000),rows:[structuredClone(row)]})),paused:false};
+ const state={tasks:[],decisions:[],messages:[],reports:[],events:[],config:{[project]:{projectName:'Test',targetRoas:2,dailyCap:1000}},jobs:[job],agents:{[project]:{jobId:job.id}},snapshots:['7d','3d','yesterday','today'].map(period=>({projectId:project,projectName:'Test',period,level:'campaign',source:'Malva MCP',complete:true,from:period==='today'?'2026-11-02T03:00:00.000Z':'2026-10-26T03:00:00.000Z',to:period==='today'?'2026-11-03T03:00:00.000Z':'2026-11-02T03:00:00.000Z',timezone:'America/Sao_Paulo',fetchedAt:date(now-2000),lastSyncAt:date(now-5000),rows:[structuredClone(row)]})),paused:false};
  let proposal;
  if(team){
   const round=ensureCollaboration(state,job,now),ref={period:'today',level:'campaign',adAccountId:row.adAccountId,externalId:row.externalId,fetchedAt:date(now-2000)};let ops;
@@ -56,7 +56,7 @@ test('Keep and pause normalize omitted/null percent; reason defaults match the d
 test('HTTP-shaped success, missing state and invalid revisions do not prove persistence',()=>{
  const f=fixture();
  for(const data of [{ok:true},{...f.data,revision:undefined},{...f.data,revision:-1},{...f.data,revision:1.5},{...f.data,revision:Infinity},{...f.data,state:{...f.state,ownerChoices:undefined}},{...f.data,state:{...f.state,ownerChoices:[]}}])assert.equal(confirmedOwnerChoice(data,f.input),null);
- assert.equal(isValidCentralResponse(f.data),true);assert.equal(isValidCentralResponse({state:{config:{},snapshots:[]},revision:0}),true);
+ assert.equal(isValidCentralResponse(f.data),true);assert.equal(isValidCentralResponse({state:{config:{},snapshots:[]},revision:0}),false);
  assert.equal(isValidCentralResponse({...f.data,state:null}),false);assert.equal(isValidCentralResponse({...f.data,state:{...f.state,config:[]}}),false);
 });
 test('Same-name foreign cards, altered signatures, actions, percentages and reasons cannot acknowledge a different choice',()=>{
@@ -73,4 +73,14 @@ test('An approved real proposal needs the exact authorized version and seal; an 
  for(const patch of [{approveExact:false},{proposalId:'other'},{proposalVersion:f.input.proposalVersion+1},{proposalSignature:'other-seal'}])assert.equal(confirmedOwnerChoice(f.data,{...f.input,...patch}),null);
  for(const patch of [{status:'Pendente de revisão'},{proposalId:'other'},{proposalVersion:99},{proposalSignature:'other-seal'}])assert.equal(confirmedOwnerChoice({...f.data,state:{...f.state,ownerChoices:[{...f.saved,...patch}]}},f.input),null);
  const pending=fixture({choice:'increase',percent:50});assert.equal(confirmedOwnerChoice(pending.data,{...pending.input,approveExact:true,...{proposalId:f.input.proposalId,proposalVersion:f.input.proposalVersion,proposalSignature:f.input.proposalSignature}}),null);
+});
+
+test('Truncated success payloads preserve the last central state instead of erasing journals',()=>{
+ const f=fixture();
+ for(const key of ['snapshots','tasks','decisions','jobs','messages','reports','events','paused']){
+  const data=structuredClone(f.data);delete data.state[key];assert.equal(isValidCentralResponse(data),false,key);
+ }
+ for(const key of ['ownerChoices','executions','proposals','collaborationRounds','collaborationMessages','campaignObservations']){
+  assert.equal(isValidCentralResponse({...f.data,state:{...f.state,[key]:{}}}),false,key);
+ }
 });

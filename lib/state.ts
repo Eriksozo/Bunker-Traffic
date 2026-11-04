@@ -5,7 +5,7 @@ import {suggestionHistoryQuery,suggestionHistoryPage} from './suggestion-history
 import {verifyDecision} from './reporting.mjs';
 import {storage,storageBackend} from './storage';
 import { z } from 'zod';
-import {bundleSchema} from './snapshot-schema.mjs';
+import {validateAnalysisBundle} from './analysis-validation.mjs';
 import {cadenceSchema,updateRun} from './agent-state';
 import {readPersistedState,commitPersistedState} from './persistence.mjs';
 import {retainKnowledgeMeasurements} from './knowledge.mjs';
@@ -48,18 +48,10 @@ export function apply(state:any,input:any){
  const now=new Date().toISOString(),uid=()=>crypto.randomUUID();const event=(text:string)=>state.events.unshift({id:uid(),at:now,text});
  switch(input.op){
  case 'import':{
+ const {snapshots}=validateAnalysisBundle(input.bundle,state);
  retainKnowledgeMeasurements(state);
- const {snapshots}=bundleSchema.parse(input.bundle);
- for(const s of snapshots){
- if(s.coverage)throw new Error('O recorte de acompanhamento não pode substituir as fontes completas de análise.');
- const previous=state.snapshots.find((x:any)=>x.projectId===s.projectId&&x.period===s.period&&x.level===s.level);
- if(previous&&Date.parse(s.fetchedAt)<Date.parse(previous.fetchedAt))throw new Error('Leitura anterior à base salva. Consulte novamente o Malva.');
- if(previous&&s.fetchedAt===previous.fetchedAt&&JSON.stringify(previous)!==JSON.stringify(s))throw new Error('A mesma data de consulta possui conteúdo diferente.');
- }
  const observed=reconcileCampaignObservations(state,snapshots);
  for(const s of snapshots){
- if(Date.parse(s.fetchedAt)>Date.now()+300000)throw new Error('Data de consulta no futuro.');
- const ids=new Set();for(const r of s.rows){const k=r.adAccountId+':'+r.externalId;if(ids.has(k))throw new Error('Objeto duplicado na mesma janela.');ids.add(k);}
  state.snapshots=state.snapshots.filter((x:any)=>!(x.projectId===s.projectId&&x.period===s.period&&x.level===s.level));state.snapshots.push(s);
  if(!state.config[s.projectId])state.config[s.projectId]={projectName:s.projectName,targetRoas:s.projectName==='Gabe'?2:null,testHours:s.projectName==='Gabe'?24:null,dailyCap:null,lossCap:null,cpcMax:s.projectName==='Gabe'?6:null,cpmMax:s.projectName==='Gabe'?160:null,icMax:s.projectName==='Gabe'?70:null};
  }if(observed.inserted)event(`${observed.inserted} mudanças de status/orçamento observadas. Nova avaliação necessária; origem não atribuída.`);event(`${snapshots.length} leituras importadas. Nenhuma campanha alterada.`);break;}

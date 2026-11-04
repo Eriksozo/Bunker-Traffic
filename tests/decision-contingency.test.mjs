@@ -42,7 +42,7 @@ test('A new identity or a different cohort cannot manufacture comparable round l
  const x=setup();x.state.config.p.lossCap=50;x.liveItems[0].snapshot.rows.push(row('new'));const p=decisionContingency(x);assert.equal(p.exposure.roundResultDelta,null);assert.equal(p.blocked,true);
 });
 test('Incident is scoped to project/account/object and does not stop reduction proposals',()=>{
- const x=setup();x.state.incidents=[{project:'p',status:'Em retomada',scope:{objectIds:[{adAccountId:'a',objectId:'c'}]}}];assert.equal(decisionContingency(x).blocked,true);x.action='reduce';assert.equal(decisionContingency(x).blocked,false);x.state.incidents[0].scope.objectIds[0].adAccountId='other';x.action='increase';assert.equal(decisionContingency(x).blocked,false);
+ const x=setup();x.state.incidents=[{project:'p',status:'Em retomada',scope:{objectIds:[{adAccountId:'a',objectId:'c'}]}}];assert.equal(decisionContingency(x).blocked,true);x.action='reduce';assert.equal(decisionContingency(x).blocked,false);x.state.incidents[0].scope.objectIds[0].adAccountId='other';const other={...row('c'),adAccountId:'other'};x.liveItems[0].snapshot.rows.push(other);x.state.snapshots[0].rows.push(structuredClone(other));x.action='increase';assert.equal(decisionContingency(x).blocked,false);
 });
 test('Two different ads sharing CBO are one financial scope; another account stays isolated',()=>{
  const x=setup();x.state.snapshots.push({...x.state.snapshots[0],level:'ad',rows:[{...row('ad1'),campaignExternalId:'c'},{...row('ad2'),campaignExternalId:'c'}]});const a=proposal('pa','ad1'),b=proposal('pb','ad2');a.payload.level=b.payload.level='ad';a.payload.action=b.payload.action='status';a.payload.after=b.payload.after={status:'PAUSED'};
@@ -71,4 +71,25 @@ test('Activating a child inside an existing CBO does not invent another parent b
  const p=proposal('child','ad');Object.assign(p.payload,{level:'ad',action:'status',before:{status:'PAUSED'},after:{status:'ACTIVE'},activationBudget:{level:'campaign',externalId:'c',adAccountId:'a',provider:'Meta',dailyBudget:100,currency:'BRL',status:'ACTIVE'}});
  x.proposal=p;x.row=ad;x.action='activate';const guard=decisionContingency(x);assert.equal(guard.exposure.projectedDaily,300);assert.equal(guard.blocked,false);
  x.state.proposals=[{...structuredClone(p),id:'another-child'}];assert.equal(decisionContingency(x).exposure.reservedExtra,0);
+});
+test('Missing tracked campaigns invalidate financial coverage instead of quietly freeing budget',()=>{
+ const x=setup();x.liveItems[0].snapshot.rows.pop();const p=decisionContingency(x);assert.equal(p.exposure.completeExposure,false);assert.equal(p.blocked,true);assert.ok(p.warnings.some(w=>w.includes('parcial')));
+});
+test('Reservations in another currency cannot be converted using the current object currency by accident',()=>{
+ const x=setup();x.state.proposals=[proposal('fx-drift','d',200,300)];x.state.proposals[0].payload.currency='USD';const p=decisionContingency(x);assert.equal(p.exposure.reservedExtra,null);assert.equal(p.exposure.completeExposure,false);assert.equal(p.blocked,true);
+});
+test('Reactivation cannot silently inherit a changed parent status from live cache',()=>{
+ const x=setup();x.state.config.p.dailyCap=1000;const p=proposal('activate');p.payload.action='status';p.payload.before={status:'PAUSED'};p.payload.after={status:'ACTIVE'};p.payload.activationBudget={level:'campaign',externalId:'c',adAccountId:'a',provider:'Meta',dailyBudget:100,currency:'BRL',status:'PAUSED'};x.proposal=p;const g=decisionContingency(x);assert.equal(g.exposure.projectedDaily,null);assert.equal(g.blocked,true);
+});
+test('4000 seeded portfolio scenarios never accept a configured ceiling with incomplete or excess exposure',()=>{
+ let seed=123456789;const rnd=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);let accepted=0,rejected=0;
+ for(let n=0;n<4000;n++){
+  const x=setup(),cap=Math.floor(rnd()*5000);x.state.config.p.dailyCap=cap;x.percent=1+Math.floor(rnd()*300);x.row.dailyBudget=1+Math.floor(rnd()*500);x.liveItems[0].snapshot.rows[1].dailyBudget=1+Math.floor(rnd()*500);
+  if(n%3===0){x.row.budgetCurrency='USD';x.row.budgetRate=3+rnd()*4;}if(n%17===0){x.row.budgetCurrency='USD';delete x.row.budgetRate;}if(n%13===0)x.row.spend=null;if(n%11===0)x.liveItems[0].snapshot.lastSyncAt=null;
+  if(n%5===0)x.state.proposals=[proposal('pending','d',x.liveItems[0].snapshot.rows[1].dailyBudget,600)];
+  const g=decisionContingency(x);
+  if(!g.blocked){accepted++;assert.ok(g.exposure.completeExposure);assert.ok(Number.isFinite(g.exposure.projectedDaily));assert.ok(g.exposure.projectedDaily<=cap);assert.ok(g.exposure.spend<cap);assert.ok(g.exposure.sourceFresh);}else rejected++;
+  x.action='reduce';x.proposal=null;assert.equal(decisionContingency(x).blocked,false);
+ }
+ assert.ok(accepted>500);assert.ok(rejected>500);
 });

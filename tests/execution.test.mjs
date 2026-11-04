@@ -8,7 +8,7 @@ function fixture(action='budget',options={}){
  const row={id:internal,externalId:'external-meta-id',adAccountId:'account-meta',provider:'Meta',name:'Campaign',accountName:'Account',budgetCurrency:'USD',dailyBudget:100,lifetimeBudget:null,status:'ACTIVE',...(options.row||{})};
  const level=options.level||'campaign';
  const job={id:'collection',project,status:'Concluída',startedAt:date(now-60000),completedAt:date(now-1000)};
- const state={config:{[project]:{projectName:'Local test'}},agents:{[project]:{jobId:job.id}},jobs:[job],snapshots:['7d','3d','yesterday','today'].map(period=>({projectId:project,period,level:'campaign',source:'Malva MCP',complete:true,from:'2026-10-26',to:'2026-11-02',timezone:'America/Boa_Vista',fetchedAt:date(now-2000),lastSyncAt:null,rows:[structuredClone(row)]}))};
+ const state={config:{[project]:{projectName:'Local test'}},agents:{[project]:{jobId:job.id}},jobs:[job],snapshots:['7d','3d','yesterday','today'].map(period=>({projectId:project,period,level:'campaign',source:'Malva MCP',complete:true,from:period==='today'?'2026-11-02T04:00:00Z':period==='3d'?'2026-10-30T04:00:00Z':period==='yesterday'?'2026-11-01T04:00:00Z':'2026-10-26T04:00:00Z',to:period==='today'?'2026-11-03T04:00:00Z':'2026-11-02T04:00:00Z',timezone:'America/Boa_Vista',fetchedAt:date(now-2000),lastSyncAt:null,rows:[structuredClone(row)]}))};
  if(level!=='campaign'){for(const snapshot of state.snapshots)snapshot.rows=[{...row,...options.campaign}];state.snapshots.push({...structuredClone(state.snapshots.at(-1)),level,rows:[structuredClone(row)]});}
  if(options.adset)state.snapshots.push({...structuredClone(state.snapshots[0]),period:'today',level:'adset',rows:[{...row,...options.adset}]});
  const round=ensureCollaboration(state,job,now),evidenceRefs=[{period:'today',level,adAccountId:row.adAccountId,externalId:row.externalId,fetchedAt:date(now-2000)}];let ops;
@@ -156,4 +156,7 @@ test('Post-action financial delta is unavailable after external native change or
 test('A post-action review never takes the place of confirming an ambiguous dispatch and respects Bunker pause',()=>{
  const f=prepared(),t=now+20*60000;submitExecution(f.state,f.submitArgs,now+1);assert.throws(()=>monitorExecution(f.state,{id:f.e.id,entry:{checkpointMinutes:15},clientId:'m',executionRef:'r',observation:f.observation(t)},t),/já confirmada/);
  const g=confirmedWithPerformance();g.state.paused=true;assert.throws(()=>monitorExecution(g.state,{id:g.e.id,entry:{checkpointMinutes:15},clientId:'m',executionRef:'r',observation:g.observed(t)},t),/pausado/);
+});
+test('An unexpired owner approval cannot dispatch after its four-period analysis expires',()=>{
+ const f=fixture('budget',{validForMs:24*3600000});assert.throws(()=>claimExecution(f.state,f.args,now+3600001),/Análise vencida/);assert.equal(f.state.executions?.length||0,0);
 });

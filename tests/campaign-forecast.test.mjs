@@ -52,3 +52,9 @@ test('DST uses the real 25-hour local day without assuming workstation timezone'
  x.item.snapshot.from=shifted(x.item.snapshot.from);x.item.snapshot.to=shifted(x.item.snapshot.to);x.item.snapshot.rows.forEach(r=>r.day=shifted(r.day));
  const p=forecastCampaign(x);assert.equal(p.status,'scenario');assert.ok(Math.abs(p.scenarios[0].spend-50*25/13)<.00001);
 });
+test('Forecast blocks a recycled Meta identity when its internal Malva object changed',()=>{
+ const x=setup();x.card.observedRow.id='new-internal';x.item.target.internalObjectId='old-internal';assert.equal(forecastCampaign(x).status,'unavailable');
+});
+test('A fresh source cannot extend the forecast horizon beyond the next local midnight',()=>{
+ const x=setup();x.card.liveToday.to='2026-11-05T01:00:00Z';assert.equal(forecastCampaign(x).status,'unavailable');
+});

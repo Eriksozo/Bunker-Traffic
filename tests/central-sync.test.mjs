@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCentralSync} from '../lib/central-sync.mjs';
-const data=revision=>({revision,state:{config:{},snapshots:[]}});
+const data=revision=>({revision,state:{config:{},snapshots:[],tasks:[],decisions:[],jobs:[],messages:[],reports:[],events:[],paused:false}});
 function harness(request){
  const current={revision:4,saving:false},statuses=[],updates=[],calls=[];
  const sync=createCentralSync({fetch:async(...args)=>{calls.push(args[0]);return request(...args);},getCurrent:()=>current,onUpdate:value=>{updates.push(value);current.revision=value.revision;},onStatus:value=>statuses.push(value),now:()=>Date.parse('2026-11-03T12:00:00Z')});
@@ -38,4 +38,10 @@ test('expired sessions, malformed data and regressed backend revisions never app
 });
 test('disposing during a read prevents late UI updates and aborts network work',async()=>{
  let resolve,signal;const h=harness((url,options)=>{signal=options.signal;return new Promise(done=>{resolve=done;});});const pending=h.sync.check();h.sync.dispose();assert.equal(signal.aborted,true);resolve(Response.json({revision:5}));await pending;assert.equal(h.statuses.length,0);assert.equal(h.updates.length,0);
+});
+
+test('A truncated HTTP 200 cannot erase prior decisions and a complete retry reconciles once',async()=>{
+ let incomplete=true;const h=harness(async url=>Response.json(url.includes('?')?{revision:5}:incomplete?{revision:5,state:{config:{},snapshots:[]}}:data(5)));
+ await h.sync.check();assert.equal(h.updates.length,0);assert.equal(h.current.revision,4);assert.equal(h.statuses.at(-1).status,'unavailable');
+ incomplete=false;await h.sync.check();assert.equal(h.updates.length,1);assert.equal(h.current.revision,5);assert.equal(h.statuses.at(-1).status,'current');
 });

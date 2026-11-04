@@ -5,6 +5,7 @@ import {readState} from './state';
 import {liveDataAction,readLiveData} from './live-data.mjs';
 import hosting from '../.openai/hosting.json';
 import {decisionContingency,riskIncreasing} from './decision-contingency.mjs';
+import {assertFinancialSources} from './analysis-validation.mjs';
 
 export async function readLiveState(){
  const {state}=await readState();return {...await readLiveData(storage(),state),siteProjectId:hosting.project_id};
@@ -20,6 +21,7 @@ export async function assertCurrentDecisionContext(state:any,input:any){
  if(input.op!=='cardDecision'&&!(input.op==='proposalReview'&&input.decision==='approve'))return;
  const proposal=input.op==='proposalReview'||input.op==='cardDecision'&&input.approveExact?(state.proposals||[]).find((p:any)=>p.id===(input.op==='proposalReview'?input.id:input.proposalId)):null;
  const project=input.project||proposal?.project;if(!project)return;
+ if(proposal)assertFinancialSources(proposal.payload?.sourceCut);
  const cards=buildDecisionCards(state,project),card=cards.find((c:any)=>input.op==='cardDecision'?c.id===input.cardId:c.row.externalId===proposal?.payload.objectId&&c.row.adAccountId===proposal?.payload.adAccountId);
  const latest=await readLiveData(storage(),state,project);
  const drift=card?campaignLiveDrift(card,latest.items):null;
