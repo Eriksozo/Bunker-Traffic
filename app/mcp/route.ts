@@ -1,3 +1,4 @@
+import {readMalvaSource} from '@/lib/malva-api-read.mjs';
 import {readReviewContext} from '@/lib/review-pipeline.mjs';
 import {readState,readReports,readSuggestionHistory,commit,apply} from '@/lib/state';
 import {agentView,reserveRequest} from '@/lib/mcp-run';
@@ -31,7 +32,11 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
  else if(r.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'bunker-trafego',version:'1.2.0'}};
  else if(r.method==='tools/list')result={tools};
  else if(r.method==='tools/call'){const {name,arguments:a={}}=r.params||{};const cur=await readState();
- if(name==='bunker_atualizar_rodada'&&a.id==='review-data'){
+ if(name==='bunker_atualizar_rodada'&&a.id==='source-data'){
+  if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope de origem inválido.');
+  result={content:[{type:'text',text:JSON.stringify(await readMalvaSource(storage(),cur.state,JSON.parse(a.note||'{}')))}]};
+ }
+ else if(name==='bunker_atualizar_rodada'&&a.id==='review-data'){
   if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope de revisão inválido.');
   const args=JSON.parse(a.note||'{}');result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...readReviewContext(cur.state,args)})}]};
  }

@@ -60,3 +60,8 @@ test('signing out clears native cookies and stops before automatic direct entry'
  assert.equal(r.status,303);assert.equal(r.headers.get('location'),'/auth/login?signedout=1');assert.match(r.headers.get('set-cookie'),/Max-Age=0/);
  assert.equal((await cloudflareAuth(new Request('https://bunker.example'+r.headers.get('location')),configured)).status,200);
 });
+test('private gateway sends Malva reads to service-authenticated edge function, no arbitrary URL',async(t)=>{
+ let call;t.mock.method(globalThis,'fetch',async(url,options)=>{call={url,options};return Response.json({source:'Malva API'});});
+ const r=await cloudflareAuth(new Request('https://bunker.example/internal/storage',{method:'POST',headers:{Authorization:'Bearer storage-test'},body:JSON.stringify({operation:'malvaRead',input:{section:'projects'}})}),{...env,BUNKER_STORAGE_TOKEN:'storage-test'});
+ assert.equal(r.status,200);assert.equal(call.url,'https://example.supabase.co/functions/v1/malva-read');assert.equal(call.options.headers.Authorization,'Bearer server-test');assert.deepEqual(JSON.parse(call.options.body),{section:'projects'});
+});
