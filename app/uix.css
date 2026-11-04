@@ -301,3 +301,9 @@ body .app.is-nav-collapsed .nav { justify-content:center; padding:0; height:38px
 @media print { body .app .sidebar,.uix-menu-toggle,.uix-skip-link { display:none!important; } body .app .main { margin:0; width:100%; } }
 
 body .app .live-sync-creative{font-size:11px;color:var(--ink-muted);white-space:nowrap;}
+
+/* Monitoring and decision analysis have independent source clocks. */
+body .app .freshness { display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;max-width:100%; }
+body .app .reading-clock { display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;max-width:100%;line-height:1.6; }
+body .app .reading-clock strong { font-size:inherit;font-weight:500; }
+body .app .reading-analysis { font-size:10px;color:var(--ink-soft); }

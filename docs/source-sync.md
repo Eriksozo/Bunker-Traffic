@@ -15,3 +15,9 @@ As decisões, análises, fontes importadas, aprovações e aprendizados são reg
 Antes de cada nova sincronização, concilie o commit do Sites com a `main` deste repositório, preserve alterações dos dois lados e revise o diff. Não copie `.env`, `.dev.vars`, caches locais, dumps, logs ou tokens. Mantenha os IDs fictícios dos testes e informe os IDs reais somente na instalação local autorizada.
 
 Uma publicação do Site deve usar seu fluxo próprio de build, versão e implantação, mantendo a identidade e o acesso privado existentes. Para reutilizar o projeto em outro Site, obtenha a nova identidade pelo fluxo de criação do Sites antes de publicar.
+
+## Relogios visiveis do acompanhamento
+
+O cabeçalho exibe a consulta contínua de hoje em todas as áreas. A data da análise selecionada aparece em outra linha e não é renovada por consultas do acompanhamento. A tela confere revisões do cache a cada 2 segundos; o executor local continua sendo necessário para consultar Malva/Órbita.
+
+Uma consulta com menos de 3 minutos só é marcada como recente quando a origem também confirma uma sincronização de até 15 minutos, anterior à própria consulta. Origem antiga ou sem horário confirmado permanece sinalizada, mesmo com o executor ativo. Isso não altera os limites de execução, fontes seladas ou aprovações. O intervalo alvo do relay não constitui garantia de latência: consultas longas, MCP, Meta e atribuição podem atrasar o dado.
