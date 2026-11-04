@@ -2,6 +2,8 @@
 
 Central privada para análise de campanhas, decisões, colaboração de agentes e aprendizado com evidências. Interface React/Vinext em Cloudflare Workers; armazenamento Supabase Postgres; Malva e Órbita consultados pelo executor local.
 
+O seletor **Todos os projetos** reúne indicadores, campanhas e cards em uma visão consolidada, com identificação do projeto para cada decisão. Os totais comparam somente janelas equivalentes e sinalizam cobertura parcial. Campanhas compartilhadas contam mídia e orçamento uma vez; receita com mais de uma atribuição sem conciliação fica N/D. Metas, incidentes, pedidos de revisão e autorizações financeiras continuam vinculados a um projeto real.
+
 ## Operação
 
 - Compara sete e três dias completos, ontem e hoje parcial, com fonte, fuso e atualização separados.

@@ -631,3 +631,9 @@ body .app .vo-composer button:hover { background:var(--brand-hover); border-colo
 
 body .app .live-sync-strip.has-warning { border-color:var(--warning-line); }
 body .app .live-sync-message.is-warning { color:var(--warning); }
+
+/* Consolidated project scope retains the existing Malva surface rhythm. */
+.project-scope-summary{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;padding:18px 20px;margin:0 0 24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.project-scope-summary strong{font-size:14px}.project-scope-summary p{margin:6px 0 0;max-width:740px;line-height:1.5}
+.project-scope-links{display:flex;flex-wrap:wrap;gap:8px}.project-scope-links button{gap:8px}
+@media(max-width:640px){.project-scope-summary{padding:14px}.project-scope-links{width:100%}.project-scope-links button{flex:1}}
