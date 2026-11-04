@@ -1,5 +1,8 @@
 import {readState,readReports,readSuggestionHistory,commit,apply} from '@/lib/state';
 import {agentView,reserveRequest} from '@/lib/mcp-run';
+import {readLiveData} from '@/lib/live-data.mjs';
+import {storage} from '@/lib/storage';
+import {campaignWatchPlan} from '@/lib/campaign-watch.mjs';
 import {updateCreativeState} from '@/lib/creative-state';
 import {agentAutonomy,collaborationRead} from '@/lib/autonomy';
 import {autonomyTools} from '@/lib/autonomy-tools';
@@ -38,7 +41,11 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
  else if(name==='bunker_atualizar_rodada'&&a.id==='live-data')result={content:[{type:'text',text:JSON.stringify(await updateLiveState(parseLiveDataEnvelope(a),cur.state))}]};
  else if(name==='bunker_atualizar_rodada'&&a.id==='creative-data'){if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope Órbita inválido.');result={content:[{type:'text',text:JSON.stringify(await updateCreativeState(JSON.parse(a.note||'{}'),cur.state))}]};}
  else if(name==='bunker_relatorios')result={content:[{type:'text',text:JSON.stringify(await readReports(a.projectId,a.limit??5,a.cursor||null))}]};
- else if(name==='bunker_ler')result={content:[{type:'text',text:JSON.stringify(agentView(cur))}]};
+ else if(name==='bunker_ler'){const live=await readLiveData(storage(),cur.state).catch(()=>({items:[],error:'Leitura de acompanhamento indisponível; análise anterior preservada.'}));result={content:[{type:'text',text:JSON.stringify(agentView(cur,live))}]};}
+ else if(name==='bunker_atualizar_rodada'&&a.id==='watch-data'){
+  const input=JSON.parse(a.note||'{}');if(a.revision!==0||a.status!=='Pendente'||input.action!=='read'||Object.keys(input).some(k=>!['action','projectId','offset','limit'].includes(k)))throw Error('Envelope de acompanhamento inválido.');
+  const live=await readLiveData(storage(),cur.state);result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...campaignWatchPlan(cur.state,live,Date.now(),input)})}]};
+ }
  else if(name==='bunker_colaboracao'||(name==='bunker_atualizar_rodada'&&a.id==='collaboration')){
   const args=name==='bunker_colaboracao'?a:JSON.parse(a.note||'{}');
   if(args.action==='decisionRead'&&args.entry?.journal==='suggestions'){
