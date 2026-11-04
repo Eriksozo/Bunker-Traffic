@@ -21,3 +21,9 @@ Uma publicação do Site deve usar seu fluxo próprio de build, versão e implan
 O cabeçalho exibe a consulta contínua de hoje em todas as áreas. A data da análise selecionada aparece em outra linha e não é renovada por consultas do acompanhamento. A tela confere revisões do cache a cada 2 segundos; o executor local continua sendo necessário para consultar Malva/Órbita.
 
 Uma consulta com menos de 3 minutos só é marcada como recente quando a origem também confirma uma sincronização de até 15 minutos, anterior à própria consulta. Origem antiga ou sem horário confirmado permanece sinalizada, mesmo com o executor ativo. Isso não altera os limites de execução, fontes seladas ou aprovações. O intervalo alvo do relay não constitui garantia de latência: consultas longas, MCP, Meta e atribuição podem atrasar o dado.
+
+## Cards e mudancas de cenario
+
+Os cards recalculam a apresentação quando chega uma revisão do acompanhamento, sem aguardar o relógio de idade de 30 s. Exibem seis métricas de hoje e o diário nativo observado; os números dos três dias da análise anterior ficam identificados como histórico, separados. O diagnóstico descreve aquisição/retorno atuais e não gera ordem de orçamento.
+
+Mudança de status, moeda, orçamento, novas vendas/reembolsos, cruzamento de retorno ou deterioração do prejuízo invalida a recomendação quando aplicável. Uma fonte vencida não ganha data nova por decorar o card. Os pareceres e propostas só são renovados por análise real dos quatro períodos, hierarquia e últimas edições. A rotina local existente foi retomada, preservando seu pulso de cinco minutos e a cadência personalizada do painel. O executor requer este Mac/Codex disponível; a hospedagem Cloudflare, sozinha, não realiza esses turnos dos agentes.

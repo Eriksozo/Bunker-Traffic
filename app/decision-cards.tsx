@@ -1,4 +1,5 @@
 'use client';
+import {cardLiveScenario} from '../lib/card-live-scenario.mjs';
 import LearningCyclePanel from './learning-cycle-panel';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowDownRight,ArrowRight,ArrowUpRight,BookOpen,BrainCircuit,Check,ChevronDown,ChevronLeft,ChevronRight,Clock3,Eye,History,Layers3,Loader2,MessageSquare,Pause,RefreshCw,Search,ShieldCheck,Sparkles,X} from 'lucide-react';
@@ -80,7 +81,7 @@ function ChangePreview({card,draft}:{card:any;draft:Draft}){
  if(draft.action==='pause')return <div className="dc-preview dc-preview-pause"><span><small>{old?'Status da análise':'Status observado'}</small><strong>{statusLabel(row.status)}</strong></span><ArrowRight size={19}/><span><small>Sua decisão</small><strong>Pausar</strong></span></div>;
  return <div className="dc-preview-wrap"><div className="dc-preview"><span><small>{old?'Diário da análise':'Diário atual'} · {row.budgetCurrency||'moeda N/D'}</small><strong>{money(before,row.budgetCurrency)}</strong>{beforeBRL&&<em>≈ {beforeBRL}</em>}</span><ArrowRight size={19}/><span><small>Diário proposto</small><strong>{validPercent(draft)?money(after,row.budgetCurrency):'—'}</strong>{validPercent(draft)&&afterBRL&&<em>≈ {afterBRL}</em>}</span><b className={'dc-percent dc-'+draft.action}>{draft.action==='increase'?'+':'−'}{percent!==null?number(percent):'—'}%</b></div>{beforeBRL&&<p className="dc-conversion">Equivalência em reais pela cotação da leitura ({number(row.budgetRate)}). A decisão usa os valores exatos em {row.budgetCurrency}.</p>}</div>;
 }
-function SourceStamps({card}:{card:any}){return <span className="dc-source-stamps"><small>Acompanhamento: {card.liveAt?stamp(card.liveAt):'sem leitura atual'}{card.liveAt&&card.liveStale?' · leitura desatualizada':''}</small><small>Análise: {stamp(card.sourceAt)}{card.analysisStale||card.liveDrift?' · releitura pendente':''}</small></span>;}
+function SourceStamps({card}:{card:any}){return <span className="dc-source-stamps"><small>Acompanhamento: {card.liveAt?stamp(card.liveAt):'sem leitura atual'}{card.liveAt&&(card.liveStale||card.liveSourceStale)?' · leitura ou origem desatualizada':''}</small><small>Análise: {stamp(card.sourceAt)}{card.analysisStale||card.liveDrift?' · releitura pendente':''}</small></span>;}
 function LiveWindow({card}:{card:any}){
  const live=card.liveToday;if(!live)return null;
  return <section className="dc-live-window" aria-label="Acompanhamento separado da análise"><h4>Acompanhamento · {dayLabel(live.from||live.fetchedAt,live.timezone)}</h4><p>Leitura {stamp(card.liveAt||live.fetchedAt)}{card.liveStale?' · leitura desatualizada':''}. Estes dados de acompanhamento não substituem a análise registrada.</p><dl><div><dt>Gasto</dt><dd>{money(live.spend)}</dd></div><div><dt>Vendas front</dt><dd>{number(live.frontOrders)}</dd></div><div><dt>ROAS</dt><dd>{ratio(live.roas)}</dd></div><div><dt>ROI</dt><dd>{ratio(live.roi)}</dd></div><div><dt>CPA Front</dt><dd>{money(live.cpaFront)}</dd></div><div><dt>Custo / IC</dt><dd>{money(live.ic)}</dd></div></dl></section>;
@@ -136,7 +137,7 @@ function KanbanTile({card,stage,now,onOpen}:{card:any;stage:string;now:number;on
  const row=card.observedRow||card.row||{},suggestion=card.suggestion||{},diagnostic=suggestion.origin==='diagnostic';
  const action=actionOf(suggestion.action),Icon=diagnostic?Search:actions[action].icon;
  const stale=!card.sourceAt||!Number.isFinite(Date.parse(card.sourceAt))||now-Date.parse(card.sourceAt)>60*60000;
- const today=todayDisplay(card,now),context=displayedContext(card),trend=campaignHistoryTrend(card);
+ const today=todayDisplay(card,now),context=displayedContext(card),trend=campaignHistoryTrend(card),scenario=cardLiveScenario(card);
  return <UiCard className={'dc-kanban-card'+(!diagnostic?' dc-kanban-'+action:'')} aria-label={'Resumo de '+row.name}>
   <div className="dc-kanban-card-top"><span className="dc-kanban-phase">{card.phase||'Fase N/D'}</span><span className={'dc-kanban-status'+(row.effectiveStatus==='ACTIVE'?' is-active':'')}>{statusLabel(row.effectiveStatus||row.status)}</span></div>
   <h4><button type="button" onClick={()=>onOpen(card)}>{row.name||'Campanha sem nomenclatura'}</button></h4>
@@ -145,7 +146,7 @@ function KanbanTile({card,stage,now,onOpen}:{card:any;stage:string;now:number;on
   <p className="dc-kanban-reason">{recommendationSummary(card)}</p>
   {(card.liveDrift||card.monitor)&&<span className="dc-context-flag"><RefreshCw size={12}/>{card.liveDrift?.title||card.monitor.title}</span>}
   {context?.kind==='mixed-return'&&<span className="dc-context-flag"><Clock3 size={12}/>{context.title}</span>}
-  <dl className="dc-kanban-metrics"><div><dt>{today.label}</dt><dd>{money(today.metrics?.spend)}</dd></div><div><dt>{recentLabel(card,'ROAS')}</dt><dd>{ratio(card.windows?.['3d']?.roas)}</dd></div><div><dt>{recentLabel(card,'Front')}</dt><dd>{number(card.windows?.['3d']?.frontOrders)}</dd></div></dl>
+  <section className={'dc-live-scenario dc-live-scenario-'+scenario.kind} aria-label="Cenário atual da campanha" aria-live="polite"><strong>{scenario.title}</strong><p>{scenario.detail}</p></section><dl className="dc-kanban-metrics dc-metrics-live" aria-label="Métricas do acompanhamento de hoje"><div><dt>Gasto · hoje</dt><dd>{money(scenario.metrics?.spend)}</dd></div><div><dt>ROAS · hoje</dt><dd>{ratio(scenario.metrics?.roas)}</dd></div><div><dt>Front · hoje</dt><dd>{number(scenario.metrics?.frontOrders)}</dd></div><div><dt>ROI · hoje</dt><dd>{ratio(scenario.metrics?.roi)}</dd></div><div><dt>CPA Front · hoje</dt><dd>{money(scenario.metrics?.cpaFront)}</dd></div><div><dt>Diário observado · {row.budgetCurrency||'N/D'}</dt><dd>{money(card.observedRow?.dailyBudget,card.observedRow?.budgetCurrency)}</dd></div></dl><details className="dc-history-reference"><summary>Histórico da análise · {recentLabel(card,'3 dias')}</summary><p>ROAS {ratio(card.windows?.['3d']?.roas)} · Front {number(card.windows?.['3d']?.frontOrders)}. Base registrada em {stamp(card.sourceAt)}.</p></details>
   <div className="dc-trend-summary"><strong>{card.analysisStale?'Tendência aguarda releitura':trend.label}</strong><span>Cenários de fechamento nos detalhes da campanha.</span></div>
   <div className="dc-kanban-context">{card.lastChoice&&<span><History size={11}/> Reavaliação</span>}{stale&&<span><Clock3 size={11}/> Atualizar análise</span>}<span title={card.teamReady&&!card.liveDrift?'Três pareceres disponíveis para este cenário':'Os agentes ainda precisam rever o cenário atual'}><MessageSquare size={11}/>{card.teamReady&&!card.liveDrift?`${array(card.teamOpinions).length}/3 pareceres`:'Releitura pendente'}</span></div>
   <footer><SourceStamps card={card}/><Button type="button" variant="outline" onClick={()=>onOpen(card)} aria-label={'Abrir decisão de '+row.name}>{stage==='approval'?'Conferir proposta':'Analisar e decidir'}<ArrowRight size={13}/></Button></footer>
@@ -182,12 +183,14 @@ function DecisionHistory({state,project,saving,onReopen,initialQuery=''}:{state:
 }
 
 export default function DecisionCards({state,project,write,saving,compact=false,initialSearch='',initialTab='cards',liveItems=[],presentationCards}:Props){
- const [tab,setTab]=useState<'cards'|'history'|'learning'>(initialTab),[search,setSearch]=useState(initialSearch),[actionFilter,setActionFilter]=useState('all'),[statusFilter,setStatusFilter]=useState('all'),[now,setNow]=useState(Date.now()),[drafts,setDrafts]=useState<Record<string,Draft>>({}),[noticeByProject,setNotices]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[approval,setApproval]=useState<Approval|null>(null),[confirmed,setConfirmed]=useState(false);
+ const [tab,setTab]=useState<'cards'|'history'|'learning'>(initialTab),[search,setSearch]=useState(initialSearch),[actionFilter,setActionFilter]=useState('all'),[statusFilter,setStatusFilter]=useState('all'),[clock,setNow]=useState(Date.now()),[drafts,setDrafts]=useState<Record<string,Draft>>({}),[noticeByProject,setNotices]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[approval,setApproval]=useState<Approval|null>(null),[confirmed,setConfirmed]=useState(false);
  const notice=noticeByProject[project]||'';
  const setNotice=useCallback((text:string)=>setNotices(previous=>({...previous,[project]:text})),[project]);
  const [receipt,setReceipt]=useState<{project:string;account:string;objectId:string}|null>(null);
  const lock=useRef(false),requestIds=useRef<Record<string,string>>({}),confirmCancel=useRef<HTMLButtonElement>(null),approvalReturn=useRef<HTMLElement|null>(null),inspectorReturn=useRef<HTMLElement|null>(null),boardHeading=useRef<HTMLHeadingElement>(null);
  const [inspected,setInspected]=useState<string|null>(null),[columnLimits,setColumnLimits]=useState<Record<string,number>>({});
+ // A new source response must not wait for the 30-second age timer.
+ const now=useMemo(()=>Math.max(clock,Date.now()),[clock,liveItems,state]);
  const cards=useMemo(()=>presentationCards??array(decisionQueue(state,project,now)).map(card=>decorateCampaignCard(card,liveItems,now)),[state,project,now,liveItems,presentationCards]);
  const plan=useMemo(()=>decisionLearningPlan(state,project,now)||{},[state,project,now]);
  const filtered=cards.filter(card=>{const row=card.observedRow||card.row||{},term=search.toLocaleLowerCase('pt-BR');return (actionFilter==='all'||card.suggestion?.action===actionFilter)&&(statusFilter==='all'||statusFilter==='active'&&(row.effectiveStatus||row.status)==='ACTIVE'||statusFilter==='paused'&&/PAUSED/.test(row.effectiveStatus||row.status||''))&&[row.name,row.accountName,row.externalId].some(value=>String(value||'').toLocaleLowerCase('pt-BR').includes(term));});
