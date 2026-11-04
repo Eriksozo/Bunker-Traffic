@@ -53,7 +53,7 @@ test('a paused central admits no collection and cannot inherit a due slot',()=>{
 test('full collector validates identities and produces twelve independent source windows without summing overlaps',async()=>{
  const now=Date.now(),p={id:project,name:'Example',timezone:'UTC',currency:'BRL'},ranges=cloudRanges(now,'UTC');let calls=0;
  const source={read:async(tool,a)=>{if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};calls++;return {level:a.level,salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:a.from+'T00:00:00.000Z',to:iso(Date.parse(a.to+'T00:00:00Z')+86400000),days:a.from===a.to?[a.from]:[a.from,a.to]},rows:[{id:internal,projectId:project,projectName:'Example',externalId:'123',adAccountId:account,accountName:'Test',name:'Example',level:a.level,provider:'meta',spend:100}]};}};
- const out=await collectCloudProject(source,p,{now:()=>now,startedAt:iso(now-1000)});assert.equal(out.snapshots.length,12);assert.equal(out.snapshots.find(s=>s.period==='today'&&s.level==='campaign').coverage.kind,'active-spent-tracked');assert.equal(out.snapshots.find(s=>s.period==='7d').from,ranges['7d'].from+'T00:00:00.000Z');
+ const out=await collectCloudProject(source,p,{now:()=>now,startedAt:iso(now-1000)});assert.equal(out.snapshots.length,12);assert.equal(out.snapshots.find(s=>s.period==='today'&&s.level==='campaign').analysisScope.kind,'meta-operating-cohort');assert.equal(out.snapshots.find(s=>s.period==='7d').from,ranges['7d'].from+'T00:00:00.000Z');
  const bad={read:async(tool,a)=>tool==='tracking_ad_accounts'?{items:[]}: {...await source.read(tool,a),truncated:{shown:1,total:2}}};await assert.rejects(collectCloudProject(bad,p,{now:()=>now}),e=>e.code==='SOURCE_INCOMPLETE');
 });
 
@@ -94,7 +94,7 @@ test('today cohort reads active and spent plus exact tracked paused objects, not
  const active={id:internal,externalId:'123',adAccountId:account,accountName:'Test',projectId:project,projectName:'Example',name:'Active',level:'campaign',provider:'meta',status:'ACTIVE',spend:5};
  const paused={...active,id:pausedId,externalId:'456',status:'PAUSED',spend:0};let details=0;
  const source={read:async(tool,a)=>{if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};if(tool==='tracking_ad_detail'){details++;assert.equal(a.objectId,pausedId);return {row:paused,currency:'BRL',period:{timezone:'UTC'}};}assert.ok(['active','spent'].includes(a.status)||a.status==='all'&&a.accountIds?.[0]===account);return {level:'campaign',salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:ranges.today.from+'T00:00:00.000Z',to:iso(Date.parse(ranges.today.to+'T00:00:00Z')+86400000),days:[ranges.today.from]},rows:[active]};}};
- const out=await collectCloudProject(source,p,{now:()=>now,levels:['campaign'],periodsWanted:['today'],tracked:[paused]});assert.equal(details,1);assert.equal(out.snapshots[0].rows.length,2);assert.equal(out.snapshots[0].coverage.trackedComplete,true);assert.equal(out.snapshots[0].rows.find(r=>r.externalId==='456').status,'PAUSED');
+ const out=await collectCloudProject(source,p,{now:()=>now,levels:['campaign'],periodsWanted:['today'],purpose:'live',tracked:[paused]});assert.equal(details,1);assert.equal(out.snapshots[0].rows.length,2);assert.equal(out.snapshots[0].coverage.trackedComplete,true);assert.equal(out.snapshots[0].rows.find(r=>r.externalId==='456').status,'PAUSED');
 });
 
 test('cloud perspectives and synthesis complete a real domain round without manufacturing owner approvals',async()=>{
@@ -111,4 +111,10 @@ test('cloud scheduling finishes a partially completed round before starting a ne
  const f=fixture();f.state.proposals=[];f.state.executions=[];const existing=f.state.collaborationRounds[0];existing.stages[3]={agentId:'ops',status:'Pendente',attempt:0};
  const newer=structuredClone(existing);newer.id='newer-round';newer.createdAt=iso(Date.now());newer.stages=['traffic','creative','budget','ops'].map(agentId=>({agentId,status:'Pendente',attempt:0}));
  f.state.collaborationRounds.unshift(newer);assert.equal(cloudNext(f.state).roundId,existing.id);
+});
+
+test('visual cache coverage stays rejected; analytic operative scope requires all twelve independent cuts',async()=>{
+ const {validateAnalysisBundle}=await import('../lib/analysis-validation.mjs');const f=fixture();const sources=f.state.snapshots.flatMap(s=>['campaign','adset','ad'].map(level=>({...s,level,rows:[]})));const today=sources.find(s=>s.period==='today'&&s.level==='campaign');today.analysisScope={kind:'meta-operating-cohort',activeComplete:true,spentComplete:true,trackedComplete:true,trackedCount:0,inactiveArchiveExcluded:true,parentCampaignCount:null};
+ assert.equal(validateAnalysisBundle({snapshots:sources},{snapshots:[]}).snapshots.length,12);assert.throws(()=>validateAnalysisBundle({snapshots:[today]},{snapshots:[]}));
+ today.coverage={kind:'active-spent-tracked',activeComplete:true,spentComplete:true,trackedComplete:true,trackedCount:0};assert.throws(()=>validateAnalysisBundle({snapshots:sources},{snapshots:[]}),/acompanhamento/);
 });
