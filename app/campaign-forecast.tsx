@@ -8,7 +8,7 @@ const number=(v:any,digits=0)=>Number.isFinite(v)?v.toLocaleString('pt-BR',{maxi
 export default function CampaignForecast({card,state,item,now,paused,error}:{card:any;state:any;item:any;now:number;paused:boolean;error:any}){
  const result=useMemo(()=>forecastCampaign({card,state,item,now,paused,error}),[card,state,item,now,paused,error]);
  if(!card)return null;
- const central=result.scenarios.find((s:any)=>s.id==='central'),tz=item?.snapshot?.timezone||'America/Boa_Vista';
+ const central=result.scenarios.find((s:any)=>s.id==='central'),tz=item?.snapshot?.timezone||card.liveToday?.timezone||card.windows?.['3d']?.timezone||'America/Boa_Vista';
  const stamp=(s:any)=>{try{return new Intl.DateTimeFormat('pt-BR',{timeZone:tz,dateStyle:'short',timeStyle:'short'}).format(new Date(s));}catch{return 'N/D';}};
  return <section className="campaign-forecast" aria-label="Tendência e cenários de fechamento">
   <header><div><span className="eyebrow"><ChartNoAxesCombined size={13}/> TENDÊNCIA E FECHAMENTO</span><h4>{result.status==='scenario'?'Cenários para fechar o dia':'Projeção em formação'}</h4></div><span className="cf-confidence">{result.confidence}</span></header>
