@@ -6,6 +6,7 @@ O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o
 
 - Interface: `https://bunker-traffic.erik-iplou.workers.dev`.
 - Login: Supabase Auth, link de e-mail, proprietário definido em `BUNKER_OWNER_EMAIL`. Cookies HttpOnly, Secure e SameSite; cabeçalhos de identidade recebidos do visitante são removidos antes da autenticação.
+- Entrada direta opcional: `BUNKER_DIRECT_ACCESS_URL` aponta para a raiz HTTPS do Site privado já autenticado no ChatGPT. Visitantes sem sessão Supabase que chegam ao login são encaminhados para essa interface, ligada à mesma base. Isso não transfere cookies, não cria uma sessão Supabase nem libera APIs anônimas. Preserve o Site com acesso exclusivo do proprietário. O login Supabase por e-mail continua disponível em `/auth/login?email=1`.
 - Banco: Postgres, tabelas `bunker_records` e `bunker_reports`, com RLS e sem concessões a anon/authenticated. A função `bunker_store` é SECURITY INVOKER e exclusiva do backend service_role.
 - Agentes: o MCP privado existente no Sites permanece como compatibilidade autenticada. Seu armazenamento usa o gateway privado `/internal/storage` do Worker, portanto a interface nova e os agentes acessam a mesma base Supabase.
 - Malva/Órbita: OAuth do executor local. Chaves desses provedores não são enviadas ao navegador ou copiadas para o GitHub.
