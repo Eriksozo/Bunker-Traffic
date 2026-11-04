@@ -32,9 +32,11 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const runtime=await this.setting();
   if(input.action==='status'){const current=await this.read();return Response.json({...runtime,running:this.running,host:'cloudflare',model:CLOUD_MODEL,paused:current.state.paused,cadence:current.state.cadence,independentOfDesktop:true});}
   if(input.action==='check'){
-   let malva=false,ai=false;try{const started=Date.now(),ids=await this.engine().identity();malva=true;const smoke=await this.env.AI.run(CLOUD_MODEL,{messages:[{role:'user',content:'Responda somente OK.'}],max_tokens:8});if(typeof smoke?.response!=='string'||!smoke.response.trim())throw Error('CLOUD_AI_UNAVAILABLE');ai=true;
-    const check={at:new Date().toISOString(),malva:true,ai:true,ads:ids.who.platforms.some((p:any)=>p.platform==='tracking'&&p.ads),workspaceId:ids.who.workspace.id,projects:ids.projects.map((p:any)=>({id:p.id,name:p.name})),durationMs:Date.now()-started};await this.ctx.storage.put('runtime',{...runtime,check,lastError:null});return Response.json({ok:true,check});
-   }catch(e:any){const code=/^[A-Z_]{3,80}$/.test(e.code||'')?e.code:'CLOUD_CHECK_FAILED';await this.ctx.storage.put('runtime',{...runtime,lastError:code,check:{at:new Date().toISOString(),malva,ai,error:code}});return Response.json({error:code},{status:503});}
+   const started=Date.now();const results=await Promise.allSettled([this.engine().identity(),this.env.AI.run(CLOUD_MODEL,{messages:[{role:'user',content:'Responda somente OK.'}],max_tokens:8})]);
+   const identity=results[0],model=results[1],malva=identity.status==='fulfilled',ai=model.status==='fulfilled'&&typeof model.value?.response==='string'&&!!model.value.response.trim();
+   const who=malva?identity.value.who:null;const error=!malva&&identity.status==='rejected'&&/^[A-Z_]{3,80}$/.test(identity.reason?.code||'')?identity.reason.code:!malva?'CLOUD_MALVA_UNAVAILABLE':!ai?'CLOUD_AI_UNAVAILABLE':null;
+   const check={at:new Date().toISOString(),malva,ai,ads:!!who?.platforms.some((p:any)=>p.platform==='tracking'&&p.ads),workspaceId:who?.workspace.id||null,projects:malva?identity.value.projects.map((p:any)=>({id:p.id,name:p.name})):[],durationMs:Date.now()-started,...(error?{error}:{})};
+   const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,check,lastError:error});return Response.json(error?{error,check}:{ok:true,check},{status:error?503:200});
   }
   if(input.action==='enable'){
    if(!runtime.check?.malva||!runtime.check?.ai||Date.now()-Date.parse(runtime.check.at)>300000)return Response.json({error:'Confira a conexão antes de ativar.'},{status:409});
