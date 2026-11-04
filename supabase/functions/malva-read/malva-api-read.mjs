@@ -50,9 +50,11 @@ function compactReport(data,project,input,range){
 }
 /** Per-isolate bounded request coalescing. Source clocks are never replaced by cache clocks. */
 export function createMalvaReader({key,fetch:request=globalThis.fetch,now=Date.now}={}){
+ // Secrets pasted from a curl header may carry whitespace, quotes or Bearer.
+ key=typeof key==='string'?key.trim().replace(/^Authorization:\s*/i,'').replace(/^Bearer\s+/i,'').replace(/^([\"'])(.*)\1$/s,'$2').trim():key;
  const cache=new Map(),inflight=new Map();let windowStart=0,used=0;
  async function get(path,ttl=2000){
-  if(!key)fail('MALVA_NOT_CONFIGURED',503);const cached=cache.get(path);if(cached&&now()-cached.storedAt<ttl)return {...cached.value,cacheHit:true};if(inflight.has(path))return inflight.get(path);
+  if(!key)fail('MALVA_NOT_CONFIGURED',503);if(!key.startsWith('mvk_'))fail('MALVA_KEY_FORMAT_INVALID',503);const cached=cache.get(path);if(cached&&now()-cached.storedAt<ttl)return {...cached.value,cacheHit:true};if(inflight.has(path))return inflight.get(path);
   if(now()-windowStart>=60000){windowStart=now();used=0;}if(++used>240)fail('MALVA_RATE_LIMITED',429);
   const work=(async()=>{const start=now();let response;try{response=await request('https://malvadash.com/api/v1'+path,{method:'GET',headers:{Authorization:'Bearer '+key,Accept:'application/json','x-malva-wait':'400'},redirect:'error',signal:AbortSignal.timeout(15000)});}catch{fail('MALVA_UNAVAILABLE',503);}
    if(!response.ok)fail(response.status===429?'MALVA_RATE_LIMITED':response.status===401?'MALVA_KEY_INVALID':response.status===403?'MALVA_SCOPE_DENIED':'MALVA_UNAVAILABLE',response.status===429?429:502);

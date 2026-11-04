@@ -28,3 +28,7 @@ A interface autenticada dispõe do mesmo contrato em `POST /api/malva`. A API n�
 A função está em `supabase/functions/malva-read`; a cópia do adaptador é verificada por teste de igualdade. Publique ambas as dependências com verify_jwt ativado. O Bunker não precisa de outra migração de banco. A chave continua revogável na Malva e substituível no secret do Supabase. A nova chave só entra em isolates novos/republicados.
 
 Contrato oficial: https://malvadash.com/docs/api e https://malvadash.com/api/v1/openapi.json . Segredos no Supabase: https://supabase.com/docs/guides/functions/secrets .
+
+## Validação de implantação em 04/11/2026
+
+Cloudflare e o MCP privado foram publicados; a chamada autenticada percorreu o gateway e a função. A Malva recusou a credencial original. Após normalizar espaços/prefixos de cabeçalho, a função confirmou `MALVA_KEY_FORMAT_INVALID`: o secret existe, mas não contém uma chave oficial `mvk_…`. É necessário o proprietário corrigir o secret. Não foi possível medir latência de relatório nem alcance de projetos; o MCP continua como alternativa. A automação local permaneceu PAUSED. Esse registro descreve a verificação desta implantação, não um estado permanente da conexão.

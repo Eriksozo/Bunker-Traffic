@@ -26,3 +26,7 @@ test('revision polling requests only revision metadata while full reads retain t
  assert.equal(head.revision,9);assert.equal(calls[0].input.projection,'revision');
  await db.prepare('SELECT payload,revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first();assert.equal(calls[1].input.projection,undefined);
 });
+test('direct Malva RPC uses the edge function and preserves sanitized actionable errors',async()=>{
+ let call;const db=new SupabaseStorage({url:'https://example.supabase.co',key:'server-test',fetch:async(url,r)=>{call={url,r};return Response.json({error:'MALVA_KEY_FORMAT_INVALID'},{status:503});}});
+ await assert.rejects(db.rpc('malvaRead',{section:'projects'}),e=>e.code==='MALVA_KEY_FORMAT_INVALID');assert.equal(call.url,'https://example.supabase.co/functions/v1/malva-read');assert.deepEqual(JSON.parse(call.r.body),{section:'projects'});
+});
