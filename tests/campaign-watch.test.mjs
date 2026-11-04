@@ -54,3 +54,6 @@ test('Paused Bunker exposes observations without creating eligible collections',
 test('Duplicate current identities do not manufacture a unique campaign signal',()=>{
  const {state,feed,snapshot}=setup();snapshot.rows.push({...snapshot.rows[0]});const p=campaignWatchPlan(state,feed,now);assert.deepEqual(kinds(p),['ambiguous']);assert.equal(p.projects[0].scopeComplete,false);
 });
+test('Actual spend outranks idle unanalysed archive without claiming a new creation',()=>{
+ const {state,feed,snapshot}=setup();snapshot.rows=[{...row('idle'),spend:0},{...row('live'),spend:50},{...row('disabled'),accountStatus:{active:false}}];const p=campaignWatchPlan(state,feed,now);const targets=p.signals.filter(s=>s.objectId);assert.deepEqual(targets.map(s=>s.objectId),['live','idle','disabled']);assert.equal(targets[0].title,'Campanha sem análise');assert.match(targets[0].reason,/não comprova criação recente/);
+});
