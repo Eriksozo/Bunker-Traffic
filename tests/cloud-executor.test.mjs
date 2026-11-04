@@ -52,7 +52,7 @@ test('model outputs are scoped and a malformed response cannot become an opinion
 test('a paused central admits no collection and cannot inherit a due slot',()=>{assert.equal(cloudNext({config:{[project]:{projectName:'Example'}},paused:true,jobs:[],snapshots:[]}),null);});
 test('full collector validates identities and produces twelve independent source windows without summing overlaps',async()=>{
  const now=Date.now(),p={id:project,name:'Example',timezone:'UTC',currency:'BRL'},ranges=cloudRanges(now,'UTC');let calls=0;
- const source={read:async(tool,a)=>{if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};calls++;return {level:a.level,salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:a.from+'T00:00:00.000Z',to:iso(Date.parse(a.to+'T00:00:00Z')+86400000),days:a.from===a.to?[a.from]:[a.from,a.to]},rows:[{id:internal,projectId:project,projectName:'Example',externalId:'123',adAccountId:account,accountName:'Test',name:'Example',level:a.level,provider:'meta',spend:100}]};}};
+ const source={read:async(tool,a)=>{if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};calls++;return {level:a.level,salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:a.from+'T00:00:00.000Z',to:iso(Date.parse(a.to+'T00:00:00Z')+86400000),days:a.from===a.to?[a.from]:[a.from,a.to]},rows:[{id:internal,projectId:project,projectName:'Example',externalId:'123',adAccountId:account,accountName:'Test',name:'Example',level:a.level,provider:'meta',spend:100,campaignExternalId:a.level==='campaign'?null:'123'}]};}};
  const out=await collectCloudProject(source,p,{now:()=>now,startedAt:iso(now-1000)});assert.equal(out.snapshots.length,12);assert.equal(out.snapshots.find(s=>s.period==='today'&&s.level==='campaign').analysisScope.kind,'meta-operating-cohort');assert.equal(out.snapshots.find(s=>s.period==='7d').from,ranges['7d'].from+'T00:00:00.000Z');
  const bad={read:async(tool,a)=>tool==='tracking_ad_accounts'?{items:[]}: {...await source.read(tool,a),truncated:{shown:1,total:2}}};await assert.rejects(collectCloudProject(bad,p,{now:()=>now}),e=>e.code==='SOURCE_INCOMPLETE');
 });
@@ -136,6 +136,8 @@ test('visual cache coverage stays rejected; analytic operative scope requires al
 
 test('vendor refusal diagnostics preserve only safe status/code metadata, never response content',()=>{
  assert.throws(()=>unpackMcp({isError:true,structuredContent:{status:404,code:'NOT_FOUND',message:'private response body'}}),e=>e.code==='MCP_TOOL_FAILED'&&e.providerStatus===404&&e.providerCode==='NOT_FOUND'&&!e.message.includes('private'));
+ for(const isError of [false,true])assert.throws(()=>unpackMcp({isError,structuredContent:{error:{status:400,code:'INVALID_ARGUMENT',message:'Too long: private data omitted',fields:{q:['private name'],privateClientField:['private value']}}}}),e=>e.providerStatus===400&&e.providerCode==='INVALID_ARGUMENT'&&e.providerCategory==='input-limit'&&JSON.stringify(e.providerFields)==='["q"]'&&!JSON.stringify(e).includes('private'));
+ assert.throws(()=>unpackMcp({isError:true,content:[{type:'text',text:'Request timed out with private-name and mck_fixture'}]}),e=>e.providerCategory==='timeout'&&!JSON.stringify(e).includes('private-name')&&!JSON.stringify(e).includes('mck_fixture'));
 });
 
 test('learning packets preserve current claims and locators while bounding repeated source/case journals',()=>{
@@ -180,4 +182,20 @@ test('research collection reads daily history and today separately and retains a
  }};
  const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source,now:()=>now,ops:{liveItems:async()=>[],importBundle:(s,b)=>{s.snapshots=b.snapshots;},updateRun:(_s,j,status)=>{j.status=status;}}});
  const result=await engine.step();assert.equal(result.kind,'collection');assert.deepEqual(detailPresets,['14d','today']);const research=store.state.cloudResearch[project].details[0];assert.equal(research.detail.intraday.period.days.length,1);assert.equal(research.detail.period.days.length,2);assert.ok(research.history.items.some(e=>e.category==='budget'));assert.equal(research.history.returnedCount,50);assert.equal(research.history.truncated,true);
+});
+
+test('large parent cohorts are partitioned before MCP validation, with complete unique child coverage',async()=>{
+ const now=Date.now(),p={id:project,name:'Example',timezone:'UTC',currency:'BRL'},ranges=cloudRanges(now,'UTC'),parents=Array.from({length:60},(_,i)=>({id:crypto.randomUUID(),externalId:String(1000+i),projectId:project,projectName:'Example',adAccountId:account,accountName:'Test',level:'campaign',provider:'meta',name:'Campaign '+i,status:'ACTIVE',spend:10})),sizes=[];
+ const source={read:async(tool,a)=>{
+  if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};
+  if(a.campaignIds){sizes.push(a.campaignIds.length);if(a.campaignIds.length>25)throw Error('Parent filter rejected');}
+  const selected=parents.filter(r=>!a.campaignIds||a.campaignIds.includes(r.externalId));
+  const all=a.level==='campaign'?selected:selected.flatMap(r=>Array.from({length:a.level==='adset'?3:5},(_,i)=>({...r,level:a.level,externalId:r.externalId+'-'+i,campaignExternalId:r.externalId})));
+  return {level:a.level,salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:ranges.today.from+'T00:00:00Z',to:iso(Date.parse(ranges.today.to+'T00:00:00Z')+86400000),days:[ranges.today.from]},rows:all.slice(0,a.limit),truncated:all.length>a.limit?{shown:a.limit,total:all.length}:false};
+ }};
+ const result=await collectCloudProject(source,p,{now:()=>now,periodsWanted:['today']});assert.deepEqual(result.snapshots.map(s=>s.rows.length),[60,180,300]);assert.ok(sizes.every(n=>n<=25));assert.ok(sizes.some(n=>n<25),'Truncated chunks must be refined.');assert.equal(new Set(result.snapshots[2].rows.map(r=>r.externalId)).size,300);
+ const foreign={read:async(tool,a)=>{const response=await source.read(tool,a);if(a.campaignIds&&response.rows.length)response.rows[0]={...response.rows[0],campaignExternalId:'foreign-parent'};return response;}};
+ await assert.rejects(collectCloudProject(foreign,p,{now:()=>now,periodsWanted:['today']}),e=>e.code==='SOURCE_IDENTITY');
+ const inconsistent={read:async(tool,a)=>{const response=await source.read(tool,a);if(a.level==='ad'&&a.campaignIds?.length===25&&response.truncated)response.truncated.total++;return response;}};
+ await assert.rejects(collectCloudProject(inconsistent,p,{now:()=>now,periodsWanted:['today']}),e=>e.code==='SOURCE_INCOMPLETE');
 });
