@@ -9,6 +9,7 @@ import {recordDecisionHistoryOutcome} from './decision-history-outcomes.mjs';
 import {shouldQueueChoiceReview} from './decision-review-queue.mjs';
 import {decisionLearningSummary} from './decision-learning-view.mjs';
 import {reopenDecision} from './decision-reconsider.mjs';
+import {learningCyclePlan,recordLearningReview} from './learning-cycle.mjs';
 import {autonomousWorkPlan} from './autonomous-work.mjs';
 
 export function ownerAutonomy(state:any,input:any,ownerId:string){
@@ -37,13 +38,14 @@ export function ownerAutonomy(state:any,input:any,ownerId:string){
 export function collaborationRead(state:any,args:any={}){
  const round=args.roundId?(state.collaborationRounds||[]).find((r:any)=>r.id===args.roundId):null;
  if(args.roundId&&!round)throw Error('Colaboração não encontrada.');
+ if(args.action==='learningRead')return learningCyclePlan(state,args.projectId||round?.project);
  const workflow=collaborationPlan(state),blocked=round?workflow.rounds.find((r:any)=>r.roundId===round.id)?.blocked:null;
  const evidence=round&&!blocked?(state.snapshots||[]).filter((s:any)=>s.projectId===round.project&&round.sourceCut.some((c:any)=>c.period===s.period&&c.level===s.level)&&(!args.period||s.period===args.period)&&(!args.level||s.level===args.level)).map((s:any)=>{
   const rows=s.rows.filter((r:any)=>!args.objectId||r.externalId===args.objectId);
   return {...s,rows:rows.slice(0,50),rowCount:rows.length,truncated:rows.length>50};
  }):undefined;
  const execution=executionPlan(state);
- return {workflow,execution,autonomous:autonomousWorkPlan(state,{collaboration:workflow,execution}),decisions:decisionLearningSummary(state,round?.project),knowledge:Object.keys(state.config).map(project=>readKnowledgePlan(state,project)),...(blocked?{evidenceBlocked:blocked}:{}),...(evidence?{evidence}:{} )};
+ return {workflow,execution,learning:learningCyclePlan(state,round?.project),autonomous:autonomousWorkPlan(state,{collaboration:workflow,execution}),decisions:decisionLearningSummary(state,round?.project),knowledge:Object.keys(state.config).map(project=>readKnowledgePlan(state,project)),...(blocked?{evidenceBlocked:blocked}:{}),...(evidence?{evidence}:{} )};
 }
 
 export function agentAutonomy(state:any,args:any){
@@ -65,6 +67,7 @@ export function agentAutonomy(state:any,args:any){
   if(!claim)throw Error('Reserva de revisão não encontrada.');
   return reviewProposal(state,args,{kind:'agent',agentId:claim.agentId});
  }
+ if(action==='learningReview')return recordLearningReview(state,args);
  if(action==='knowledge')return recordKnowledge(state,args.entry);
  if(action==='outcome')return recordOutcome(state,args.entry);
  if(action==='executionClaim')return claimExecution(state,args);

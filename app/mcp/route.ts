@@ -43,7 +43,7 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
    if(!args.projectId||!Object.hasOwn(cur.state.config,args.projectId))throw new Error('Informe um projeto configurado para ler o histórico de sugestões.');
    result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...await readSuggestionHistory(args.projectId,args.limit??10,args.cursor||null)})}]};
   }
-  else if(args.action==='read'||args.action==='decisionRead')result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...(args.action==='decisionRead'?readDecisionExamples(cur.state,args):collaborationRead(cur.state,args))})}]};
+  else if(args.action==='read'||args.action==='learningRead'||args.action==='decisionRead')result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...(args.action==='decisionRead'?readDecisionExamples(cur.state,args):collaborationRead(cur.state,args))})}]};
   else{if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');const record=agentAutonomy(cur.state,args);const saved=await commit(cur.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({ok:true,revision:saved.revision,record})}]};}
  }
  else if(name==='bunker_iniciar_rodada'||(name==='bunker_atualizar_rodada'&&a.status==='Em análise'&&(a.id?.startsWith('project:')||a.id==='projects:due'))){if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');const c=reserveRequest(cur.state,a);const saved=await commit(c.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({revision:saved.revision,...('jobs' in c?{jobs:c.jobs}:{job:c.job})})}]};}
