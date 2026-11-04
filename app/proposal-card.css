@@ -1,0 +1,65 @@
+/* One proposal, one financial preview. Supporting evidence opens on demand. */
+body .app .cp-proposal-readable{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:none;overflow:hidden}
+body .app .cp-proposal-readable .cp-proposal-head{padding:22px 24px 20px;background:transparent;gap:16px;align-items:flex-start}
+body .app .cp-proposal-readable .cp-proposal-head>div{min-width:0}
+body .app .cp-proposal-readable .cp-overline{font:10px/1.5 var(--font-mono);letter-spacing:.5px;color:var(--ink-muted);margin-bottom:9px}
+body .app .cp-proposal-readable .cp-proposal-head h3{font-size:20px;font-weight:600;letter-spacing:-.45px;line-height:1.35;color:var(--ink);margin:0;overflow-wrap:anywhere}
+body .app .cp-proposal-readable .cp-proposal-head p{font-size:12px;line-height:1.6;color:var(--ink-muted);margin:7px 0 0}
+body .app .cp-proposal-readable .cp-proposal-head>.cp-badge{font-size:10px;padding:5px 9px;border-radius:6px;flex-shrink:0;margin-top:2px}
+body .app .cp-proposal-readable .cp-proposal-main{padding:20px 24px 22px}
+body .app .cp-proposal-readable .cp-campaign-name{margin:0 0 20px;font-size:12px;line-height:1.7;color:var(--ink-soft);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+body .app .cp-proposal-readable .cp-budget-summary{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:18px;align-items:center;padding:18px 20px;background:var(--surface-subtle);border:1px solid var(--border);border-radius:12px}
+body .app .cp-proposal-readable .cp-budget-summary>div{min-width:0;display:flex;flex-direction:column;gap:9px}
+body .app .cp-proposal-readable .cp-budget-summary small{font-size:11px;line-height:1.4;color:var(--ink-muted)}
+body .app .cp-proposal-readable .cp-budget-summary strong{font-size:25px;line-height:1.2;font-weight:450;letter-spacing:-.6px;color:var(--ink-soft);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+body .app .cp-proposal-readable .cp-budget-summary .cp-proposed-value strong{font-weight:600;color:var(--ink)}
+body .app .cp-proposal-readable .cp-budget-summary>svg{color:var(--ink-muted);margin-top:20px;justify-self:center}
+body .app .cp-proposal-readable .cp-budget-unit{display:flex;align-items:center;gap:9px;margin:10px 0 0;color:var(--ink-muted);font-size:11px;line-height:1.5}
+body .app .cp-proposal-readable .cp-delta{display:inline-flex;align-items:center;font:500 10px/1.3 var(--font-mono);border-radius:5px;padding:3px 6px;margin:0;background:var(--surface-raised);border:1px solid var(--border);color:var(--ink-soft)}
+body .app .cp-proposal-readable .cp-budget-equivalent{font-size:11px;line-height:1.6;color:var(--ink-muted);margin:6px 0 0}
+body .app .cp-proposal-readable .cp-reason-block{margin-top:22px}
+body .app .cp-proposal-readable .cp-reason-block h4{margin:0 0 8px;font-size:11px;line-height:1.5;font-weight:550;color:var(--ink-muted)}
+body .app .cp-proposal-readable .cp-reason-block p,body .app .cp-proposal-readable .cp-reason-expand summary>span:first-child{font-size:13px;line-height:1.75;color:var(--ink-soft);margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+body .app .cp-proposal-readable .cp-reason-expand summary{list-style:none;cursor:pointer}
+body .app .cp-proposal-readable .cp-reason-expand summary::-webkit-details-marker{display:none}
+body .app .cp-proposal-readable .cp-read-more{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--selection);margin-top:9px}
+body .app .cp-proposal-readable .cp-reason-expand[open] summary>span:first-child{display:none}
+body .app .cp-proposal-readable .cp-reason-expand[open] summary{margin-bottom:10px}
+body .app .cp-proposal-readable .cp-supporting-details{padding:0 24px}
+body .app .cp-proposal-readable .cp-supporting-details>.cp-detail{margin:0;border-top:1px solid var(--border)}
+body .app .cp-proposal-readable .cp-detail>summary{min-height:48px;padding:12px 0;gap:9px;font-size:12px;color:var(--ink-soft)}
+body .app .cp-proposal-readable .cp-detail>summary>.cp-detail-label{font:inherit;color:inherit}
+body .app .cp-proposal-readable .cp-detail>summary>.cp-detail-count{padding:2px 5px;font:10px/1.3 var(--font-mono);color:var(--ink-muted);background:var(--surface-raised);border-radius:4px}
+body .app .cp-proposal-readable .cp-detail>summary>svg:first-child{color:var(--ink-muted)}
+body .app .cp-proposal-readable .cp-care-details>summary>svg:first-child{color:var(--warning)}
+body .app .cp-proposal-readable .cp-care-list{margin:0 0 18px;padding:2px 0 0 18px;display:grid;gap:9px;font-size:12px;line-height:1.75;color:var(--ink-soft);overflow-wrap:anywhere}
+body .app .cp-proposal-readable .cp-care-list li::marker{color:var(--ink-muted)}
+body .app .cp-proposal-readable .cp-opinions-compact{padding:0 0 15px;display:grid;gap:7px}
+body .app .cp-proposal-readable .cp-opinion-row{padding:0;border:1px solid var(--border);border-radius:9px;background:var(--surface-subtle);min-width:0;overflow:hidden}
+body .app .cp-proposal-readable .cp-opinion-row>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;min-height:54px;padding:12px}
+body .app .cp-proposal-readable .cp-opinion-row>summary::-webkit-details-marker{display:none}
+body .app .cp-proposal-readable .cp-opinion-row .cp-person{flex-shrink:0;min-width:73px}
+body .app .cp-proposal-readable .cp-opinion-preview{font-size:12px;line-height:1.5;color:var(--ink-soft);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;min-width:0}
+body .app .cp-proposal-readable .cp-opinion-row>summary>svg{margin-left:auto;flex-shrink:0;color:var(--ink-muted)}
+body .app .cp-proposal-readable .cp-opinion-row[open]>summary>svg{transform:rotate(180deg)}
+body .app .cp-proposal-readable .cp-opinion-row[open] .cp-opinion-preview{display:none}
+body .app .cp-proposal-readable .cp-opinion-body{padding:0 14px 14px;border-top:1px solid var(--border)}
+body .app .cp-proposal-readable .cp-opinion-body>small{display:block;margin-top:14px;font-size:10px;color:var(--ink-muted)}
+body .app .cp-proposal-readable .cp-proposal-identity{display:grid;gap:10px;margin:0;padding:4px 0 18px}
+body .app .cp-proposal-readable .cp-proposal-identity>div{display:grid;grid-template-columns:100px minmax(0,1fr);gap:12px}
+body .app .cp-proposal-readable .cp-proposal-identity dt{font-size:11px;color:var(--ink-muted);line-height:1.6}
+body .app .cp-proposal-readable .cp-proposal-identity dd{margin:0;font-size:11px;line-height:1.6;color:var(--ink-soft);overflow-wrap:anywhere}
+body .app .cp-proposal-readable .cp-data-heading{margin:14px 0 8px;color:var(--ink);font-size:12px;font-weight:550}
+body .app .cp-proposal-readable .cp-proposal-foot{padding:16px 24px 20px;margin:0;background:var(--surface-subtle)}
+body .app .cp-proposal-readable .cp-validity{display:flex;gap:6px;align-items:center;font-size:10px;color:var(--ink-muted);margin-bottom:12px}
+body .app .cp-proposal-readable .cp-review-actions{display:flex;flex-wrap:wrap;gap:8px}
+body .app .cp-proposal-readable .cp-review-actions .cp-button{min-height:38px;font-size:12px;padding:9px 12px;border-radius:8px}
+body .app .cp-proposal-readable .cp-approval-confirmation{display:flex;gap:6px;align-items:flex-start;font-size:10px!important;line-height:1.65!important;margin:12px 0 0!important;color:var(--ink-muted)!important;max-width:none}
+body .app .cp-proposal-readable .cp-approval-confirmation>svg{flex-shrink:0;margin-top:2px}
+body .app .cp-proposal-readable summary:focus-visible{outline:2px solid var(--selection);outline-offset:2px;border-radius:7px}
+body .app .agent-report.ar-compact{padding-top:14px}
+body .app .agent-report.ar-compact .ar-summary>strong{font-size:13px;font-weight:550;line-height:1.65}
+body .app .agent-report.ar-compact p{font-size:12px;line-height:1.8}
+body .app .agent-report.ar-compact .ar-next{padding:0;border:0;background:transparent;margin-top:14px!important}
+body .app .agent-report.ar-compact .ar-next>strong{color:var(--ink-muted);font-weight:500}
+@media(max-width:600px){body .app .cp-proposal-readable .cp-proposal-head{padding:18px;gap:12px;flex-wrap:wrap}body .app .cp-proposal-readable .cp-proposal-head h3{font-size:18px}body .app .cp-proposal-readable .cp-proposal-main{padding:18px}body .app .cp-proposal-readable .cp-budget-summary{padding:15px 12px;gap:10px;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr)}body .app .cp-proposal-readable .cp-budget-summary strong{font-size:21px;letter-spacing:-.5px}body .app .cp-proposal-readable .cp-budget-summary small{font-size:10px}body .app .cp-proposal-readable .cp-supporting-details{padding:0 18px}body .app .cp-proposal-readable .cp-proposal-foot{padding:16px 18px 18px}body .app .cp-proposal-readable .cp-review-actions .cp-button{flex:1;white-space:nowrap}body .app .cp-proposal-readable .cp-review-actions>.cp-quiet{flex-basis:auto}body .app .cp-proposal-readable .cp-opinion-row>summary{gap:9px}body .app .cp-proposal-readable .cp-opinion-row .cp-person{min-width:63px}body .app .cp-proposal-readable .cp-opinion-preview{font-size:11px}body .app .cp-proposal-readable .cp-proposal-identity>div{grid-template-columns:78px minmax(0,1fr);gap:10px}}
