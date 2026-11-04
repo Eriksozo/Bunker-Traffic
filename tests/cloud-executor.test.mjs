@@ -199,3 +199,8 @@ test('large parent cohorts are partitioned before MCP validation, with complete 
  const inconsistent={read:async(tool,a)=>{const response=await source.read(tool,a);if(a.level==='ad'&&a.campaignIds?.length===25&&response.truncated)response.truncated.total++;return response;}};
  await assert.rejects(collectCloudProject(inconsistent,p,{now:()=>now,periodsWanted:['today']}),e=>e.code==='SOURCE_INCOMPLETE');
 });
+
+test('each real role receives a distinct verification task and peer review cannot impersonate owner approval',async()=>{
+ const systems={};for(const role of ['traffic','creative','budget','ops'])await runCloudAnalyst({run:async(_m,r)=>{systems[role]=r.messages[0].content;return {response:{decision:'Investigar',reason:'Sem dados suficientes',nextStep:'Conferir origem',text:'Sem alvo elegível neste recorte.',suggestions:[],question:null}};}},role,{campaigns:[]});
+ assert.match(systems.traffic,/TRÁFEGO:.*aquisição front/);assert.match(systems.creative,/CRIATIVOS:.*conjuntos\/anúncios/);assert.match(systems.budget,/ORÇAMENTO:.*moeda nativos/);assert.match(systems.budget,/não é aprovação do dono/);assert.match(systems.ops,/textos genéricos não substitui/);assert.equal(new Set(Object.values(systems)).size,4);
+});
