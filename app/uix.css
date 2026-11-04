@@ -250,12 +250,11 @@ body .app .live-sync-summary strong { font-size:12px; font-weight:500; line-heig
 body .app .live-sync-summary small { font-size:10px; font-variant-numeric:tabular-nums; }
 body .app .live-sync-actions { display:flex; align-items:center; gap:12px; margin-left:auto; }
 body .app .live-sync-actions>.button { min-height:30px; padding:5px 9px; font-size:11px; }
-body .app .live-sync-details { position:relative; }
-body .app .live-sync-details>summary { display:flex; align-items:center; gap:5px; min-height:30px; list-style:none; cursor:pointer; border-radius:5px; font-size:11px; }
-body .app .live-sync-details>summary::-webkit-details-marker { display:none; }
-body .app .live-sync-details>summary svg { width:13px; height:13px; }
-body .app .live-sync-details[open]>summary svg { transform:rotate(180deg); }
-body .app .live-sync-detail-body { position:absolute; z-index:45; top:calc(100% + 11px); right:0; width:360px; max-width:calc(100vw - 40px); max-height:65dvh; overflow:auto; padding:14px; border:1px solid; border-radius:12px; }
+body .app .live-sync-details-toggle { display:flex; align-items:center; gap:5px; min-height:30px; padding:0; border:0; background:none; cursor:pointer; border-radius:5px; font-size:11px; }
+body .app .live-sync-details-toggle svg { width:13px; height:13px; }
+body .app .live-sync-details-toggle[aria-expanded=true] svg { transform:rotate(180deg); }
+body .app .live-sync-detail-body { position:static; flex-basis:100%; width:100%; min-width:0; padding:14px; border:1px solid; border-radius:9px; }
+body .app .live-sync-detail-body[hidden] { display:none; }
 body .app .live-sync-detail-body p { font-size:11px; line-height:1.7; margin:0; }
 body .app .live-sync-detail-body p+p { margin-top:8px; }
 body .app .live-sync-message { flex-basis:100%; width:100%; margin:0; font-size:11px; line-height:1.7; }
@@ -273,7 +272,7 @@ body .app.is-nav-collapsed .nav { justify-content:center; padding:0; height:38px
  body .app .topbar { display:flex; padding:0 16px; gap:10px; height:56px; } body .app .topbar .breadcrumb { margin-right:auto; font-size:11px; } body .app .top-actions { gap:10px; } body .app .top-actions .private { font-size:0; gap:0; } body .app .private svg { width:16px; height:16px; }
  body .app .uix-menu-toggle { display:inline-flex; width:40px; height:40px; min-height:40px; padding:0; } body .app .topbar .avatar { width:28px; height:28px; }
  body .app main { padding:21px 16px 10px; } body .app .heading { flex-direction:column; gap:14px; margin-bottom:20px; } body .app .heading h1 { font-size:20px; } body .app .heading-actions { width:100%; justify-content:flex-start; }
- body .app .live-sync-actions>.button { min-height:40px; } body .app .live-sync-details>summary { min-height:40px; } body .app .live-sync-detail-body { position:fixed; top:auto; right:16px; margin-top:10px; max-width:calc(100vw - 32px); }
+ body .app .live-sync-actions>.button { min-height:40px; } body .app .live-sync-details-toggle { min-height:40px; }
  body .app .contextbar { gap:10px; } body .app .contextbar .freshness { width:100%; margin-left:0; font-size:10px; } body .app .windows { margin-left:auto; } body .app .windows button { min-height:34px; padding:5px 8px; font-size:11px; } body .app .project-selector { padding:3px 8px; } body .app .project-selector select { font-size:12px; min-height:34px; min-width:64px; }
  body .app .dc-heading { padding:2px 0 18px; gap:12px; flex-direction:column; } body .app .dc-heading h2 { font-size:20px; } body .app .dc-heading p { font-size:12px; } body .app .dc-copilot { font-size:10px; padding:6px 9px; }
  body .app .dc-topbar { gap:10px; margin-bottom:18px; } body .app .dc-tabs { width:100%; gap:2px; flex-wrap:nowrap; } body .app .dc-tabs>[role=tab] { min-height:40px; flex:1 1 0; min-width:0; white-space:normal; line-height:1.25; text-align:center; font-size:10px; padding:4px 5px; gap:5px; } body .app .dc-tabs>[role=tab] svg { width:13px; height:13px; } body .app .dc-tabs>[role=tab]>[data-slot=badge] { font-size:9px; min-width:16px; padding:2px 4px; }

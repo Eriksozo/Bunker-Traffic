@@ -49,3 +49,8 @@ test('pause and endpoint failure cannot be presented as a fresh active connectio
  assert.equal(liveDisplayStatus(undefined,'john',{now}).label,'Aguardando primeira coleta');
  assert.equal(liveDisplayStatus({...item,snapshot:null},'john',{now}).recent,false);
 });
+test('a changing source stays visibly unconfirmed and transport failure takes precedence',()=>{
+ const changed={...item,error:{code:'SOURCE_CHANGED',message:'O cenário mudou durante a consulta.',at:'2026-11-02T18:00:00.000Z'}};
+ assert.equal(liveDisplayStatus(changed,'john',{now}).label,'Conferindo alterações');assert.equal(liveDisplayStatus(changed,'john',{now}).recent,false);
+ assert.equal(liveDisplayStatus(changed,'john',{now,error:'Sem conexão'}).label,'Falha de sincronização');
+});

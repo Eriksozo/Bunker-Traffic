@@ -236,9 +236,9 @@ body .app .live-sync-strip { background:var(--surface-subtle); border-color:var(
 body .app .live-sync-strip.has-error { border-color:var(--danger-line); }
 body .app .live-sync-summary strong { color:var(--ink-soft); }
 body .app .live-sync-summary small { color:var(--ink-muted); }
-body .app .live-sync-details>summary { color:var(--ink-muted); }
-body .app .live-sync-details>summary:hover,body .app .live-sync-details[open]>summary { color:var(--ink); }
-body .app .live-sync-detail-body { background:var(--surface); border-color:var(--line-strong); box-shadow:0 8px 28px #0007,var(--shadow-surface); }
+body .app .live-sync-details-toggle { color:var(--ink-muted); }
+body .app .live-sync-details-toggle:hover,body .app .live-sync-details-toggle[aria-expanded=true] { color:var(--ink); }
+body .app .live-sync-detail-body { background:var(--surface); border-color:var(--line-strong); box-shadow:var(--shadow-surface); }
 body .app .live-sync-detail-body p,body .app .live-sync-message { color:var(--ink-soft); }
 body .app .live-sync-detail-body .live-sync-times { color:var(--ink-muted); }
 body .app .live-sync-message.is-error { color:var(--danger); }
@@ -628,3 +628,6 @@ body .app .vo-composer button:hover { background:var(--brand-hover); border-colo
  body .app .main,body .app .panel,body .app .kpi[data-slot=card],body .app .dc-card[data-slot=card],body .app .dc-learning-panel { background:#fff; color:#111; border-color:#bbb; box-shadow:none; }
  body .app .heading h1,body .app .heading p,body .app .report pre,body .app .dc-card :is(h3,p,strong),body .app .dc-heading :is(h2,p) { color:#222; }
 }
+
+body .app .live-sync-strip.has-warning { border-color:var(--warning-line); }
+body .app .live-sync-message.is-warning { color:var(--warning); }

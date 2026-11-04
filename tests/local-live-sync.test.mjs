@@ -180,9 +180,36 @@ test('a tracked campaign that left active and spent still receives an exact all-
 test('identical cohort overlaps deduplicate, while conflicting metadata or financial values fail',async()=>{
   for(const conflict of [null,'dailyBudget','name']){
     const client=new FakeClient(),r=row();client.reportHandler=args=>report([{...r,...(args.status==='spent'&&conflict?{[conflict]:conflict==='dailyBudget'?1:'Different'}:{})}],PROJECT,args.status==='active'?{freshAt:'2026-11-03T00:37:57.000Z',lastSyncAt:'2026-11-03T00:29:40.000Z'}:{});
-    if(conflict)await assert.rejects(collectProject(client,PROJECT,{now:()=>NOW,trackedRows:[r]}),{code:'SOURCE_INCOMPLETE'});
+    if(conflict)await assert.rejects(collectProject(client,PROJECT,{now:()=>NOW,trackedRows:[r]}),{code:'SOURCE_CHANGED'});
     else{const snapshot=await collectProject(client,PROJECT,{now:()=>NOW,trackedRows:[r]});assert.equal(snapshot.rows.length,1);assert.equal(snapshot.fetchedAt,'2026-11-03T00:37:57.000Z');assert.equal(snapshot.lastSyncAt,'2026-11-03T00:29:40.000Z');}
   }
+});
+test('rolling metrics use the newest whole campaign row without duplicate sums or missing-value fallbacks',async()=>{
+ const client=new FakeClient(),old=row(),latest={...old,spend:old.spend+50,revenueNet:900,orders:6,frontOrders:4,checkouts:null};
+ client.reportHandler=args=>report([args.status==='active'?old:latest],PROJECT,args.status==='active'?{freshAt:'2026-11-03T00:37:57.000Z'}:{});
+ const snapshot=await collectProject(client,PROJECT,{now:()=>NOW});
+ assert.equal(snapshot.rows.length,1);assert.deepEqual(snapshot.rows[0],mapCampaignRow(latest,PROJECT));assert.equal(snapshot.fetchedAt,'2026-11-03T00:37:57.000Z');
+ assert.equal(client.calls.filter(call=>call.tool==='tracking_campaigns').length,2);
+});
+test('a later-returned report with older metrics cannot overwrite the newer observed campaign',async()=>{
+ const client=new FakeClient(),older=row(),newer={...older,spend:100,frontOrders:1};
+ client.reportHandler=args=>report([args.status==='active'?newer:older],PROJECT,args.status==='spent'?{freshAt:'2026-11-03T00:37:57.000Z'}:{});
+ const snapshot=await collectProject(client,PROJECT,{now:()=>NOW});assert.deepEqual(snapshot.rows[0],mapCampaignRow(newer,PROJECT));
+});
+test('equal-clock conflicting rows stay unconfirmed after one bounded read-only retry',async()=>{
+ const client=new FakeClient();client.reportHandler=args=>report([{...row(),spend:args.status==='active'?100:200}]);
+ await assert.rejects(collectProject(client,PROJECT,{now:()=>NOW}),{code:'SOURCE_CHANGED'});
+ assert.equal(client.calls.filter(call=>call.tool==='tracking_campaigns').length,4);assert.equal(client.calls.some(call=>call.args?.action==='import'),false);
+});
+test('a native edit that stabilizes on the second attempt is observed without any provider mutation',async()=>{
+ const client=new FakeClient();let reads=0;client.reportHandler=()=>{reads++;return report([{...row(),dailyBudget:reads===1?100:200}]);};
+ const snapshot=await collectProject(client,PROJECT,{now:()=>NOW});assert.equal(snapshot.rows[0].dailyBudget,200);assert.equal(reads,4);
+ assert.ok(client.calls.every(call=>call.tool==='tracking_campaigns'));
+});
+test('the relay persists and confirms changed rolling metrics using its existing cache CAS',async()=>{
+ const client=new FakeClient();client.reportHandler=args=>report([{...row(),spend:args.status==='active'?100:200}],PROJECT,args.status==='active'?{freshAt:'2026-11-03T00:37:57.000Z'}:{});
+ assert.deepEqual(await relay(client).runOnce(),{paused:false,imported:1,failed:0});assert.equal(client.state.items[0].snapshot.rows[0].spend,200);assert.equal(client.state.items[0].revision,8);
+ assert.equal(client.calls.some(call=>call.tool?.includes('set_ad_')),false);
 });
 test('a tracked campaign absent from a complete exact-ID query is not invented as paused or deleted',async()=>{
   const client=new FakeClient();client.reportHandler=()=>report([]);

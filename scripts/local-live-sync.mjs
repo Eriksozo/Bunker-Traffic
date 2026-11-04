@@ -22,6 +22,7 @@ const MESSAGES=Object.freeze({
   SOURCE_IDENTITY:'A identidade do espaço ou projeto não confere com a configuração.',
   SOURCE_INVALID:'A origem retornou dados incompatíveis com o contrato de leitura.',
   SOURCE_INCOMPLETE:'A leitura não cobriu todas as campanhas; o cache anterior foi preservado.',
+  SOURCE_CHANGED:'O cenário mudou durante a consulta. O cache anterior foi preservado; o Mac fará outra leitura automaticamente.',
   SOURCE_STALE:'A leitura da origem venceu ou o dia mudou durante a coleta.',
   SOURCE_LIMIT:'A leitura excede o limite; nenhuma campanha foi descartada.',
   BUNKER_UNAVAILABLE:'Não foi possível consultar o Bunker.',
@@ -249,10 +250,17 @@ export function snapshotFromReports(reports,project,range,now){
 
 /** Operational cohort only: active, spent, and exact IDs from the last live read.
  * This does not claim coverage of every inactive campaign in account history. */
-export async function collectProject(client,project,{now=Date.now,trackedRows=[],wait=delay}={}){
-  const range=todayRange(now(),project.timezone);let calls=0;
+export async function collectProject(client,project,options={}){
+  const budget={calls:0};
+  for(let attempt=0;attempt<2;attempt++){
+    try{return await collectProjectAttempt(client,project,options,budget);}
+    catch(error){if(error?.code!=='SOURCE_CHANGED'||attempt)throw error;}
+  }
+}
+async function collectProjectAttempt(client,project,{now=Date.now,trackedRows=[],wait=delay},budget){
+  const range=todayRange(now(),project.timezone);
   const query=async(status,accountIds,campaignIds)=>{
-    if(++calls>MAX_SOURCE_CALLS)fail('SOURCE_LIMIT');
+    if(++budget.calls>MAX_SOURCE_CALLS)fail('SOURCE_LIMIT');
     const report=await client.callTool('malva','tracking_campaigns',{projectId:project.id,level:'campaign',sales:'traffic',provider:['meta'],status,accountStatus:'all',preset:'custom',from:range.day,to:range.day,limit:100,...(accountIds?{accountIds}:{}),...(campaignIds?{campaignIds}:{})});
     // A small source/local clock lead can settle before validation. Never admit
     // a future read, extend its five-minute age limit, or wait for large skew.
@@ -299,11 +307,19 @@ export async function collectProject(client,project,{now=Date.now,trackedRows=[]
     if(part.rows.some(row=>!allowed.has(row.externalId)))fail('SOURCE_IDENTITY');
     reports.push(part);
   }
-  const union=new Map();
+  const union=new Map(),observedAt=new Map();
+  const measurements=new Set(['spend','revenue','revenueNet','adCosts','productCost','saleTax','frontOrders','orders','checkouts','refundedOrders','refundedRevenue','impressions','linkClicks','video3s','videoPlays']);
+  const metadata=row=>JSON.stringify(Object.fromEntries(Object.entries(row).filter(([field])=>!measurements.has(field))));
   for(const report of reports)for(const row of report.rows){
     const id=rowKey(row),previous=union.get(id);
-    if(previous&&JSON.stringify(previous)!==JSON.stringify(row))fail('SOURCE_INCOMPLETE');
-    union.set(id,row);
+    if(previous&&JSON.stringify(previous)!==JSON.stringify(row)){
+      // Rolling metrics may change between complete reads. Never mix fields,
+      // sum duplicate campaigns, or choose across divergent native metadata.
+      if(metadata(previous)!==metadata(row)||observedAt.get(id)===Date.parse(report.freshAt))fail('SOURCE_CHANGED');
+    }
+    if(!previous||Date.parse(report.freshAt)>observedAt.get(id)){
+      union.set(id,row);observedAt.set(id,Date.parse(report.freshAt));
+    }
   }
   const snapshot=snapshotFromReports([{...reports[0],rows:[...union.values()]},...reports.map(report=>({...report,rows:[]}))],project,range,now());
   return {...snapshot,coverage:{kind:'active-spent-tracked',activeComplete:true,spentComplete:true,trackedComplete:true,trackedCount:tracked.size}};

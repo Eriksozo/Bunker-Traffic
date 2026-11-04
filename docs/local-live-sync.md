@@ -105,7 +105,8 @@ O formato real do Malva verificado nesta entrega tem `freshAt`, `period.{timezon
 - `fetchedAt` mantém o `freshAt` da consulta. `lastSyncAt` mantém o instante informado pela origem ou `null`. Um relógio nunca substitui o outro.
 - Valores numéricos são copiados como vieram, incluindo orçamento e moeda próprios. Não converte orçamento, não transforma ausência em zero nem usa pedidos totais como vendas front.
 - Uma resposta vazia válida pode gerar zero linhas. Uma falha nunca é convertida em uma resposta vazia.
-- Uma campanha é identificada pelo par conta + `externalId`. Duplicatas na mesma conta são recusadas.
+- Uma campanha é identificada pelo par conta + `externalId`. Duplicatas dentro da mesma resposta são recusadas. Quando ela aparece em consultas completas diferentes, mudanças apenas nas métricas usam a linha inteira da consulta com `freshAt` mais recente, sem somar nem misturar campos.
+- Divergências de orçamento, status ou outros metadados, e métricas divergentes com o mesmo relógio, geram `SOURCE_CHANGED`. A coleta inteira pode ser repetida uma única vez, somente em leitura, compartilhando o limite de 500 consultas. Se o cenário continuar mudando, o cache anterior fica preservado até outro ciclo. Isso não autoriza repetir importações ambíguas nem ações em campanhas.
 - Quando há mais de 100 linhas, lista as contas Meta do projeto e divide os filtros `accountIds` em grupos disjuntos, subdividindo grupos truncados. Confere o total e a presença das campanhas da consulta inicial.
 - Se uma única conta ainda exceder 100 campanhas, a ferramenta atual não oferece paginação suficiente: registra `SOURCE_INCOMPLETE` e preserva o cache. Não inventa filtros para ocultar a linha 101.
 - Mudanças de contagem durante a coleta, virada do dia, leitura com mais de cinco minutos, mais de 3.000 linhas ou mais de 1.450.000 bytes recusam o lote, sem descartar linhas.
