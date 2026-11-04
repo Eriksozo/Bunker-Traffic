@@ -11,6 +11,8 @@ import './decision-cards.css';
 import './decision-kanban.css';
 import AgentReport from './agent-report';
 import CampaignDailyResults from './campaign-daily-results';
+import {campaignHistoryTrend} from '../lib/campaign-forecast.mjs';
+import './campaign-forecast.css';
 import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
 import {Input} from '@/components/ui/input';
@@ -111,7 +113,7 @@ function Card({card,state,draft,setDraft,saving,now,onSave,onApprove}:{card:any;
   <details className="dc-rationale"><summary><p className="dc-reason dc-reason-preview">{recommendationSummary(card)}</p><span>Ler análise <ChevronDown size={13}/></span></summary><p className="dc-reason">{recommended.reason||'Conferir os períodos e o efeito dos ajustes anteriores antes da próxima decisão.'}</p></details>
   <div className="dc-card-metrics"><span><small>{recentLabel(card,'ROAS')}</small><strong>{ratio(card.windows?.['3d']?.roas)}</strong></span><span><small>{recentLabel(card,'Front')}</small><strong>{number(card.windows?.['3d']?.frontOrders)}</strong></span><span><small>{today.label}</small><strong>{money(today.metrics?.spend)}</strong></span></div>
   <DecisionContext card={card}/>
-  <CampaignDailyResults key={JSON.stringify([card.project,row.adAccountId,row.externalId])} projectId={card.project} adAccountId={row.adAccountId} objectId={row.externalId}/>
+  <CampaignDailyResults card={card} state={state} now={now} key={JSON.stringify([card.project,row.adAccountId,row.externalId])} projectId={card.project} adAccountId={row.adAccountId} objectId={row.externalId}/>
   <div className="dc-action-box"><div className="dc-action-label"><span>1. Escolha a ação</span>{saved&&<span className="dc-recorded"><History size={11}/>{latestStatus}</span>}</div><div className="dc-action-grid" role="group" aria-label={'Ação para '+row.name}>{actionOrder.map(id=>{const ActionIcon=actions[id].icon;return <Button type="button" key={id} aria-pressed={action===id} disabled={saving||state.paused||actionable[id]===false||(id==='pause'&&row.status==='PAUSED')} onClick={()=>select(id)} className={'dc-action dc-'+id+(action===id?' dc-selected':'')}><ActionIcon size={16}/>{actions[id].label}</Button>;})}</div>
    {['increase','reduce'].includes(action)&&<div className="dc-percentage-controls"><div className="dc-presets" role="group" aria-label="Percentuais rápidos">{(action==='increase'?[20,50,100]:[20,30,50]).map(value=><Button type="button" key={value} aria-pressed={Number(draft.percent)===value} onClick={()=>setDraft({...draft,percent:String(value)})} disabled={saving}>{action==='increase'?'+':'−'}{value}%</Button>)}</div><label className="dc-custom-percent"><span>Personalizar</span><span><Input type="number" aria-label={'Percentual para '+row.name} min="0.01" max={action==='increase'?1000:99.99} step="0.01" value={draft.percent} onChange={e=>setDraft({...draft,percent:e.target.value})} disabled={saving}/><b>%</b></span></label></div>}
    {!valid&&<p className="dc-validation" role="alert">{action==='increase'?'Informe um aumento maior que 0 e até 1.000%.':'Informe uma redução maior que 0 e menor que 100%. Para interromper, escolha Pausar.'}</p>}
@@ -130,7 +132,7 @@ function KanbanTile({card,stage,now,onOpen}:{card:any;stage:string;now:number;on
  const row=card.observedRow||card.row||{},suggestion=card.suggestion||{},diagnostic=suggestion.origin==='diagnostic';
  const action=actionOf(suggestion.action),Icon=diagnostic?Search:actions[action].icon;
  const stale=!card.sourceAt||!Number.isFinite(Date.parse(card.sourceAt))||now-Date.parse(card.sourceAt)>60*60000;
- const today=todayDisplay(card,now),context=displayedContext(card);
+ const today=todayDisplay(card,now),context=displayedContext(card),trend=campaignHistoryTrend(card);
  return <UiCard className={'dc-kanban-card'+(!diagnostic?' dc-kanban-'+action:'')} aria-label={'Resumo de '+row.name}>
   <div className="dc-kanban-card-top"><span className="dc-kanban-phase">{card.phase||'Fase N/D'}</span><span className={'dc-kanban-status'+(row.effectiveStatus==='ACTIVE'?' is-active':'')}>{statusLabel(row.effectiveStatus||row.status)}</span></div>
   <h4><button type="button" onClick={()=>onOpen(card)}>{row.name||'Campanha sem nomenclatura'}</button></h4>
@@ -140,6 +142,7 @@ function KanbanTile({card,stage,now,onOpen}:{card:any;stage:string;now:number;on
   {(card.liveDrift||card.monitor)&&<span className="dc-context-flag"><RefreshCw size={12}/>{card.liveDrift?.title||card.monitor.title}</span>}
   {context?.kind==='mixed-return'&&<span className="dc-context-flag"><Clock3 size={12}/>{context.title}</span>}
   <dl className="dc-kanban-metrics"><div><dt>{today.label}</dt><dd>{money(today.metrics?.spend)}</dd></div><div><dt>{recentLabel(card,'ROAS')}</dt><dd>{ratio(card.windows?.['3d']?.roas)}</dd></div><div><dt>{recentLabel(card,'Front')}</dt><dd>{number(card.windows?.['3d']?.frontOrders)}</dd></div></dl>
+  <div className="dc-trend-summary"><strong>{card.analysisStale?'Tendência aguarda releitura':trend.label}</strong><span>Cenários de fechamento nos detalhes da campanha.</span></div>
   <div className="dc-kanban-context">{card.lastChoice&&<span><History size={11}/> Reavaliação</span>}{stale&&<span><Clock3 size={11}/> Atualizar análise</span>}<span title={card.teamReady&&!card.liveDrift?'Três pareceres disponíveis para este cenário':'Os agentes ainda precisam rever o cenário atual'}><MessageSquare size={11}/>{card.teamReady&&!card.liveDrift?`${array(card.teamOpinions).length}/3 pareceres`:'Releitura pendente'}</span></div>
   <footer><SourceStamps card={card}/><Button type="button" variant="outline" onClick={()=>onOpen(card)} aria-label={'Abrir decisão de '+row.name}>{stage==='approval'?'Conferir proposta':'Analisar e decidir'}<ArrowRight size={13}/></Button></footer>
  </UiCard>;
