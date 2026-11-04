@@ -10,7 +10,7 @@ A ferramenta existente `bunker_atualizar_rodada` aceita `id: source-data`, `stat
 
 Primeiro: `{"section":"projects"}`. A chave oficial pode alcançar apenas um projeto. Não inferir acesso a outros projetos. Os demais permanecem no MCP Malva; Órbita segue no próprio conector.
 
-Depois: `{"section":"campaigns","projectId":"UUID_REAL_CONFIGURADO","level":"campaign","period":"four"}`. Há também `adset`, `ad`, `accountId`, `objectId`, status e período customizado. `ad-accounts`, `ad-detail` e `ad-changes` atendem investigação de hierarquia e últimas edições. O backend confere ID e nome configurados antes de devolver uma leitura do projeto.
+Depois: `{"section":"campaigns","projectId":"UUID_REAL_CONFIGURADO","level":"campaign","period":"four"}`. Há também `adset`, `ad`, `accountId`, filtros de pai `campaignId`/`adsetId` e `objectId` para anúncio, status e período customizado. `ad-detail` exige o UUID interno da linha (`id`); `ad-changes` exige o ID na plataforma (`externalId`). `ad-accounts`, `ad-detail` e `ad-changes` atendem investigação de hierarquia e últimas edições. O backend confere ID e nome configurados antes de devolver uma leitura do projeto.
 
 A interface autenticada dispõe do mesmo contrato em `POST /api/malva`. A API não grava a decisão, não atualiza uma análise selada e não autoriza execução. Preserve a pausa da central e as reservas/cadência das revisões. O envio financeiro continua exclusivamente pelo fluxo exato aprovado e MCP Malva, com conferência independente.
 

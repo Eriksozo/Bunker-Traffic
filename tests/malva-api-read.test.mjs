@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {createMalvaReader,malvaPeriods,validateMalvaRequest,readMalvaSource} from '../lib/malva-api-read.mjs';
+import {createMalvaReader,malvaPeriods,malvaPath,validateMalvaRequest,readMalvaSource} from '../lib/malva-api-read.mjs';
 const project={id:'11111111-1111-4111-8111-111111111111',name:'Example',timezone:'America/Sao_Paulo',currency:'BRL'},account='22222222-2222-4222-8222-222222222222';
 const at=Date.parse('2026-11-04T15:00:00Z'),input={section:'campaigns',projectId:project.id,period:'four'};
 function harness({invalid,stale=false}={}){let calls=[],count=0;const reader=createMalvaReader({key:'mvk_private-test-key',now:()=>at,fetch:async(url,options)=>{calls.push({url,options});if(url.endsWith('/projects'))return Response.json([project]);count++;const q=new URL(url).searchParams,range={from:q.get('from'),to:q.get('to')};return Response.json({period:{timezone:project.timezone,days:[range.from,range.to]},level:'campaign',salesScope:{kind:'traffic'},currency:'BRL',rows:[{projectId:project.id,projectName:project.name,externalId:'123',name:'Example',adAccountId:account,provider:'meta',level:'campaign',spend:123,secret:'must-be-omitted',...invalid}],totals:{spend:123},lastSyncAt:'2026-11-04T14:50:00Z'},{headers:{'x-malva-fresh-at':'2026-11-04T14:59:59Z','x-malva-cache':stale?'stale':'fresh'}});}});return {reader,calls,count:()=>count};}
@@ -37,4 +37,12 @@ test('edge deployment source stays identical and enforces service-only auth with
 test('secret pasted as a curl header is normalized without disclosing it; non-API key is rejected before fetch',async()=>{
  let calls=0,header;const read=createMalvaReader({key:' Authorization: Bearer mvk_example ',fetch:async(_url,opts)=>{calls++;header=opts.headers.Authorization;return Response.json([]);}});await read({section:'projects'});assert.equal(header,'Bearer mvk_example');
  const invalid=createMalvaReader({key:'mcp_wrong_kind',fetch:async()=>{calls++;}});await assert.rejects(invalid({section:'projects'}),e=>e.code==='MALVA_KEY_FORMAT_INVALID');assert.equal(calls,1);
+});
+
+test('detail uses internal UUID; hierarchy filters use platform parent IDs at the right level',()=>{
+ assert.doesNotThrow(()=>validateMalvaRequest({section:'ad-detail',projectId:project.id,objectId:account}));
+ assert.throws(()=>validateMalvaRequest({...input,objectId:'123'}));
+ assert.throws(()=>validateMalvaRequest({...input,level:'adset',adsetId:'123'}));
+ const q={...input,period:'today',level:'ad',campaignId:'111',adsetId:'222',objectId:'333'};assert.doesNotThrow(()=>validateMalvaRequest(q));
+ const url=new URL('https://malvadash.com'+malvaPath(q,{from:'2026-11-04',to:'2026-11-04'}));assert.equal(url.searchParams.get('adId'),'333');assert.equal(url.searchParams.get('campaignId'),'111');assert.equal(url.searchParams.get('adsetId'),'222');
 });
