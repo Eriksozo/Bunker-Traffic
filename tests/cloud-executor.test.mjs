@@ -2,7 +2,7 @@ import {authenticateServer} from '../supabase/functions/malva-mcp/server-auth.mj
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {callRemoteMcp,cloudMalvaClient} from '../lib/cloud-malva.mjs';
-import {cloudNext,cloudDispatch,cloudProposalPayload,failCloudOpinion} from '../lib/cloud-engine.mjs';
+import {cloudNext,cloudDispatch,cloudProposalPayload,failCloudOpinion,createCloudEngine} from '../lib/cloud-engine.mjs';
 import {authorizeCloudDispatch} from '../lib/cloud-dispatch-guard.mjs';
 import {runCloudAnalyst,cloudFocus,cloudEvidence,compactCloudContext} from '../lib/cloud-analysis.mjs';
 import {collectCloudProject,cloudRanges} from '../lib/cloud-collector.mjs';
@@ -95,4 +95,20 @@ test('today cohort reads active and spent plus exact tracked paused objects, not
  const paused={...active,id:pausedId,externalId:'456',status:'PAUSED',spend:0};let details=0;
  const source={read:async(tool,a)=>{if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};if(tool==='tracking_ad_detail'){details++;assert.equal(a.objectId,pausedId);return {row:paused,currency:'BRL',period:{timezone:'UTC'}};}assert.ok(['active','spent'].includes(a.status)||a.status==='all'&&a.accountIds?.[0]===account);return {level:'campaign',salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:ranges.today.from+'T00:00:00.000Z',to:iso(Date.parse(ranges.today.to+'T00:00:00Z')+86400000),days:[ranges.today.from]},rows:[active]};}};
  const out=await collectCloudProject(source,p,{now:()=>now,levels:['campaign'],periodsWanted:['today'],tracked:[paused]});assert.equal(details,1);assert.equal(out.snapshots[0].rows.length,2);assert.equal(out.snapshots[0].coverage.trackedComplete,true);assert.equal(out.snapshots[0].rows.find(r=>r.externalId==='456').status,'PAUSED');
+});
+
+test('cloud perspectives and synthesis complete a real domain round without manufacturing owner approvals',async()=>{
+ const f=fixture();f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];f.state.executions=[];
+ for(const cut of f.state.snapshots)for(const r of cut.rows){r.spend=100;r.revenueNet=200;r.frontOrders=2;}
+ const round=ensureCollaboration(f.state,f.state.jobs[0]),store=memory(f);let generations=0;
+ const ai={run:async()=>{generations++;return {response:{decision:'Manter',reason:'Aguardar aquisição nova',nextStep:'Conferir evolução',text:'Uma campanha priorizada; os demais objetos não receberam leitura individual.',suggestions:[],question:null}};}};
+ const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{},ai,ops:{}});
+ for(let i=0;i<4;i++){const result=await engine.step();assert.equal(result.kind,'stage');}
+ assert.equal(generations,4);assert.equal(store.state.collaborationRounds.find(r=>r.id===round.id).status,'Concluída');assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,4);assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);
+});
+
+test('cloud scheduling finishes a partially completed round before starting a newer one',()=>{
+ const f=fixture();f.state.proposals=[];f.state.executions=[];const existing=f.state.collaborationRounds[0];existing.stages[3]={agentId:'ops',status:'Pendente',attempt:0};
+ const newer=structuredClone(existing);newer.id='newer-round';newer.createdAt=iso(Date.now());newer.stages=['traffic','creative','budget','ops'].map(agentId=>({agentId,status:'Pendente',attempt:0}));
+ f.state.collaborationRounds.unshift(newer);assert.equal(cloudNext(f.state).roundId,existing.id);
 });

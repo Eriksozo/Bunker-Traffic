@@ -14,9 +14,10 @@ import {CLOUD_MODEL} from '../lib/cloud-analysis.mjs';
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
  private running=false;
+ private centralView:any=null;
  private async setting():Promise<Runtime>{return await this.ctx.storage.get<Runtime>('runtime')||{enabled:false,history:[]};}
  private db(){return new SupabaseStorage({url:this.env.SUPABASE_URL,key:this.env.SUPABASE_SERVICE_ROLE_KEY});}
- private async read(){return readPersistedState(this.db(),empty);}
+ private async read(){const current=await readPersistedState(this.db(),empty);this.centralView={paused:current.state.paused,cadence:current.state.cadence,at:new Date().toISOString()};return current;}
  private async write(fn:(s:any,revision:number)=>any){
   const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);return result;
  }
@@ -30,7 +31,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  async fetch(request:Request){
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
-  if(input.action==='status'){const current=await this.read();return Response.json({...runtime,running:this.running,host:'cloudflare',model:CLOUD_MODEL,paused:current.state.paused,cadence:current.state.cadence,independentOfDesktop:true});}
+  if(input.action==='status'){return Response.json({...runtime,running:this.running,host:'cloudflare',model:CLOUD_MODEL,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
   if(input.action==='check'){
    const started=Date.now();const results=await Promise.allSettled([this.engine().identity(),this.env.AI.run(CLOUD_MODEL,{messages:[{role:'user',content:'Responda somente OK.'}],max_tokens:8})]);
    const identity=results[0],model=results[1],malva=identity.status==='fulfilled',ai=model.status==='fulfilled'&&typeof model.value?.response==='string'&&!!model.value.response.trim();
@@ -55,7 +56,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // Bounded work prevents one large project from owning a whole alarm forever.
    const started=Date.now();for(let n=0;n<4&&Date.now()-started<90000;n++){
     setting=await this.setting();if(!setting.enabled)break;
-    const result=await engine.step(),at=new Date().toISOString();const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});
+    const result=await engine.step(),at=new Date().toISOString();const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,lastErrorDetail:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});
     if(['idle','blocked'].includes(result.kind))break;
    }
    if((await this.setting()).enabled)await this.syncLive();
