@@ -34,7 +34,7 @@ test('a stale or failed read remains displayable and is clearly no longer recent
  const old={...item,snapshot:{...snapshot,fetchedAt:'2026-11-02T17:00:00.000Z'},lastSuccessAt:'2026-11-02T17:00:00.000Z'};
  assert.equal(currentLiveSnapshot(old,'john',undefined,now),old.snapshot);
  assert.equal(liveDisplayStatus(old,'john',{now}).recent,false);
- assert.equal(liveDisplayStatus(old,'john',{now}).label,'Sem atualização recente do Mac');
+ assert.equal(liveDisplayStatus(old,'john',{now}).label,'Aguardando nova coleta');
  const failed={...item,error:{code:'MCP_READ_FAILED',message:'Fonte indisponível',at:'2026-11-02T18:00:00.000Z'}};
  assert.equal(currentLiveSnapshot(failed,'john',undefined,now),snapshot);
  assert.deepEqual(liveDisplayStatus(failed,'john',{now}),{recent:false,label:'Falha de sincronização',error:'Fonte indisponível'});
