@@ -1,6 +1,6 @@
 # Conexões e publicação
 
-O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o código; Malva e Órbita são consultados pelo executor local autenticado. Conexão técnica não concede autorização para mudar anúncios.
+O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o código; A Malva usa uma chave MCP de servidor dedicada; o executor e o modelo rodam na Cloudflare. A Órbita ainda exige um conector próprio de nuvem para atualizar produção/aliases automaticamente. Conexão técnica não concede autorização para mudar anúncios.
 
 ## Caminhos
 
@@ -9,7 +9,8 @@ O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o
 - Entrada direta opcional: `BUNKER_DIRECT_ACCESS_URL` aponta para a raiz HTTPS do Site privado já autenticado no ChatGPT. Visitantes sem sessão Supabase que chegam ao login são encaminhados para essa interface, ligada à mesma base. Isso não transfere cookies, não cria uma sessão Supabase nem libera APIs anônimas. Preserve o Site com acesso exclusivo do proprietário. O login Supabase por e-mail continua disponível em `/auth/login?email=1`.
 - Banco: Postgres, tabelas `bunker_records` e `bunker_reports`, com RLS e sem concessões a anon/authenticated. A função `bunker_store` é SECURITY INVOKER e exclusiva do backend service_role.
 - Agentes: o MCP privado existente no Sites permanece como compatibilidade autenticada. Seu armazenamento usa o gateway privado `/internal/storage` do Worker, portanto a interface nova e os agentes acessam a mesma base Supabase.
-- Malva/Órbita: OAuth do executor local. Chaves desses provedores não são enviadas ao navegador ou copiadas para o GitHub.
+- Malva: secret `MALVA_MCP` no Supabase, Edge Function `malva-mcp` com autenticação de serviço. Somente ferramentas explicitamente permitidas. Chave pessoal MCP, não a chave REST de relatórios.
+- Órbita: dados importados mantêm fonte/data. A ausência de credencial independente impede declarar atualização autônoma da produção. Nenhum token de sessão do Mac/GPT é copiado.
 
 ## Segredos
 

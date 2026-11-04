@@ -1,9 +1,14 @@
+export {BunkerCloudExecutor} from './cloud-executor';
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
 import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 import {cloudflareAuth,withSessionCookies} from '../lib/cloudflare-auth.mjs';
 
 const worker = {
+  async scheduled(_event:ScheduledController,env:Cloudflare.Env,ctx:ExecutionContext){
+    const executor=(env as any).BUNKER_EXECUTOR;
+    if(executor)ctx.waitUntil(executor.getByName('primary').fetch('https://bunker-internal/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'tick'})}));
+  },
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     if((env as any).BUNKER_HOST==='cloudflare'){
       const authenticated=await cloudflareAuth(request,env);

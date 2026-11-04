@@ -1,4 +1,5 @@
 'use client';
+import CloudExecutorPanel from './cloud-executor-panel';
 import {useMemo,useRef,useState} from 'react';
 import {Activity,ArrowRight,Check,Clock3,Loader2,RefreshCw,ShieldCheck} from 'lucide-react';
 import {reviewPipeline} from '../lib/review-pipeline.mjs';
@@ -22,7 +23,7 @@ export default function ReviewPipeline({state,project,now,write,saving,onOpen}:{
   }finally{lock.current=false;setBusy(false);}
  }
  const eligible=plan.projects.filter(p=>p.canRequest).map(p=>p.id);
- return <section className="rp-hub" aria-label="Central de revisões dos agentes">
+ return <><CloudExecutorPanel/><section className="rp-hub" aria-label="Central de revisões dos agentes">
   <header className="rp-heading"><div><span className="eyebrow"><Activity size={13}/> REVISÕES DOS AGENTES</span><h2>Acompanhe a análise por aqui.</h2><p>Coleta, pareceres, sugestões e aprovação no mesmo lugar.</p></div><Button className="button primary" disabled={saving||busy||state.paused||!eligible.length} onClick={()=>void queue(eligible)}>{busy?<Loader2 size={15} className="spin"/>:<RefreshCw size={15}/>} {plan.projects.length>1?'Revisar projetos disponíveis':'Revisar agora'}</Button></header>
   <div className="rp-summary"><span><strong>{plan.counts.active}</strong> em análise</span><span><strong>{plan.counts.queued}</strong> na fila</span><span><strong>{plan.counts.awaitingApproval}</strong> aguardando você</span></div>
   <p className="hint rp-method"><ShieldCheck size={14}/> Os resultados aparecem por projeto, assim que registrados. Um pedido de revisão não altera as campanhas.</p>
@@ -38,6 +39,6 @@ export default function ReviewPipeline({state,project,now,write,saving,onOpen}:{
    <footer><small>Último registro: {stamp(p.lastAt)}</small><div><Button variant="outline" disabled={!p.canRequest||saving||busy} onClick={()=>void queue([p.id])}>Solicitar revisão</Button><Button variant="ghost" onClick={()=>onOpen(p.id)}>Ver cards <ArrowRight size={14}/></Button></div></footer>
   </article>)}</div>
   {!plan.projects.length&&<p className="rp-notice">Configure um projeto para acompanhar suas revisões.</p>}
-  <details className="rp-details"><summary>Como a revisão funciona</summary><p>A dashboard lê os registros salvos e recebe suas decisões. O Mac mantém as conexões autenticadas do Malva e da Órbita e executa os agentes na cadência configurada. Ele precisa estar ligado e disponível.</p><p>O tempo exibido é o tempo já decorrido. As etapas mostram apenas trabalho registrado; não representam presença online nem previsão de conclusão. Dados insuficientes bloqueiam recomendações. Orçamento e status continuam exigindo sua aprovação exata.</p></details>
- </section>;
+  <details className="rp-details"><summary>Como a revisão funciona</summary><p>A dashboard lê os registros salvos e recebe suas decisões. O executor Cloudflare mantém as revisões e as ações aprovadas na nuvem. O processamento segue a cadência configurada. A conexão da Órbita ainda depende do conector enquanto não houver uma credencial própria na nuvem.</p><p>O tempo exibido é o tempo já decorrido. As etapas mostram apenas trabalho registrado; não representam presença online nem previsão de conclusão. Dados insuficientes bloqueiam recomendações. Orçamento e status continuam exigindo sua aprovação exata.</p></details>
+ </section></>;
 }

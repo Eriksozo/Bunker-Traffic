@@ -1,6 +1,6 @@
 # Bunker · Central de tráfego
 
-Central privada para análise de campanhas, decisões, colaboração de agentes e aprendizado com evidências. Interface React/Vinext em Cloudflare Workers; armazenamento Supabase Postgres; Malva e Órbita consultados pelo executor local.
+Central privada para análise de campanhas, decisões, colaboração de agentes e aprendizado com evidências. Interface React/Vinext em Cloudflare Workers; armazenamento Supabase Postgres; Malva MCP consultada por um executor persistente na Cloudflare; contexto Órbita previamente importado permanece rastreável.
 
 O seletor **Todos os projetos** reúne indicadores, campanhas e cards em uma visão consolidada, com identificação do projeto para cada decisão. Os totais comparam somente janelas equivalentes e sinalizam cobertura parcial. Campanhas compartilhadas contam mídia e orçamento uma vez; receita com mais de uma atribuição sem conciliação fica N/D. Metas, incidentes, pedidos de revisão e autorizações financeiras continuam vinculados a um projeto real.
 
@@ -15,9 +15,9 @@ O seletor **Todos os projetos** reúne indicadores, campanhas e cards em uma vis
 
 ## Aprovação e execução
 
-Sugestão, escolha, proposta aprovada e aplicação confirmada são estados diferentes. Somente o dono pode aprovar a versão exata de uma proposta na interface. O executor local aplica apenas orçamento diário/status Meta autorizados, passando por claim, pré-conferência, despacho único e readback. Envio, timeout ou parecer de agente não comprovam aplicação.
+Sugestão, escolha, proposta aprovada e aplicação confirmada são estados diferentes. Somente o dono pode aprovar a versão exata de uma proposta na interface. O executor Cloudflare aplica apenas orçamento diário/status Meta autorizados, passando por claim, pré-conferência, despacho único e readback. Envio, timeout ou parecer de agente não comprovam aplicação.
 
-O Mac deve permanecer ligado, conectado e com suas integrações disponíveis. A agenda salva não comprova execução. O cache visual pode atualizar independentemente das fontes congeladas das análises; uma leitura recente não autoriza reutilizar uma aprovação antiga.
+O processamento na nuvem usa Durable Object, alarmes e Workers AI; dispensa Mac, GPT e aba aberta. Requer a conexão MCP própria conferida e ativação na dashboard. A agenda salva não comprova execução. O cache visual pode atualizar independentemente das fontes congeladas das análises; uma leitura recente não autoriza reutilizar uma aprovação antiga.
 
 ## Serviços
 
@@ -29,7 +29,7 @@ Detalhes: [conexões e publicação](docs/connections.md), [contrato dos agentes
 
 ## Desenvolvimento
 
-Requisitos: Node 22.13+ e npm. O executor local usa macOS e autenticação do CLI Codex. Para desenvolvimento e verificação:
+Requisitos: Node 22.13+ e npm. A recuperação local opcional usa macOS; a rotina local fica pausada enquanto a nuvem assume. Para desenvolvimento e verificação:
 
 ```sh
 npm ci
@@ -45,3 +45,5 @@ A camada de compatibilidade D1 permanece para recuperação da origem preservada
 ## Código e dados
 
 A base inicial foi a versão46 do Bunker no Sites. As fixtures públicas usam identificadores fictícios. O escritório pixel art e o diorama3D usam arte original; licenças de fontes e componentes acompanham os arquivos. As fases e regras de aquisição continuam dependentes dos dados, do projeto e de validação humana; o classificador é uma triagem, não uma prova causal.
+
+Executor independente: [contrato, configuração, limites e recuperação](docs/cloud-executor.md).

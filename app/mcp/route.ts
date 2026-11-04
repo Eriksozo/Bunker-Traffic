@@ -1,3 +1,5 @@
+import {executorControl} from '@/lib/executor-control';
+import {cloudMalvaClient} from '@/lib/cloud-malva.mjs';
 import {readMalvaSource} from '@/lib/malva-api-read.mjs';
 import {readReviewContext} from '@/lib/review-pipeline.mjs';
 import {readState,readReports,readSuggestionHistory,commit,apply} from '@/lib/state';
@@ -32,7 +34,10 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
  else if(r.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'bunker-trafego',version:'1.2.0'}};
  else if(r.method==='tools/list')result={tools};
  else if(r.method==='tools/call'){const {name,arguments:a={}}=r.params||{};const cur=await readState();
- if(name==='bunker_atualizar_rodada'&&a.id==='source-data'){
+ if(name==='bunker_atualizar_rodada'&&a.id==='cloud-data'){
+  if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope inválido.');const input=JSON.parse(a.note||'{}');if(!['status','identity'].includes(input.action))throw Error('Somente leitura.');result={content:[{type:'text',text:JSON.stringify(input.action==='status'?await executorControl({action:'status'}):await cloudMalvaClient(storage()).read('workspace_whoami',{}))}]};
+ }
+ else if(name==='bunker_atualizar_rodada'&&a.id==='source-data'){
   if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope de origem inválido.');
   result={content:[{type:'text',text:JSON.stringify(await readMalvaSource(storage(),cur.state,JSON.parse(a.note||'{}')))}]};
  }
