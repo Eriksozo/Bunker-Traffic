@@ -7,6 +7,7 @@ import {authorizeCloudDispatch} from '../lib/cloud-dispatch-guard.mjs';
 import {runCloudAnalyst,cloudFocus,cloudEvidence,compactCloudContext,cloudLearningContext,cloudHistoryContext,cloudAnalysisContext} from '../lib/cloud-analysis.mjs';
 import {collectCloudProject,cloudRanges} from '../lib/cloud-collector.mjs';
 import {ensureCollaboration,claimCollaboration,postCollaboration,submitProposal,reviewProposal} from '../lib/collaboration.mjs';
+import {recordKnowledge} from '../lib/knowledge.mjs';
 const project='11111111-1111-4111-8111-111111111111',account='22222222-2222-4222-8222-222222222222',internal='33333333-3333-4333-8333-333333333333';
 const iso=t=>new Date(t).toISOString();
 function fixture(){
@@ -121,6 +122,19 @@ test('cloud perspectives and synthesis complete a real domain round without manu
  for(let i=0;i<4;i++){const result=await engine.step();assert.equal(result.kind,'stage');}
  assert.equal(generations,4);assert.equal(store.state.collaborationRounds.find(r=>r.id===round.id).status,'Concluída');assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,4);assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);
  assert.equal(new Set(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').map(m=>m.executionRef)).size,4);
+});
+
+for(const changeDuringSynthesis of [false,true])test(changeDuringSynthesis?'a hypothesis revision during synthesis rolls back suggestion and proposal and releases the claim':'cloud synthesis enrolls its explicit hypothesis before approval without dispatching',async()=>{
+ const f=fixture();f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];f.state.executions=[];
+ for(const cut of f.state.snapshots)for(const r of cut.rows){r.spend=100;r.revenueNet=150;r.frontOrders=2;r.adCosts=0;r.productCost=0;r.saleTax=0;}
+ const stamp=iso(Date.now()-3000),k=recordKnowledge(f.state,{project,topic:'Conter perda contextual',claim:'Hipótese para comparar aquisição e exposição após redução.',confidence:0.3,sources:[{system:'Malva MCP',reference:'prior-observation',observedAt:stamp,summary:'Hipótese anterior à proposta.'}]},stamp);
+ ensureCollaboration(f.state,f.state.jobs[0]);const store=memory(f);let calls=0,dispatch=0;
+ const ai={run:async(_m,request)=>{calls++;const {context:c,reflectionRequirements:r}=JSON.parse(request.messages[1].content);if(changeDuringSynthesis&&c.role==='ops')await store.write(st=>recordKnowledge(st,{...k,id:k.id,expectedRevision:1,claim:'Hipótese alterada durante a síntese.'},iso(Date.now())));return {response:{decision:'Conter com aprovação',reason:'Investigar perda nova',nextStep:'Aguardar revisão e aprovação',text:'Sugestão restrita à campanha priorizada, sem aplicação.',suggestions:c.role==='ops'?[{adAccountId:account,objectId:'123',action:'reduce',percent:20,reason:'Comparar aquisição depois de conter exposição.',learning:{knowledgeId:k.id,knowledgeRevision:1,reason:'Testar a hipótese de contenção no mesmo projeto.'}}]:[],question:null,reflection:{lesson:'Conferir aquisição nova.',uncertainty:'Sem efeito causal demonstrado.',nextCheck:'Comparar dias fechados.',citations:r.examples.slice(0,1),peerChecks:r.requiredPeerRoles.map(role=>({messageId:r.peerConclusions.find(p=>p.role===role).messageId,stance:'support',reason:'Fonte e escopo conferidos.'}))}}};}};
+ const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{dispatch:async()=>{dispatch++;}},ai,ops:{}});
+ for(let i=0;i<3;i++)assert.equal((await engine.step()).kind,'stage');
+ if(changeDuringSynthesis){await assert.rejects(engine.step(),e=>e.code==='CLOUD_LEARNING_ENROLLMENT_HYPOTHESIS');assert.equal(store.state.proposals.length,0);assert.equal(store.state.cardSuggestions?.length||0,0);assert.equal(store.state.learningEnrollments,undefined);assert.equal(store.state.collaborationRounds[0].stages[3].status,'Falhou');assert.equal(dispatch,0);return;}
+ assert.equal((await engine.step()).kind,'stage');
+ assert.equal(calls,4);assert.equal(dispatch,0);assert.equal(store.state.proposals.length,1);const p=store.state.proposals[0];assert.equal(p.status,'Em revisão');assert.equal(p.payload.currency,'USD');assert.equal(p.payload.before.dailyBudget,100);assert.equal(p.payload.after.dailyBudget,80);assert.equal(p.approvedVersion,undefined);assert.equal(store.state.executions.length,0);assert.equal(store.state.learningEnrollments.length,1);assert.equal(store.state.learningEnrollments[0].proposalSignature,p.signature);assert.equal(store.state.learningEnrollments[0].knowledgeId,k.id);
 });
 
 test('cloud scheduling finishes a partially completed round before starting a newer one',()=>{
