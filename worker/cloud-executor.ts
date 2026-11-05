@@ -15,6 +15,7 @@ import {readLiveData,liveDataAction} from '../lib/live-data.mjs';
 import {collectCloudProject,trackedCloudCampaigns} from '../lib/cloud-collector.mjs';
 import {CLOUD_MODEL} from '../lib/cloud-analysis.mjs';
 import {cloudProductionModelPolicy} from '../lib/cloud-model-policy.mjs';
+import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
@@ -38,8 +39,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const runtime=await this.setting();
   if(input.action==='status'){return Response.json({...runtime,running:this.running,host:'cloudflare',model:CLOUD_MODEL,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
   if(input.action==='check'){
-   const started=Date.now();const results=await Promise.allSettled([this.engine().identity(),this.env.AI.run(CLOUD_MODEL,{messages:[{role:'user',content:'Responda somente OK.'}],max_tokens:8})]);
-   const identity=results[0],model=results[1],malva=identity.status==='fulfilled',ai=model.status==='fulfilled'&&typeof model.value?.response==='string'&&!!model.value.response.trim();
+   const started=Date.now();const results=await Promise.allSettled([this.engine().identity(),checkCloudModel(this.env.AI)]);
+   const identity=results[0],model=results[1],malva=identity.status==='fulfilled',ai=model.status==='fulfilled'&&model.value===true;
    const who=malva?identity.value.who:null;const error=!malva&&identity.status==='rejected'&&/^[A-Z_]{3,80}$/.test(identity.reason?.code||'')?identity.reason.code:!malva?'CLOUD_MALVA_UNAVAILABLE':!ai?'CLOUD_AI_UNAVAILABLE':null;
    const check={at:new Date().toISOString(),malva,ai,ads:!!who?.platforms.some((p:any)=>p.platform==='tracking'&&p.ads),workspaceId:who?.workspace.id||null,projects:malva?identity.value.projects.map((p:any)=>({id:p.id,name:p.name})):[],durationMs:Date.now()-started,...(error?{error}:{})};
    const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,check,lastError:error});return Response.json(error?{error,check}:{ok:true,check},{status:error?503:200});

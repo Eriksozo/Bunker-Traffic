@@ -67,3 +67,11 @@ Uma recuperação registra `mcp_read_recovered` nos logs do bridge, sem credenci
 ### Reserva na fronteira de elegibilidade
 
 A consulta de identidade pode atravessar o fim de um intervalo de espera, uma mudança de agenda ou o encerramento da janela de admissão. Antes de reservar, o executor recalcula a prioridade e todo o lote elegível no estado atual, usando o mesmo instante na seleção e em `claimBatch`. Todo projeto novo do lote precisa conferir com os IDs e nomes retornados pela consulta Malva. Não reutiliza a lista antiga, não admite retroativamente e não ignora uma pausa ou trabalho prioritário que tenha chegado durante a consulta. Pedidos manuais existentes continuam sujeitos às próprias regras de elegibilidade.
+
+### Contrato nativo de saída por modelo
+
+A política de produção `wide` usa o contrato Chat Completions declarado para `@cf/openai/gpt-oss-120b` pelo SDK oficial Workers AI: `response_format.json_schema` contém `name` e `schema`. A declaração JSON Schema completa permanece dentro de `schema`. A política `legacy` do Llama conserva a declaração diretamente em `json_schema`; os dois contratos não são intercambiáveis. GPT-OSS recebe `reasoning_effort: low` no parâmetro nativo, além das instruções de saída curta. Teto de entrada/saída, alvos, reflexão, confronto de memória e validações numéricas não mudam.
+
+O teste de contrato compila a chamada real capturada contra os tipos oficiais instalados por modelo, e inclui o envelope antigo como controle negativo. A conferência de conexão também usa o envelope/decodificador da política de produção, com JSON sintético mínimo, sem dados do projeto e sem criar parecer. Uma resposta `response` do modelo anterior, raciocínio sem conteúdo final, truncamento ou JSON inválido não libera a conferência. Sucesso de conectividade não demonstra qualidade da análise nem eficácia financeira.
+
+Referências: [modelo GPT-OSS na Cloudflare](https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/), tipos oficiais `@cloudflare/workers-types` fixados no lockfile (`Base_Ai_Cf_Openai_Gpt_Oss_120B` → `ChatCompletionsInput` → `ResponseFormatJSONSchema`). O exemplo genérico de JSON Mode para Llama não substitui o contrato específico do modelo. A validação no servidor continua obrigatória; uma saída recusada não é reparada ou aproveitada parcialmente.
