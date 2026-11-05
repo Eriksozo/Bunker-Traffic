@@ -62,3 +62,8 @@ Cada tentativa mantém o limite de 20 segundos; o orçamento total das leituras 
 Uma recuperação registra `mcp_read_recovered` nos logs do bridge, sem credenciais, corpo da resposta ou argumentos das campanhas. Falhas definitivas preservam status, categoria, campos permitidos, tentativas e duração pelo bridge, transporte e diário da coleta. Os timestamps e métricas retornados pela origem permanecem inalterados e continuam sujeitos às validações de identidade, cobertura e atualização.
 
 `tracking_set_ad_budget` e `tracking_set_ad_status` têm sempre uma única tentativa de transporte. Timeout, erro HTTP, falha ao ler a resposta ou resposta ambígua nunca autorizam reenvio. Aprovação exata, consumo único do dispatch e conferência posterior permanecem independentes. Este mecanismo não adiciona retry de CAS, gravação de banco, inferência ou alterações na Meta.
+
+
+### Reserva na fronteira de elegibilidade
+
+A consulta de identidade pode atravessar o fim de um intervalo de espera, uma mudança de agenda ou o encerramento da janela de admissão. Antes de reservar, o executor recalcula a prioridade e todo o lote elegível no estado atual, usando o mesmo instante na seleção e em `claimBatch`. Todo projeto novo do lote precisa conferir com os IDs e nomes retornados pela consulta Malva. Não reutiliza a lista antiga, não admite retroativamente e não ignora uma pausa ou trabalho prioritário que tenha chegado durante a consulta. Pedidos manuais existentes continuam sujeitos às próprias regras de elegibilidade.
