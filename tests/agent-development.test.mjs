@@ -80,3 +80,10 @@ test('pattern validation labels remain separate from hypotheses, and choices fro
 test('memory compaction declares omissions and preserves current observation values',()=>{
  const c=packet();c.agentMemory={episodes:Array.from({length:3},(_,i)=>({id:i,lesson:'x'.repeat(3000)})),ownerFeedback:[],patternValidation:[]};const out=compactCloudContext(c,5000);assert.equal(out.campaigns[0].windows.today.spend,309.83);assert.equal(out.coverage.omittedAgentMemory.episodes,2);assert.equal(c.agentMemory.episodes.length,3);
 });
+
+test('Measured adverse cases become local corrective context and never individual profit credit',()=>{
+ const f=fixture();contribute(f,'traffic');const outcome={id:'measured',project:'p',objectId:'c',adAccountId:'a',verified:true,confirmedApplication:true,classification:'Desfavorável',before:{to:iso(now-2000),metrics:{spend:100,frontOrders:2}},after:{to:iso(now-1000),metrics:{spend:100,frontOrders:0}}};
+ const development=agentDevelopmentPlan(f.state,'p',now,[outcome]);assert.equal(development.agents[0].measuredTeamCases,1);assert.equal(development.agents[0].adverseTeamCases,1);assert.equal(development.agents[0].financialSuccessRate,null);assert.match(development.agents[0].next,/desfavorável/);
+ const memory=cloudAgentMemory(f.state,{...f.round,id:'next'},'traffic',[{adAccountId:'a',externalId:'c'}],{items:[],actionOutcomes:[outcome,{...outcome,id:'other',project:'q'}]},now);assert.equal(memory.measuredOutcomes.length,1);assert.match(memory.next,/desfavorável/);assert.equal(memory.measuredOutcomes[0].outcomeId,'measured');
+ const unverified=cloudAgentMemory(f.state,{...f.round,id:'next'},'traffic',[{adAccountId:'a',externalId:'c'}],{items:[],actionOutcomes:[{...outcome,verified:false}]},now);assert.equal(unverified.measuredOutcomes.length,0);
+});

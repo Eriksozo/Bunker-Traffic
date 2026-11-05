@@ -1,3 +1,4 @@
+import {autonomousLearningPlan} from './learning-outcomes.mjs';
 import {briefAgentPlans} from './agent-briefing.mjs';
 import {claim,claimBatch,compactState} from './agent-state.ts';
 import {collaborationPlan} from './collaboration.mjs';
@@ -16,6 +17,7 @@ export function agentView(current:any,live:any={}){
  const view:any=compactState(current);
  view.plan.collaboration=collaborationPlan(current.state);
  view.plan.learning=learningCyclePlan(current.state);
+ const measurements=autonomousLearningPlan(current.state);view.plan.learning.automaticMeasurement={ready:measurements.readyCount,waiting:measurements.waitingCount,limits:measurements.policy,waitingReasons:measurements.waiting};
  view.plan.knowledge=Object.keys(current.state.config).map(project=>readKnowledgePlan(current.state,project));
  view.plan.execution=executionPlan(current.state);
  view.plan.contingency=contingencyPlan(current.state,live.items||[]);

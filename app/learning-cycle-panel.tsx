@@ -9,11 +9,11 @@ export default function LearningCyclePanel({state,project}:{state:any;project:st
   <header><BrainCircuit size={22}/><div><h3>Aprender, conferir e melhorar</h3><p>Cada padrão precisa sobreviver a novos resultados e à revisão de outro agente.</p></div><span>Com sua aprovação</span></header>
   <ol className="learning-steps">{cycle.steps.map((step:any,i:number)=><li key={step.role}><b>{i+1}</b><span>{step.label}</span></li>)}</ol>
   <div className="learning-score"><div><strong>{stats.patterns}</strong><span>padrões em estudo</span></div><div><strong>{stats.advisory}</strong><span>com validação para apoiar sugestões</span></div><div><strong>{stats.needsReview}</strong><span>precisam ser revistos</span></div><div><strong>{stats.agreementRate===null?'N/D':`${Math.round(stats.agreementRate*100)}%`}</strong><span>concordância com você · {stats.comparableChoices} comparações</span></div></div>
-  <p className="learning-caption">Concordar com você não prova lucro. Resultado favorável exige métricas conciliadas; os testes deste fluxo são observacionais.</p>
+  <p className="learning-caption">{stats.measuredApplications||0} aplicações com comparação automática conferida. Dias sem exposição, incidentes e alterações concorrentes podem impedir a comparação. Concordar com você não prova lucro. Resultado favorável exige métricas conciliadas; os testes deste fluxo são observacionais.</p>
   <div className="agent-development" aria-label="Aprendizado individual">{cycle.development.agents.map((agent:any)=><article key={agent.id}>
    <div><strong>{agent.name}</strong><span>{agent.label}</span></div>
    <p>{agent.focus}</p>
-   <small>{agent.grounded} reflexões com números conferidos · {agent.peerChecks} contrapontos registrados</small>
+   <small>{agent.grounded} reflexões com números conferidos · {agent.peerChecks} contrapontos registrados · {agent.ownerCorrections||0} correções do dono · {agent.measuredTeamCases||0} casos medidos da equipe</small>
    <details><summary>Próximo aprendizado <ChevronDown size={13}/></summary><p>{agent.next}</p>
     {!agent.episodes&&<p>Ainda não há reflexão registrada no recorte recente. Nenhum acerto foi presumido.</p>}
     {agent.recall.map((e:any)=><div className="agent-episode" key={e.messageId}><small>{new Date(e.createdAt).toLocaleString('pt-BR',{timeZone:'America/Boa_Vista'})} · hipótese</small><p>{e.reflection.lesson}</p><p>Falta conferir: {e.reflection.uncertainty}</p></div>)}

@@ -92,3 +92,17 @@ Os repositórios foram baixados apenas para revisão, fora da aplicação. A imp
 - [DSPy](https://github.com/stanfordnlp/dspy): avaliações com métricas e exemplos explícitos. Não há otimização automática dos prompts em produção; mudanças desse tipo precisam superar a avaliação de regressão.
 
 As referências não são evidência de lucro do Bunker nem fonte de metas de clientes. Os testes de regressão cobrem números inventados, falta de dados, identidade, autoria, replay, isolamento de projetos, memória antiga, cache/histórico e retenção de sugestões em desacordo. Nada disso constitui promessa de decisão perfeita.
+
+## Fechamento automático e ecossistema — versão 3
+
+O executor Cloudflare passa a priorizar comparações elegíveis antes de uma nova análise, preservando a prioridade de confirmações e ações já aprovadas. A unidade usa somente leituras salvas e processa até duas aplicações. Não inicia coleta fora da cadência, não chama o modelo para inventar métricas e não executa comandos no Malva.
+
+Cada caso exige proposta Meta aprovada, versão e assinatura correspondentes, confirmação por leitura posterior e dias encerrados de igual duração/fuso antes e depois. Reutiliza as medições preservadas pelo Bunker quando as fontes correntes forem substituídas. Dados ausentes, gasto zero, incidentes, outras edições e comparações divergentes não viram sucesso. A tentativa limitada fica registrada; só uma mudança de evidência permite outra avaliação. Os limites de histórico preservam as evidências existentes.
+
+As comparações são classificadas como favoráveis, desfavoráveis ou inconclusivas pelos mesmos critérios econômicos e de aquisição já publicados. Ficam disponíveis ao papel que analisa o mesmo projeto, conta e campanha. Um resultado da equipe não recebe crédito individual e não transforma uma hipótese em regra validada. A validação prospectiva e a revisão independente continuam necessárias para promover padrões.
+
+A memória individual recebe correções do dono e resultados medidos; um caso desfavorável passa a ser prioridade de investigação. A dashboard mostra a quantidade de aplicações medidas e as correções relacionadas aos episódios recentes de cada papel, sem apresentar uma taxa de perfeição.
+
+A leitura do cache Órbita passa a integrar o contexto do modelo: nomenclatura, nome Meta, origem declarada, estágio e expert/squad. O vínculo exige nome exato nos anúncios das campanhas priorizadas. Duplicidades não são resolvidas por suposição; não remover sufixos de Avatar ou limpeza automaticamente. Produção publicada ou resultado informado na Órbita não comprova receita atribuída na Meta.
+
+O contexto declara disponibilidade, idade e cobertura apenas dos registros retornados. Uma coleta pelo MCP do chat pode atualizar o cache, mas não constitui credencial independente da Órbita na nuvem. Quando o cache vence, o agente recebe a limitação, sem alegar consulta ao vivo ou ausência de criativos. A conexão financeira permanece exclusivamente pelo MCP Malva, nos valores e na versão aprovados pelo dono.
