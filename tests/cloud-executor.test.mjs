@@ -242,3 +242,12 @@ test('Four authored role analyses select frozen facts and persist reference rece
  const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{dispatch:async()=>{throw Error('No action authorized');}},ai,ops:{}});for(let i=0;i<4;i++)assert.equal((await engine.step()).kind,'stage');
  assert.equal(calls,4);assert.equal(store.state.collaborationRounds.find(r=>r.id===round.id).status,'Concluída');const messages=store.state.collaborationMessages.filter(m=>m.kind==='conclusion');assert.equal(messages.length,4);for(const m of messages){assert.equal(m.evidenceResolution.sourceHash,round.sourceHash);assert.ok(m.evidenceResolution.selected.length>=2);assert.equal(m.campaignReadings[0].citations[0].value,2);}assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);
 });
+
+test('Due projects are admitted before an older live collection, while closed admission never creates retroactive jobs',()=>{
+ const now=Date.parse('2026-11-05T15:00:00Z'),other='55555555-5555-4555-8555-555555555555',state={config:{[project]:{projectName:'Running'},[other]:{projectName:'Due'}},paused:false,cadence:{enabled:true,intervalMinutes:60,start:'08:00',end:'20:00',weekdays:[0,1,2,3,4,5,6],timezone:'UTC'},jobs:[{id:'running',project,executor:'cloudflare',status:'Em análise',startedAt:iso(now-1000),updatedAt:iso(now-1000)}],agents:{[project]:{jobId:'running'}},snapshots:[]};
+ const before=structuredClone(state);assert.deepEqual(cloudNext(state,[],now),{kind:'admit',projects:[other]});assert.deepEqual(state,before);
+ const outside=Date.parse('2026-11-05T21:00:00Z');state.jobs[0].startedAt=iso(outside-1000);state.jobs[0].updatedAt=iso(outside-1000);assert.deepEqual(cloudNext(state,[],outside),{kind:'collectJob',project,jobId:'running'});
+});
+test('An approved exact execution stays ahead of due-source admission',()=>{
+ const f=fixture(),other='55555555-5555-4555-8555-555555555555';f.state.config[other]={projectName:'Due'};f.state.cadence={enabled:true,intervalMinutes:15,start:'00:00',end:'23:59',weekdays:[0,1,2,3,4,5,6],timezone:'UTC'};const next=cloudNext(f.state);assert.equal(next.kind,'execution');assert.equal(next.proposalId,f.p.id);
+});

@@ -14,12 +14,12 @@ function reading(row={externalId:'c0',adAccountId:'a',spend:1000}){return {adAcc
 function context(rows){return {campaignReviewPolicy:campaignCoveragePolicy,campaigns:rows.map(r=>({target:r,windows:{today:r},hierarchy:[]}))};}
 function credit(state,round,rows,t=now){for(const role of ['traffic','creative','budget','ops'])recordCampaignCoverage(state,{id:role+t,kind:'conclusion',fromAgent:role,campaignReadings:rows.map(reading),createdAt:iso(t)},round);}
 test('Four priority targets remain while two rotation targets progressively cover smaller campaigns',()=>{
- const f=fixture(),first=selectLearningFocus(f.state,'p');assert.equal(first.length,6);assert.deepEqual(first.slice(2).map(r=>r.externalId),['c0','c1','c2','c3']);assert.deepEqual(first.slice(0,2).map(r=>r.externalId),['c4','c5']);
+ const f=fixture(),first=selectLearningFocus(f.state,'p');assert.equal(first.length,6);assert.deepEqual(first.slice(0,4).map(r=>r.externalId),['c0','c1','c2','c3']);assert.deepEqual(first.slice(4).map(r=>r.externalId),['c4','c5']);
  const seen=new Set();for(let i=0;i<5;i++){const focus=selectLearningFocus(f.state,'p');focus.forEach(r=>seen.add(r.externalId));credit(f.state,{...f.round,id:'round'+i},focus,now+i*1000);}assert.equal(seen.size,12);assert.equal(campaignCoveragePlan(f.state,'p').reviewed,12);
 });
 test('Frozen job focus survives new review credits, and the next job rotates from completed evidence',()=>{
  const f=fixture(),first=selectLearningFocus(f.state,'p');f.state.cloudResearch={p:{jobId:'job',focusPolicy:1,focus:first.map(r=>({adAccountId:r.adAccountId,externalId:r.externalId}))}};credit(f.state,f.round,first);
- assert.deepEqual(learningFocus(f.state,'p'),first);f.state.agents.p.jobId='next';assert.notDeepEqual(learningFocus(f.state,'p').slice(0,2).map(r=>r.externalId),first.slice(0,2).map(r=>r.externalId));
+ assert.deepEqual(learningFocus(f.state,'p'),first);f.state.agents.p.jobId='next';assert.notDeepEqual(learningFocus(f.state,'p').map(r=>r.externalId),first.map(r=>r.externalId));
 });
 test('Partial, different-round and discussion contributions never count as four-role completion',()=>{
  const f=fixture(),m={id:'traffic',kind:'conclusion',fromAgent:'traffic',campaignReadings:[reading(f.rows[0])],createdAt:iso(now)};recordCampaignCoverage(f.state,m,f.round);for(const role of ['creative','budget','ops'])recordCampaignCoverage(f.state,{...m,id:role,fromAgent:role},{...f.round,id:'different'});assert.equal(campaignCoveragePlan(f.state,'p').reviewed,0);recordCampaignCoverage(f.state,{...m,id:'traffic-next'},{...f.round,id:'different'});assert.equal(campaignCoveragePlan(f.state,'p').reviewed,1);
@@ -63,4 +63,8 @@ test('Per-campaign requirements expose exact current facts and a creative child 
  const bad=f.rows.map(reading);assert.throws(()=>validateCampaignReadings(bad,c,'creative'),e=>e.readingFailure.externalId==='c0'&&e.readingFailure.adAccountId==='a'&&e.readingFailure.reason==='child_citation_required');bad[0].citations=requirements[0].examples;assert.doesNotThrow(()=>validateCampaignReadings(bad,c,'creative'));
  let req;await runCloudAnalyst({run:async(_m,r)=>{req=r;return {response:{decision:'Observar',reason:'Conferir resposta',nextStep:'Comparar aquisição',text:'Leitura dos dois alvos.',suggestions:[],question:null,campaignReadings:bad}}}},'creative',c);
  const body=JSON.parse(req.messages[1].content);assert.deepEqual(body.campaignReadingRequirements,requirements);const schema=req.response_format.json_schema.properties.campaignReadings.items;assert.deepEqual(schema.properties.externalId.enum,['c0','c1']);assert.equal(schema.properties.citations.minItems,1);
+});
+
+test('When actual packet capacity is one, priorities and rotation both receive complete authored reviews over successive rounds',()=>{
+ const f=fixture(12),seen=new Set();for(let i=0;i<24;i++){const focus=selectLearningFocus(f.state,'p');for(const id of ['c0','c1','c2','c3'])assert.ok(focus.some(r=>r.externalId===id));const actual=focus.slice(0,1);seen.add(actual[0].externalId);credit(f.state,{...f.round,id:'bounded'+i},actual,now+i*1000);}assert.equal(seen.size,12);assert.equal(campaignCoveragePlan(f.state,'p').reviewed,12);
 });
