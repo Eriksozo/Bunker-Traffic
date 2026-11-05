@@ -47,7 +47,7 @@ test('future and old episodes are excluded and repeated campaign copies do not f
  const f=fixture(),m=contribute(f,'traffic').message;f.state.collaborationMessages=Array.from({length:8},(_,i)=>({...m,id:'repeat'+i}));f.state.collaborationMessages.push({...m,id:'future',createdAt:iso(now+1000)},{...m,id:'old',createdAt:iso(now-31*86400000)});const a=agentDevelopmentPlan(f.state,'p',now).agents[0];assert.equal(a.episodes,8);assert.equal(a.recall.length,1);
 });
 test('archive cache is bounded and original immutable evidence is preserved',()=>{
- const f=fixture(),m=contribute(f,'traffic').message,archives=Array.from({length:20},(_,i)=>({key:'collaboration:r'+i,payload:{round:{sourceHash:'hash'+i},messages:[{...m,id:'msg'+i,createdAt:iso(now-i*1000)}]}})),before=JSON.stringify(archives);retainAgentEpisodes(f.state,archives);assert.equal(f.state.agentEpisodes.length,8);assert.equal(JSON.stringify(archives),before);retainAgentEpisodes(f.state,archives);assert.equal(f.state.agentEpisodes.length,8);
+ const f=fixture(),m=contribute(f,'traffic').message,archives=Array.from({length:20},(_,i)=>({key:'collaboration:r'+i,payload:{round:{...f.round,sourceHash:'hash'+i},messages:[{...m,id:'msg'+i,createdAt:iso(now-i*1000)}]}})),before=JSON.stringify(archives);retainAgentEpisodes(f.state,archives);assert.equal(f.state.agentEpisodes.length,8);assert.equal(JSON.stringify(archives),before);retainAgentEpisodes(f.state,archives);assert.equal(f.state.agentEpisodes.length,8);
  assert.equal(agentDevelopmentPlan(f.state,'p',now).agents[0].episodes,9); // one live plus eight archived, by message identity
 });
 test('normal collaboration compaction preserves reflection in both durable archive and role recall',()=>{
@@ -124,4 +124,30 @@ test('ungrounded historical prose remains in history but cannot reinforce model 
  const f=fixture(),r=reflection();contribute(f,'traffic');r.citations=[];contribute(f,'creative',r);
  const memory=cloudAgentMemory(f.state,{...f.round,id:'next'},'creative',[{adAccountId:'a',externalId:'c'}],{},now);
  assert.equal(memory.episodes.length,0);assert.equal(memory.ungroundedRecallOmitted,true);assert.equal(agentDevelopmentPlan(f.state,'p',now).agents.find(a=>a.id==='creative').episodes,1);assert.equal(f.state.collaborationMessages.length,2);
+});
+
+function reviewedProposal(f){
+ const checked=normalizeAgentReflection(reflection(),{...f,agentId:'budget',evidenceRefs:f.refs});
+ const p={id:'proposal',project:'p',roundId:f.round.id,version:1,signature:'sealed-proposal',status:'Revisão solicitada',payload:{objectId:'c',adAccountId:'a'},reviews:[{id:'actual-review',actor:'agent',agentId:'budget',decision:'revise',version:1,signature:'sealed-proposal',claimId:'real-claim',executionRef:'real-execution',createdAt:iso(now-500),reflection:checked}]};f.state.proposals.push(p);return p;
+}
+test('Independent proposal reflection enters only its own project and role as a typed review, never financial success',()=>{
+ const f=fixture(),p=reviewedProposal(f),memory=cloudAgentMemory(f.state,{...f.round,id:'next'},'budget',[{adAccountId:'a',externalId:'c'}],{},now);
+ assert.equal(memory.episodes.length,1);assert.equal(memory.episodes[0].kind,'proposal-review');assert.equal(memory.episodes[0].reviewId,p.reviews[0].id);assert.equal(memory.episodes[0].reviewDecision,'revise');assert.equal(memory.episodes[0].proposalSignature,p.signature);assert.equal(memory.episodes[0].sourceHash,f.round.sourceHash);
+ assert.equal(cloudAgentMemory(f.state,{...f.round,id:'next'},'traffic',[],{},now).episodes.length,0);assert.equal(cloudAgentMemory(f.state,f.round,'budget',[],{},now).episodes.length,0);assert.equal(agentDevelopmentPlan(f.state,'q',now).agents.find(a=>a.id==='budget').episodes,0);
+ const plan=agentDevelopmentPlan(f.state,'p',now).agents.find(a=>a.id==='budget');assert.equal(plan.grounded,1);assert.equal(plan.ownerComparisons,0);assert.equal(plan.measuredTeamCases,0);assert.equal(plan.financialSuccessRate,null);assert.equal(p.status,'Revisão solicitada');assert.equal(f.state.executions,undefined);
+});
+test('Owner reviews, unchecked prose and mismatched proposal identities never enter agent memory',()=>{
+ for(const mutate of [p=>p.project='q',p=>p.roundId='foreign',p=>p.reviews[0].actor='owner',p=>p.reviews[0].version=2,p=>p.reviews[0].signature='different',p=>p.reviews[0].reflection.numericCitationsChecked=false,p=>delete p.reviews[0].claimId,p=>p.reviews[0].createdAt=iso(now+1)]){
+ const f=fixture(),p=reviewedProposal(f);mutate(p);assert.equal(cloudAgentMemory(f.state,{...f.round,id:'next'},'budget',[],{},now).episodes.length,0);
+ }
+});
+test('A real answered peer question becomes typed dialogue without completing a stage',()=>{
+ const f=fixture(),claim=claimCollaboration(f.state,{roundId:f.round.id,agentId:'traffic',executionRef:'question-worker',clientId:'question-claim'},now),q=postCollaboration(f.state,{roundId:f.round.id,claimId:claim.claimId,executionRef:claim.executionRef,toAgent:'creative',kind:'message',requiresReply:true,text:'Conferir os filhos depois da edição?',evidenceRefs:f.refs,clientId:'q'},now);
+ const answerClaim=claimCollaboration(f.state,{roundId:f.round.id,agentId:'creative',executionRef:'answer-worker',clientId:'answer-claim',replyTo:q.id},now),answer=postCollaboration(f.state,{roundId:f.round.id,claimId:answerClaim.claimId,executionRef:answerClaim.executionRef,toAgent:'traffic',kind:'message',replyTo:q.id,requiresReply:false,text:'Os filhos precisam de nova aquisição após a edição.',evidenceRefs:f.refs,reflection:reflection(),clientId:'answer'},now);
+ const c=cloudAgentMemory(f.state,{...f.round,id:'next'},'creative',[{adAccountId:'a',externalId:'c'}],{},now);assert.equal(c.episodes.length,1);assert.equal(c.episodes[0].kind,'dialogue');assert.equal(c.episodes[0].messageId,answer.id);assert.equal(c.episodes[0].replyTo,q.id);assert.notEqual(f.round.stages.find(s=>s.agentId==='creative').status,'Concluída');assert.equal(f.state.proposals.length,0);
+ q.project='q';assert.equal(cloudAgentMemory(f.state,{...f.round,id:'next'},'creative',[],{},now).episodes.length,0);
+});
+test('Archive retrieval preserves exact review identity, is idempotent and does not mutate durable originals',()=>{
+ const f=fixture(),p=reviewedProposal(f),archive={key:'collaboration:'+f.round.id,payload:{round:structuredClone(f.round),messages:[],proposals:[structuredClone(p)]}},before=structuredClone(archive);retainAgentEpisodes(f.state,[archive]);retainAgentEpisodes(f.state,[archive]);assert.deepEqual(archive,before);assert.equal(f.state.agentEpisodes.length,1);f.state.proposals=[];f.state.collaborationRounds=[];
+ const c=cloudAgentMemory(f.state,{id:'next',project:'p'},'budget',[{adAccountId:'a',externalId:'c'}],{},now);assert.equal(c.episodes.length,1);assert.equal(c.episodes[0].archiveKey,archive.key);assert.equal(c.episodes[0].proposalVersion,1);assert.equal(c.episodes[0].reflection.numericCitationsChecked,true);
 });

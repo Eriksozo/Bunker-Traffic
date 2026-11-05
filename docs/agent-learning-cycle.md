@@ -243,3 +243,10 @@ Uma paginação de comparação tem prioridade sobre novos exemplos da mesma fil
 Conclusões, respostas entre agentes e revisões de propostas guardam `learningInputs`, produzido pelo servidor depois da compactação final do pacote. O registro identifica episódios, escolhas do dono, hipóteses, comparações verificadas e metadados da Órbita que realmente chegaram à chamada do modelo. Entradas omitidas não recebem crédito de entrega; o modelo não pode preencher ou substituir esse registro. As revisões também preservam a reflexão autoral com suas citações novamente conferidas no momento da gravação.
 
 Esse registro permite auditar disponibilidade de contexto, não comprova uso semântico nem eficácia. Órbita mantém cobertura `returned-items-only` e vínculo por nome exato; produção não é venda. Casos retrospectivos inconclusivos permanecem inconclusivos, separados de aplicações do Bunker. Nenhum registro aprova proposta ou altera orçamento/status.
+
+
+### Memória individual de revisões e diálogo — política v2
+
+Além das conclusões de etapa, cada agente recupera suas próprias revisões de proposta e respostas a perguntas reais da equipe. Cada entrada preserva o tipo (`conclusion`, `proposal-review`, `dialogue`), a rodada e o hash de suas fontes. A revisão identifica proposta, versão, assinatura, revisor e veredito; o diálogo identifica a pergunta real. Esses tipos acompanham os registros de contexto entregue ao modelo.
+
+Revisões do dono, versões incompatíveis, reflexões sem conferência numérica e respostas sem pergunta correspondente não entram nessa memória. Projeto, papel, validade e limites de recuperação continuam isolados; episódios da rodada atual não viram precedentes históricos. O arquivo durável preserva os registros completos e a memória limitada mantém as referências depois da compactação. Uma resposta não conclui etapa, uma revisão não conta como análise individual de campanha e nenhuma delas recebe crédito financeiro ou autoriza execução.
