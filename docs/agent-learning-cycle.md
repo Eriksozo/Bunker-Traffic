@@ -268,3 +268,10 @@ O contexto de cada papel inclui `reviewTiming`, uma leitura da agenda efetiva: i
 Os agentes devem usar `nextStep` e `reflection.nextCheck` para explicar o que conferir na próxima rodada elegível. Analisar sete dias históricos não significa aguardar sete dias para acompanhar; tempo de maturação e proteção de um teste não suspendem a checagem na cadência já configurada. Lembranças e pareceres anteriores não podem redefinir essa agenda. O mesmo relógio do executor acompanha a montagem do contexto e a seleção de memórias.
 
 Conclusões, respostas e revisões preservam a agenda que receberam, para auditoria. O relatório exibe a configuração atual ao lado do próximo passo e mantém o texto autoral original; uma troca de cadência ou pausa é refletida sem reescrever o histórico. A janela planejada não é um prazo garantido de leitura, proposta, aplicação ou entrega da Meta.
+
+
+### Correção técnica de tentativas recusadas
+
+Erros de saída do modelo guardam somente diagnóstico de formato: envelope inesperado, saída truncada, falta de conteúdo final, JSON inválido ou esquema incompatível. O registro permite contagens numéricas limitadas de tokens e motivo de término conhecido; não armazena conteúdo parcial, raciocínio, cabeçalhos ou campos livres da resposta. O histórico operacional e o contexto de revisão expõem o mesmo diagnóstico sanitizado.
+
+Na próxima tentativa já elegível, o mesmo papel da mesma rodada recebe a falha da etapa anterior. Falhas de outra rodada, papel, discussão ou revisão de proposta não viram instrução de correção dessa etapa. Truncamento pede texto mais curto mantendo todos os alvos e citações obrigatórias; sintaxe ou esquema pede conferir a saída completa. Não se recupera JSON parcial nem se omite campanha para aprovar uma resposta. Não há chamada extra, aumento de tentativas, mudança de agenda, redução de evidência, nota de eficácia ou aprovação financeira. Tentativas recusadas permanecem distintas das contribuições concluídas.
