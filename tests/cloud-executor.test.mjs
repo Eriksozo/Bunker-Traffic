@@ -120,6 +120,7 @@ test('cloud perspectives and synthesis complete a real domain round without manu
  const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{},ai,ops:{}});
  for(let i=0;i<4;i++){const result=await engine.step();assert.equal(result.kind,'stage');}
  assert.equal(generations,4);assert.equal(store.state.collaborationRounds.find(r=>r.id===round.id).status,'Concluída');assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,4);assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);
+ assert.equal(new Set(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').map(m=>m.executionRef)).size,4);
 });
 
 test('cloud scheduling finishes a partially completed round before starting a newer one',()=>{
