@@ -225,4 +225,4 @@ A política v2 permite uma única espera assíncrona de até 1 segundo quando os
 
 ### Perguntas entre agentes
 
-A resposta a uma pergunta da rodada é diálogo, não uma nova conclusão por campanha. Seu esquema permite `campaignReadings: []` e não permite sugestões financeiras; o servidor registra somente a resposta ligada à pergunta e às fontes reais. Ela não conclui a síntese nem credita cobertura individual. Etapas e revisões com `campaignReviewPolicy` continuam exigindo uma leitura verificada por alvo, sem omissões, duplicação ou números de outra conta.
+A resposta a uma pergunta da rodada é diálogo, não uma nova conclusão por campanha. Seu esquema permite `campaignReadings: []` ou apenas as campanhas citadas na pergunta, com identidade e números conferidos, e não permite sugestões financeiras; o servidor registra somente a resposta ligada à pergunta e às fontes reais. Ela não conclui a síntese nem credita cobertura individual. Etapas e revisões com `campaignReviewPolicy` continuam exigindo uma leitura verificada por alvo, sem omissões, duplicação ou números de outra conta.

@@ -37,7 +37,8 @@ test('Dialogue may omit individual assessments without claiming coverage; stage 
  const f=fixture(2),dialogue={...context(f.rows)};delete dialogue.campaignReviewPolicy;
  assert.equal(validateCampaignReadings([],dialogue,'ops'),null);assert.equal(validateCampaignReadings(undefined,dialogue,'ops'),null);
  for(const role of ['traffic','creative','budget','ops'])assert.throws(()=>validateCampaignReadings([],context(f.rows),role),e=>e.code==='CLOUD_CAMPAIGN_READING_REQUIRED');
- assert.throws(()=>validateCampaignReadings([reading(f.rows[0])],dialogue,'ops'),e=>e.code==='CLOUD_CAMPAIGN_READING_REQUIRED');
+ assert.equal(validateCampaignReadings([reading(f.rows[0])],dialogue,'ops').length,1);
+ assert.throws(()=>validateCampaignReadings([reading(f.rows[0]),reading(f.rows[0])],dialogue,'ops'),e=>e.code==='CLOUD_CAMPAIGN_READING_REQUIRED');
  const foreign=f.rows.map(reading);foreign[0].adAccountId='other-account';assert.throws(()=>validateCampaignReadings(foreign,dialogue,'ops'),e=>e.code==='CLOUD_CAMPAIGN_READING_SCOPE');
  const wrong=f.rows.map(reading);wrong[0].citations[0].value=-1;assert.throws(()=>validateCampaignReadings(wrong,dialogue,'ops'),e=>e.code==='CLOUD_CAMPAIGN_READING_EVIDENCE');
 });
