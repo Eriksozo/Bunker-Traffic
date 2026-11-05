@@ -33,3 +33,5 @@ body .app .agent-report p,.workspace-dialog .agent-report p { font-size:12px; li
 .agent-report table th:first-child { text-align:left; }
 .agent-report table th { color:var(--ink-muted); font-weight:500; font-size:10px; }
 .agent-report table td { color:var(--ink); }
+
+.agent-report .ar-next>small { display:block; margin-top:7px; color:var(--ink-muted); font-size:10px; line-height:1.7; }

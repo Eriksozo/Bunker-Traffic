@@ -259,3 +259,12 @@ Entregar uma lembrança ao modelo não prova que ele a confrontou com os dados a
 As referências são regeneradas após cada compactação. Somente entradas presentes no pacote final, sem duplicidade de identidade, do projeto/papel permitido, podem ser selecionadas. O servidor resolve o ID e fingerprint reais; o agente não atribui notas, sucesso ou permissões ao registro. As métricas atuais continuam passando pela verificação numérica e pela fonte congelada no momento da gravação. A origem pode ser uma revisão ou um diálogo tipado, sem transformá-los em conclusão de etapa.
 
 Conclusões, respostas e revisões preservam esse confronto ao lado do contexto entregue. A memória individual mantém a explicação junto do episódio, inclusive após a compactação do histórico. O desenvolvimento de cada papel informa quantos confrontos e descartes foram registrados; são contagens de atividade verificável, não taxa de acerto, lucro ou prova de aprendizagem semântica. A síntese, a validação prospectiva e a aprovação financeira não recebem promoção automática. Não há outra agenda nem uma chamada extra de modelo para preencher o campo.
+
+
+### Checagem operacional e maturação do resultado
+
+O contexto de cada papel inclui `reviewTiming`, uma leitura da agenda efetiva: intervalo, dias, janela e fuso, com o instante da leitura e a próxima janela planejada. Agenda inválida vira indisponível; pausa e revisão automática desativada não recebem uma próxima janela inventada. Os valores padrão do backend são identificados como padrão. Essa leitura não cria jobs, muda configuração ou promete que a fila e as fontes concluirão naquele horário.
+
+Os agentes devem usar `nextStep` e `reflection.nextCheck` para explicar o que conferir na próxima rodada elegível. Analisar sete dias históricos não significa aguardar sete dias para acompanhar; tempo de maturação e proteção de um teste não suspendem a checagem na cadência já configurada. Lembranças e pareceres anteriores não podem redefinir essa agenda. O mesmo relógio do executor acompanha a montagem do contexto e a seleção de memórias.
+
+Conclusões, respostas e revisões preservam a agenda que receberam, para auditoria. O relatório exibe a configuração atual ao lado do próximo passo e mantém o texto autoral original; uma troca de cadência ou pausa é refletida sem reescrever o histórico. A janela planejada não é um prazo garantido de leitura, proposta, aplicação ou entrega da Meta.
