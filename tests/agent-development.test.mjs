@@ -151,3 +151,10 @@ test('Archive retrieval preserves exact review identity, is idempotent and does 
  const f=fixture(),p=reviewedProposal(f),archive={key:'collaboration:'+f.round.id,payload:{round:structuredClone(f.round),messages:[],proposals:[structuredClone(p)]}},before=structuredClone(archive);retainAgentEpisodes(f.state,[archive]);retainAgentEpisodes(f.state,[archive]);assert.deepEqual(archive,before);assert.equal(f.state.agentEpisodes.length,1);f.state.proposals=[];f.state.collaborationRounds=[];
  const c=cloudAgentMemory(f.state,{id:'next',project:'p'},'budget',[{adAccountId:'a',externalId:'c'}],{},now);assert.equal(c.episodes.length,1);assert.equal(c.episodes[0].archiveKey,archive.key);assert.equal(c.episodes[0].proposalVersion,1);assert.equal(c.episodes[0].reflection.numericCitationsChecked,true);
 });
+
+test('A memory confrontation survives archival as an authored judgment without becoming financial credit',()=>{
+ const f=fixture(),m=contribute(f,'traffic').message;m.memoryReview={version:1,sourceType:'owner-choice',sourceId:'prior-choice',sourceFingerprint:'source',packetMemoryFingerprint:'packet',reference:'M0',referenceChecked:true,currentEvidenceRequired:true,currentEvidenceCount:1,evidenceIndices:[0],stance:'reject',reason:'Este caso tem aquisição diferente da escolha anterior.'};
+ const archive={key:'collaboration:'+f.round.id,payload:{round:structuredClone(f.round),messages:[structuredClone(m)],proposals:[]}},before=structuredClone(archive);retainAgentEpisodes(f.state,[archive]);f.state.collaborationMessages=[];f.state.collaborationRounds=[];assert.deepEqual(archive,before);
+ const plan=agentDevelopmentPlan(f.state,'p',now).agents.find(a=>a.id==='traffic');assert.equal(plan.memoryConfrontations,1);assert.equal(plan.memoryRejections,1);assert.equal(plan.financialSuccessRate,null);assert.deepEqual(plan.recall[0].memoryReview,m.memoryReview);
+ const memory=cloudAgentMemory(f.state,{id:'next',project:'p'},'traffic',[{adAccountId:'a',externalId:'c'}],{},now);assert.equal(memory.episodes[0].memoryReview.sourceId,'prior-choice');assert.equal(cloudAgentMemory(f.state,{id:'next',project:'p'},'creative',[],{},now).episodes.length,0);
+});
