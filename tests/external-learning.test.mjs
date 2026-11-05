@@ -54,3 +54,17 @@ test('All four role memories receive external evidence without counting it as pe
 test('A quarantined history conflict prevents reusing old coverage as fresh learning evidence',async()=>{
  const s=await setup(),r=await collectExternalLearning(source(),s,project,{now:()=>now});s.historyLearning.failures={[historyLearningKey('p','a','c')]:{project:'p',adAccountId:'a',externalId:'c',code:'SOURCE_HISTORY_CONFLICT'}};assert.equal(externalLearningCandidates(s,project,now).length,0);assert.equal(persistExternalLearning(s,r,now).status,'Releitura necessária');assert.equal(s.decisionHistoryOutcomes,undefined);
 });
+
+test('External window diagnostics distinguish clock, identity and bounds failures without weakening validation',async()=>{
+ const {externalWindowIssues}=await import('../lib/external-learning.mjs');
+ const valid={level:'campaign',salesScope:{kind:'traffic'},currency:project.currency,period:{timezone:project.timezone,days:['2026-11-01'],from:'2026-11-01T00:00:00Z',to:'2026-11-02T00:00:00Z'},freshAt:date(now-1000),lastSyncAt:date(now-1000)};
+ assert.deepEqual(externalWindowIssues(valid,project,'2026-11-01',now),[]);
+ assert.deepEqual(externalWindowIssues({...valid,freshAt:date(now+1)},project,'2026-11-01',now),['freshAtFuture']);
+ assert.deepEqual(externalWindowIssues({...valid,lastSyncAt:null},project,'2026-11-01',now),['syncMissing']);
+ assert.deepEqual(externalWindowIssues({...valid,currency:'foreign'},project,'2026-11-01',now),['metricsCurrency']);
+ assert.ok(externalWindowIssues({...valid,period:{...valid.period,to:null}},project,'2026-11-01',now).includes('boundsMissing'));
+ const s=await setup(),r=await collectExternalLearning(source({mutate:r=>{r.freshAt=date(now+200);}}),s,project,{now:()=>now});
+ assert.equal(r.code,'SOURCE_EXTERNAL_WINDOW');assert.deepEqual(r.windowFailure.issues,['freshAtFuture']);assert.equal(r.windowFailure.sourceClock.freshAt,date(now+200));persistExternalLearning(s,r,now);
+ assert.deepEqual(s.externalLearningChecks[r.eventKey].windowFailure,r.windowFailure);assert.equal(s.decisionHistoryOutcomes,undefined);assert.equal(s.externalHistoryMeasurements,undefined);
+ assert.equal(JSON.stringify(r.windowFailure).includes('revenue'),false);assert.equal(JSON.stringify(r.windowFailure).includes('token'),false);
+});
