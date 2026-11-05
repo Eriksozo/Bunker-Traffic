@@ -160,3 +160,15 @@ test('A post-action review never takes the place of confirming an ambiguous disp
 test('An unexpired owner approval cannot dispatch after its four-period analysis expires',()=>{
  const f=fixture('budget',{validForMs:24*3600000});assert.throws(()=>claimExecution(f.state,f.args,now+3600001),/Análise vencida/);assert.equal(f.state.executions?.length||0,0);
 });
+
+
+test('A newly disabled account cannot receive an increase or activation in preflight',()=>{
+ for(const [action,options] of [['budget',{}],['status',{row:{status:'PAUSED'}}]]){
+  const f=fixture(action,options),e=claimExecution(f.state,f.args,now);
+  assert.throws(()=>prepareExecution(f.state,{id:e.id,claimId:e.claimId,executionRef:e.executionRef,clientId:'disabled',observation:f.observation(now,{accountStatus:{active:false}})},now),/aptidão ativa/);
+  assert.equal(e.status,'Reservada');assert.equal(e.command,undefined);assert.equal(e.submittedAt,undefined);
+ }
+ const f=fixture('status'),e=claimExecution(f.state,f.args,now);
+ prepareExecution(f.state,{id:e.id,claimId:e.claimId,executionRef:e.executionRef,clientId:'contain',observation:f.observation(now,{accountStatus:{active:false}})},now);
+ assert.equal(e.command.arguments.status,'PAUSED');
+});

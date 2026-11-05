@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {choiceResolutionArchiveQuery,hydrateChoiceResolutions,readChoiceResolution} from '../lib/decision-resolution.mjs';
+import {choiceResolutionArchiveQuery,hydrateChoiceResolutions,readChoiceResolution,readLiveChoiceResolution} from '../lib/decision-resolution.mjs';
 import {decisionLearningSummary,readDecisionExamples} from '../lib/decision-learning-view.mjs';
 
 const project='project-a',now=Date.parse('2026-11-02T20:00:00Z');
@@ -70,4 +70,15 @@ test('Archive lookup is bounded, parameterized and skips live proposals, nonfina
 test('Unavailable archival proof is surfaced without marking a decision applied',async()=>{
  const f=fixture(),saved=structuredClone(f.state),bad={prepare(){return {bind(){return {async all(){return {success:false};}};}};}};
  await assert.rejects(hydrateChoiceResolutions(bad,f.state,now),/recibos arquivados/);assert.deepEqual(f.state,saved);
+});
+
+
+test('Live applied status requires the exact approved choice, version and provider readback',()=>{
+ const f=fixture();f.state.proposals=[f.proposal];f.state.executions=[f.execution];
+ assert.equal(readLiveChoiceResolution(f.state,f.choice,now),f.execution);
+ for(const change of [f=>f.execution.proposalVersion=1,f=>f.execution.proposalSignature='old-seal',f=>f.execution.readback=null,f=>f.execution.readback.row.dailyBudget=99,f=>f.proposal.payload.adAccountId='other-account',f=>f.choice.after.dailyBudget=200,f=>f.choice.proposalVersion=1,f=>f.execution.readback.fetchedAt=new Date(now+1).toISOString()]){
+  const f=fixture();f.state.proposals=[f.proposal];f.state.executions=[f.execution];change(f);assert.equal(readLiveChoiceResolution(f.state,f.choice,now),null);
+ }
+ const keep={...f.choice,action:'keep'};assert.equal(readLiveChoiceResolution(f.state,keep,now),null);
+ assert.equal(readLiveChoiceResolution(f.state,null,now),null);
 });

@@ -241,3 +241,12 @@ test('A dispatched but unconfirmed choice never receives a confirmed archival re
  assert.equal(compacted.archives.some(a=>a.payload.proposals.some(p=>p.id===f.proposal.id)),false);assert.equal(f.state.choiceResolutions,undefined);
  assert.equal(decisionLearningPlan(f.state,project,now+400001).choices[0].executionStatus,'Enviada');
 });
+
+
+test('Disabled accounts cannot receive owner increase choices; containment remains available',()=>{
+ const f=fixture({row:{accountStatus:{active:false}}}),card=buildDecisionCards(f.state,project,now)[0];
+ assert.equal(card.actionable.increase,false);assert.equal(card.actionable.reduce,true);assert.equal(card.actionable.pause,true);
+ const before=structuredClone(f.state);
+ assert.throws(()=>recordOwnerChoice(f.state,{project,cardId:card.id,signature:card.signature,choice:'increase',percent:50,clientId:'disabled-increase'},'owner',now),/não permitem/);
+ assert.deepEqual(f.state,before);
+});
