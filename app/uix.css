@@ -307,3 +307,9 @@ body .app .freshness { display:flex;flex-direction:column;align-items:flex-start
 body .app .reading-clock { display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;max-width:100%;line-height:1.6; }
 body .app .reading-clock strong { font-size:inherit;font-weight:500; }
 body .app .reading-analysis { font-size:10px;color:var(--ink-soft); }
+
+.workspace-dialog .campaign-object-reading { display:grid; gap:5px; margin:18px 0 12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+.workspace-dialog .campaign-object-reading strong { font-size:12px; }
+.workspace-dialog .campaign-object-reading small { color:var(--ink-muted); font-size:10px; overflow-wrap:anywhere; }
+.workspace-dialog .campaign-object-reading p { margin:3px 0 0; font-size:12px; line-height:1.65; }
+.workspace-dialog .campaign-reading-warning { color:var(--amber,#e8b958); }
