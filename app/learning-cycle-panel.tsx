@@ -1,15 +1,17 @@
+import {campaignCoveragePlan} from '../lib/campaign-learning-coverage.mjs';
 'use client';
 import {useMemo} from 'react';
 import {BrainCircuit,ChevronDown} from 'lucide-react';
 import {learningCyclePlan} from '../lib/learning-cycle.mjs';
 import './learning-cycle.css';
 export default function LearningCyclePanel({state,project}:{state:any;project:string}){
- const cycle=useMemo(()=>learningCyclePlan(state,project),[state,project]),stats=cycle.stats;
+ const cycle=useMemo(()=>learningCyclePlan(state,project),[state,project]),stats=cycle.stats,coverage=useMemo(()=>campaignCoveragePlan(state,project),[state,project]);
  return <section className="learning-cycle" aria-label="Ciclo de aprendizado dos agentes">
   <header><BrainCircuit size={22}/><div><h3>Aprender, conferir e melhorar</h3><p>Cada padrão precisa sobreviver a novos resultados e à revisão de outro agente.</p></div><span>Com sua aprovação</span></header>
   <ol className="learning-steps">{cycle.steps.map((step:any,i:number)=><li key={step.role}><b>{i+1}</b><span>{step.label}</span></li>)}</ol>
   <div className="learning-score"><div><strong>{stats.patterns}</strong><span>padrões em estudo</span></div><div><strong>{stats.advisory}</strong><span>com validação para apoiar sugestões</span></div><div><strong>{stats.needsReview}</strong><span>precisam ser revistos</span></div><div><strong>{stats.agreementRate===null?'N/D':`${Math.round(stats.agreementRate*100)}%`}</strong><span>concordância com você · {stats.comparableChoices} comparações</span></div></div>
   <p className="learning-caption">{stats.measuredApplications||0} aplicações com comparação automática conferida. Dias sem exposição, incidentes e alterações concorrentes podem impedir a comparação. Concordar com você não prova lucro. Resultado favorável exige métricas conciliadas; os testes deste fluxo são observacionais.</p>
+  <p className="learning-caption"><strong>Cobertura de revisão:</strong> {coverage.reviewed} de {coverage.eligible} campanhas Meta ativas com gasto já receberam parecer numérico dos quatro agentes na mesma rodada. {coverage.waiting} aguardam essa revisão completa. Cada rodada reserva espaço para as menos revisadas; dados coletados sozinhos não contam como análise.</p>
   <div className="agent-development" aria-label="Aprendizado individual">{cycle.development.agents.map((agent:any)=><article key={agent.id}>
    <div><strong>{agent.name}</strong><span>{agent.label}</span></div>
    <p>{agent.focus}</p>

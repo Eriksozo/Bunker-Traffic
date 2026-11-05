@@ -50,3 +50,7 @@ test('All four role memories receive external evidence without counting it as pe
  for(const role of ['traffic','creative','budget','ops']){const m=cloudAgentMemory(s,{id:'new-round',project:'p'},role,[row],{items:[],actionOutcomes:[]},now);assert.equal(m.externalResults.length,1);assert.equal(m.measuredOutcomes.length,0);assert.equal(m.episodes.length,0);assert.equal(m.externalResults[0].executionByBunker,false);}
  const plan=externalLearningPlan(s);assert.equal(plan.completedScopes,1);assert.equal(plan.comparisons,1);assert.equal(plan.favorable,1);assert.equal(plan.policy.providerWrites,false);
 });
+
+test('A quarantined history conflict prevents reusing old coverage as fresh learning evidence',async()=>{
+ const s=await setup(),r=await collectExternalLearning(source(),s,project,{now:()=>now});s.historyLearning.failures={[historyLearningKey('p','a','c')]:{project:'p',adAccountId:'a',externalId:'c',code:'SOURCE_HISTORY_CONFLICT'}};assert.equal(externalLearningCandidates(s,project,now).length,0);assert.equal(persistExternalLearning(s,r,now).status,'Releitura necessária');assert.equal(s.decisionHistoryOutcomes,undefined);
+});

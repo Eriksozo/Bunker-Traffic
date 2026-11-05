@@ -138,3 +138,8 @@ test('Changed rows cannot borrow a frozen reference merely by retaining its fetc
  assert.equal(view.facts[0].windows[1].metrics,null);assert.equal(view.facts[0].windows[0].metrics.spend,100);
  assert.deepEqual({state,message},changed);
 });
+
+test('A card shows only its own campaign reading, facts and proposals from a multi-campaign contribution',()=>{
+ const row=(externalId,name)=>({externalId,adAccountId:'account',level:'campaign',name,spend:100,revenueNet:200,frontOrders:2}),stamp='2026-11-05T12:00:00Z',state={snapshots:['3d','today'].map(period=>({projectId:'p',period,level:'campaign',source:'Malva MCP',complete:true,fetchedAt:stamp,rows:[row('a','Campanha A'),row('b','Campanha B')]}))},message={id:'m',project:'p',roundId:'r',fromAgent:'traffic',kind:'conclusion',text:'Leitura das duas campanhas.',summary:{decision:'Resumo amplo',reason:'Resumo com várias campanhas',nextStep:'Revisar'},campaignReadings:[{adAccountId:'account',externalId:'a',assessment:'observe',reason:'A precisa de novas compras.',citations:[]},{adAccountId:'account',externalId:'b',assessment:'investigate',reason:'B precisa de conferir checkout.',citations:[]}],evidenceRefs:['a','b'].flatMap(externalId=>['3d','today'].map(period=>({adAccountId:'account',externalId,level:'campaign',period,fetchedAt:stamp})))};
+ const view=agentReportView(state,message,[],Date.parse(stamp),{adAccountId:'account',externalId:'b'});assert.equal(view.summary.decision,'Investigar');assert.equal(view.summary.reason,'B precisa de conferir checkout.');assert.equal(view.readings.length,1);assert.equal(view.facts.length,1);assert.equal(view.facts[0].name,'Campanha B');assert.equal(agentReportView(state,message).readings.length,2);
+});

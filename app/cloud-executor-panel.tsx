@@ -8,6 +8,7 @@ for(const code of ['CLOUD_LEARNING_REVIEW_REQUIRED','CLOUD_LEARNING_REVIEW_SCOPE
 for(const code of ['CLOUD_LEARNING_ENROLLMENT_SCOPE','CLOUD_LEARNING_ENROLLMENT_INVALID','CLOUD_LEARNING_ENROLLMENT_CONFLICT','CLOUD_LEARNING_ENROLLMENT_LATE','CLOUD_LEARNING_ENROLLMENT_HYPOTHESIS','CLOUD_LEARNING_ENROLLMENT_CAPACITY'])errors[code]='A hipótese mudou ou não pôde ser vinculada antes da aprovação. A nova sugestão desta tentativa não foi publicada; a equipe precisa reler o cenário.';
 for(const code of ['SOURCE_HISTORY_IDENTITY','SOURCE_HISTORY_ORDER','SOURCE_HISTORY_PERIOD_CHANGED','SOURCE_HISTORY_CURSOR','SOURCE_HISTORY_CONFLICT'])errors[code]='O histórico de edições não confirmou identidade, ordem ou paginação. A etapa será relida; nenhum exemplo foi validado.';
 errors.SOURCE_HISTORY_LIMIT='O histórico excedeu o limite desta unidade. A paginação anterior foi preservada; confira a capacidade antes de continuar.';
+for(const code of ['CLOUD_CAMPAIGN_READING_REQUIRED','CLOUD_CAMPAIGN_READING_EVIDENCE','CLOUD_CAMPAIGN_READING_SCOPE','CLOUD_COVERAGE_IDENTITY'])errors[code]='Falta uma leitura por campanha com números conferidos ou a identidade mudou. A equipe precisa reler; cobertura e sugestões não foram presumidas.';
 errors.CLOUD_STEP_FAILED='Não foi possível concluir esta etapa. Confira os registros e a próxima revisão.';
 export default function CloudExecutorPanel(){
  const [data,setData]=useState<any>(null),[busy,setBusy]=useState(''),[error,setError]=useState('');

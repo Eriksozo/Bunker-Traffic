@@ -1,3 +1,4 @@
+import {mockCampaignReadings} from './fixtures/campaign-readings.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {learningPeerPacket,persistLearningPeerReview} from '../lib/learning-peer-review.mjs';
@@ -65,7 +66,7 @@ test('compaction defers the whole learning packet rather than silently deleting 
 });
 test('normal cloud stages author independent learning reviews, without extra model calls or provider actions',async()=>{
  const f=fixture();let state=f.state,calls=0,providerCalls=0;
- const ai={run:async(_m,request)=>{calls++;const {context:c,reflectionRequirements:r}=JSON.parse(request.messages[1].content);return {response:{...output(),reflection:{lesson:'Conferir aquisição após edição.',uncertainty:'Associação não demonstra causalidade.',nextCheck:'Comparar novas compras.',citations:r.examples.slice(0,1),peerChecks:r.requiredPeerRoles.map(role=>({messageId:r.peerConclusions.find(p=>p.role===role).messageId,stance:'support',reason:'Escopo e fontes conferidos.'}))},learningReview:c.learningReview?modelReview(c.learningReview):null}};}};
+ const ai={run:async(_m,request)=>{calls++;const {context:c,reflectionRequirements:r}=JSON.parse(request.messages[1].content);return {response:{...output(),campaignReadings:mockCampaignReadings(c),reflection:{lesson:'Conferir aquisição após edição.',uncertainty:'Associação não demonstra causalidade.',nextCheck:'Comparar novas compras.',citations:r.examples.slice(0,1),peerChecks:r.requiredPeerRoles.map(role=>({messageId:r.peerConclusions.find(p=>p.role===role).messageId,stance:'support',reason:'Escopo e fontes conferidos.'}))},learningReview:c.learningReview?modelReview(c.learningReview):null}};}};
  const engine=createCloudEngine({read:async()=>({state:structuredClone(state),revision:1}),write:async fn=>{const draft=structuredClone(state),out=await fn(draft,1);state=draft;return out;},ai,source:{read:async()=>{providerCalls++;throw Error('Unexpected read');},dispatch:async()=>{providerCalls++;throw Error('Unexpected write');}},ops:{},now:()=>now});
  for(let i=0;i<4;i++){const result=await engine.step();assert.equal(result.kind,'stage');if(i<3)assert.equal(result.learningReview.status,'Registrada');}
  assert.equal(calls,4);assert.equal(providerCalls,0);assert.equal(state.learningReviews.length,3);assert.equal(new Set(state.learningReviews.map(r=>r.executionRef)).size,3);assert.equal(learningCyclePlan(state,'p',now).stats.advisory,1);assert.equal(state.proposals.length,0);assert.equal(state.executions,undefined);assert.deepEqual(state.config,f.state.config);

@@ -31,3 +31,15 @@ test('Descendant edits remain confounders and do not become campaign budget acti
 test('Incremental window overlaps prior completion and stale writers preserve current history',async()=>{
  const s=base(),calls=[],c={read:async(_t,a)=>{calls.push(a);return page([historyEvent(2)]);}},r=await collectHistoryLearning(c,historyProject,historyRow,null,{now:()=>historyNow});persistHistoryLearning(s,r,historyNow);const key=historyLearningKey('p','a','c');await collectHistoryLearning(c,historyProject,historyRow,s.historyLearning.scopes[key],{now:()=>historyNow+86400000});assert.equal(calls[1].preset,'custom');assert.equal(calls[1].from,'2026-11-04');assert.equal(calls[1].to,'2026-11-06');const before=structuredClone(s);assert.equal(persistHistoryLearning(s,r,historyNow).status,'Releitura necessária');assert.deepEqual(s,before);
 });
+
+test('Automatic reread preserves a native actor profile imported earlier, avoiding a false same-ID conflict',async()=>{
+ const s=base(),event=historyEvent(2,{source:'meta',automatic:true,actor:{key:'system',name:'Meta',kind:'system',profile:'Dash'},category:'status',values:{kind:'status',from:'processing',to:'active'},echo:null});
+ importDecisionHistory(s,{entry:{project:'p',from:historyEvent(3).at,to:new Date(historyNow).toISOString(),fetchedAt:new Date(historyNow).toISOString(),complete:true,pagination:{complete:true,nextCursor:null},events:[event]}},historyNow);
+ const prior=structuredClone(s.decisionHistory[0]),r=await collectHistoryLearning({read:async()=>page([event])},historyProject,historyRow,null,{now:()=>historyNow+1000});const saved=persistHistoryLearning(s,r,historyNow+1000);assert.equal(saved.inserted,0);assert.equal(s.decisionHistory.length,1);assert.equal(s.decisionHistory[0].actor.profile,'Dash');assert.deepEqual(s.decisionHistory[0],prior);
+});
+
+test('Divergent optional history is explicitly quarantined without replacing prior ledger or losing analytic data',async()=>{
+ const {storeHistoryCollection}=await import('../lib/cloud-history-learning.mjs'),s=base();let e=historyEvent(2);const c={read:async()=>page([e])};let r=await collectHistoryLearning(c,historyProject,historyRow,null,{now:()=>historyNow});storeHistoryCollection(s,r,historyNow);const ledger=structuredClone(s.decisionHistory),scope=structuredClone(s.historyLearning.scopes),snapshots=s.snapshots;
+ e=historyEvent(2,{values:{kind:'money',field:'daily_budget',currency:'USD',from:100,to:999}});const key=historyLearningKey('p','a','c');r=await collectHistoryLearning(c,historyProject,historyRow,s.historyLearning.scopes[key],{now:()=>historyNow+1000});assert.equal(storeHistoryCollection(s,r,historyNow+1000).status,'Histórico requer conciliação');assert.deepEqual(s.decisionHistory,ledger);assert.deepEqual(s.historyLearning.scopes,scope);assert.equal(s.snapshots,snapshots);assert.deepEqual(s.historyLearning.failures[key].fields,['after']);
+ e=historyEvent(2);r=await collectHistoryLearning(c,historyProject,historyRow,s.historyLearning.scopes[key],{now:()=>historyNow+2000});storeHistoryCollection(s,r,historyNow+2000);assert.equal(s.historyLearning.failures[key],undefined);assert.equal(s.decisionHistory.length,1);
+});
