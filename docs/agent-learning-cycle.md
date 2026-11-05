@@ -166,3 +166,14 @@ Uma rodada nova sem campanha Meta ativa com gasto não precisa produzir quatro p
 Falhas de coleta passam a preservar projeto, job, código e etapa (conexão, campanhas, pesquisa, aprendizado ou persistência). A nota fica no job original e no contexto de revisão; o diagnóstico operacional recente mantém até 120 entradas deduplicadas por tentativa. O executor também registra falhas no histórico de atividade, junto da última falha, sem apagá-las quando outra etapa tem sucesso. Corpo de resposta e credenciais não entram nesse diagnóstico. O resumo MCP mostra o motivo da última coleta malsucedida de cada projeto, sem expandir relatórios completos.
 
 O painel distingue explicitamente a triagem do sistema de uma conversa real da equipe. Casos já medidos continuam exigindo revisores reais mesmo quando nenhuma campanha está elegível naquele momento. Não há mudança na agenda, pausa, regras de execução ou aprovação do dono.
+
+
+## Versão 8 — aproveitar o ecossistema sem perder a evidência
+
+A entrada dos modelos compacta metadados idênticos, colunas repetidas e séries diárias/horárias antes de adiar campanhas. O transporte usa tabelas `columns/v1`, campos constantes e referências explícitas de texto/colunas. Zero, null, campo ausente, valores não arredondados e identidades continuam distintos; a validação usa os campos canônicos, sem alterar as fontes persistidas. O teste de seis campanhas com quatro períodos e hierarquia cabe em 40 KB; isso não garante seis campanhas em todo pacote de produção, nem crédito de revisão para um alvo adiado. O teste também verifica que montar o transporte é puro e repetível.
+
+Cada campanha do pacote final recebe exigências de citação e exemplos numéricos reais. Criativos precisa citar conjunto/anúncio quando há números desses filhos; os demais continuam confrontando seu próprio contexto. As enumerações do esquema usam somente contas e objetos do pacote efetivamente enviado. Exemplo disponível não é análise pronta nem resultado favorável.
+
+Uma tentativa recusada preserva a falha específica (alvo, conta e motivo permitido) e a próxima tentativa do mesmo papel na mesma rodada recebe esse feedback. Número inexistente, citação duplicada ou ausência da evidência exigida continuam impedindo a conclusão. Uma correção válida pode concluir uma única contribuição; falhas não recebem cobertura, aprovação nem pontuação financeira. Outros papéis e rodadas não herdam esse feedback como se fosse próprio.
+
+O contexto de revisão também expõe falhas de ingestão histórica e de comparação retrospectiva, separadas por projeto. O histórico dos gestores alimenta observações; eficácia exige resultados verificáveis e confronto independente. A Órbita continua fornecendo somente metadados criativos quando sua conexão de servidor estiver disponível. Nenhuma fonte ausente recebe sucesso, zeros ou presença simulada. Agenda, pausa, limites e aprovação exata para execução continuam preservados.

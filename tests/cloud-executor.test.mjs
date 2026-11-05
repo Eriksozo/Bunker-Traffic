@@ -220,3 +220,17 @@ test('each real role receives a distinct verification task and peer review canno
  const systems={};for(const role of ['traffic','creative','budget','ops'])await runCloudAnalyst({run:async(_m,r)=>{systems[role]=r.messages[0].content;return {response:{decision:'Investigar',reason:'Sem dados suficientes',nextStep:'Conferir origem',text:'Sem alvo elegível neste recorte.',suggestions:[],question:null}};}},role,{campaigns:[]});
  assert.match(systems.traffic,/TRÁFEGO:.*aquisição front/);assert.match(systems.creative,/CRIATIVOS:.*conjuntos\/anúncios/);assert.match(systems.budget,/ORÇAMENTO:.*moeda nativos/);assert.match(systems.budget,/não é aprovação do dono/);assert.match(systems.ops,/textos genéricos não substitui/);assert.equal(new Set(Object.values(systems)).size,4);
 });
+
+test('A rejected numeric reading teaches only the same role and round; a corrected retry earns one contribution',async()=>{
+ const f=fixture();f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];f.state.executions=[];
+ for(const cut of f.state.snapshots)for(const r of cut.rows){r.spend=100;r.revenueNet=200;r.frontOrders=2;}
+ const round=ensureCollaboration(f.state,f.state.jobs[0]),store=memory(f);let calls=0;const packets=[];
+ const ai={run:async(_m,request)=>{calls++;const body=JSON.parse(request.messages[1].content),c=body.context,r=body.reflectionRequirements;packets.push(c);const readings=mockCampaignReadings(c);if(calls===1)readings[0].citations[0].value=999999;
+ return {response:{campaignReadings:readings,decision:'Observar',reason:'Conferir aquisição',nextStep:'Comparar novas vendas',text:'Uma campanha priorizada nesta unidade.',reflection:{lesson:'Validar números da origem.',uncertainty:'Efeito não medido.',nextCheck:'Comparar períodos.',citations:r.examples.slice(0,1),peerChecks:r.requiredPeerRoles.map(role=>({messageId:r.peerConclusions.find(p=>p.role===role).messageId,stance:'inconclusive',reason:'Sem resultado novo.'}))},suggestions:[],question:null}};}};
+ const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{},ai,ops:{}});
+ await assert.rejects(engine.step(),e=>e.code==='CLOUD_CAMPAIGN_READING_EVIDENCE');assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,0);assert.equal(store.state.campaignReviewCoverage,undefined);
+ const failure=Object.values(store.state.cloudAttemptFailures)[0];assert.deepEqual(failure.readingFailure,{adAccountId:account,externalId:'123',reason:'citation_not_in_packet'});
+ await store.write(s=>{s.cloudAttemptFailures.foreign={...failure,roundId:'other',code:'FOREIGN_ROUND'};s.cloudAttemptFailures.otherRole={...failure,agentId:'budget',code:'FOREIGN_ROLE'};});
+ assert.equal((await engine.step()).kind,'stage');assert.equal(packets[1].validationFeedback.code,'CLOUD_CAMPAIGN_READING_EVIDENCE');assert.deepEqual(packets[1].validationFeedback.readingFailure,failure.readingFailure);assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,1);
+ assert.equal((await engine.step()).kind,'stage');assert.equal(packets[2].validationFeedback,undefined);assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);
+});

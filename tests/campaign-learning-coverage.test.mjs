@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectLearningFocus,learningFocus,campaignCoverageKey,campaignCoveragePlan,validateCampaignReadings,normalizeCampaignReadings,recordCampaignCoverage,campaignCoveragePolicy} from '../lib/campaign-learning-coverage.mjs';
+import {selectLearningFocus,learningFocus,campaignCoverageKey,campaignCoveragePlan,validateCampaignReadings,normalizeCampaignReadings,recordCampaignCoverage,campaignCoveragePolicy,campaignReadingRequirements} from '../lib/campaign-learning-coverage.mjs';
 import {ensureCollaboration,claimCollaboration,postCollaboration} from '../lib/collaboration.mjs';
 import {runCloudAnalyst,compactCloudContext} from '../lib/cloud-analysis.mjs';
 const now=Date.parse('2026-11-05T18:00:00Z'),iso=n=>new Date(n).toISOString();
@@ -55,4 +55,12 @@ test('Compaction declares deferred targets and removes corresponding peer readin
 test('Coverage survives message archival and capacity limits preserve existing evidence',()=>{
  const f=fixture(1);credit(f.state,f.round,f.rows);const old=f.state.campaignReviewCoverage[campaignCoverageKey('p','a','c0')];f.state.collaborationMessages=[];assert.equal(campaignCoveragePlan(f.state,'p').reviewed,1);
  for(let i=1;i<5000;i++)f.state.campaignReviewCoverage['bounded-'+i]={};recordCampaignCoverage(f.state,{id:'new',kind:'conclusion',fromAgent:'traffic',createdAt:iso(now),campaignReadings:[reading({externalId:'new',adAccountId:'a',spend:1})]},f.round);assert.equal(Object.keys(f.state.campaignReviewCoverage).length,5000);assert.ok(f.state.campaignReviewCapacity);assert.deepEqual(f.state.campaignReviewCoverage[campaignCoverageKey('p','a','c0')],old);
+});
+
+test('Per-campaign requirements expose exact current facts and a creative child citation with scoped failure feedback',async()=>{
+ const f=fixture(2),c=context(f.rows);c.campaigns[0].hierarchy=[{period:'today',level:'ad',rows:[{adAccountId:'a',externalId:'actual-child',frontOrders:0,spend:25.123456}]}];
+ const requirements=campaignReadingRequirements(c,'creative');assert.equal(requirements[0].childCitationRequired,true);assert.deepEqual(requirements[0].examples[0],{period:'today',level:'ad',externalId:'actual-child',metric:'frontOrders',value:0});assert.equal(requirements[1].childCitationRequired,false);
+ const bad=f.rows.map(reading);assert.throws(()=>validateCampaignReadings(bad,c,'creative'),e=>e.readingFailure.externalId==='c0'&&e.readingFailure.adAccountId==='a'&&e.readingFailure.reason==='child_citation_required');bad[0].citations=requirements[0].examples;assert.doesNotThrow(()=>validateCampaignReadings(bad,c,'creative'));
+ let req;await runCloudAnalyst({run:async(_m,r)=>{req=r;return {response:{decision:'Observar',reason:'Conferir resposta',nextStep:'Comparar aquisição',text:'Leitura dos dois alvos.',suggestions:[],question:null,campaignReadings:bad}}}},'creative',c);
+ const body=JSON.parse(req.messages[1].content);assert.deepEqual(body.campaignReadingRequirements,requirements);const schema=req.response_format.json_schema.properties.campaignReadings.items;assert.deepEqual(schema.properties.externalId.enum,['c0','c1']);assert.equal(schema.properties.citations.minItems,1);
 });
