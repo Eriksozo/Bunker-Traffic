@@ -1,0 +1,4 @@
+export const historyNow=Date.parse('2026-11-05T12:00:00Z');
+export const historyProject={id:'p',name:'John',timezone:'UTC',currency:'BRL'};
+export const historyRow={id:'internal-c',externalId:'c',adAccountId:'a',budgetCurrency:'USD',provider:'meta',name:'[TESTE] Sales',projectId:'p',projectName:'John',level:'campaign'};
+export const historyEvent=(n=1,extra={})=>({id:'e'+n,at:new Date(historyNow-n*86400000).toISOString(),source:'malva',category:'budget',automatic:false,actor:{key:'manager',name:'Gestor',kind:'malva'},account:{id:'a',accountId:'native-a',currency:'USD',provider:'meta',label:'Account'},object:{level:'campaign',externalId:'c',name:'[TESTE] Sales'},values:{kind:'money',field:'daily_budget',currency:'USD',from:100,to:120},echo:{at:new Date(historyNow-n*86400000).toISOString(),actorName:'Meta'},...extra});

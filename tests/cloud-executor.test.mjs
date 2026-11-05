@@ -191,7 +191,7 @@ test('research collection reads daily history and today separately and retains a
   if(tool==='tracking_list_projects')return {items:[{id:project,name:'Example',timezone:'UTC',currency:'BRL'}]};
   if(tool==='tracking_ad_accounts')return {items:[{id:account,provider:'meta'}]};
   if(tool==='tracking_campaigns')return {level:a.level,salesScope:{kind:'traffic'},currency:'BRL',freshAt:iso(now),lastSyncAt:null,period:{timezone:'UTC',from:a.from+'T00:00:00.000Z',to:iso(Date.parse(a.to+'T00:00:00Z')+86400000),days:a.from===a.to?[a.from]:[a.from,a.to]},rows:[{...r,level:a.level,campaignExternalId:a.level==='campaign'?null:'123'}]};
-  if(tool==='tracking_ad_changes')return {timezone:'UTC',items:Array.from({length:50},(_,i)=>({id:String(i),category:i===40?'budget':'status',at:iso(now-i*1000),values:{kind:'money',field:'daily_budget',from:100,to:150}})),nextCursor:null};
+  if(tool==='tracking_ad_changes')return {timezone:'UTC',period:{from:null,to:null,timezone:'UTC'},items:Array.from({length:50},(_,i)=>({id:String(i),source:'meta',object:{level:'campaign',externalId:'123',name:'Sales'},account:{id:account,accountId:'native',provider:'meta',currency:'USD'},category:i===40?'budget':'status',at:iso(now-(i+1)*1000),values:{kind:'money',field:'daily_budget',from:100,to:150}})),nextCursor:null};
   if(tool==='tracking_ad_detail'){detailPresets.push(a.preset);return {row:r,currency:'BRL',daily:[],period:{timezone:'UTC',from:ranges.today.from+'T00:00:00Z',to:iso(Date.parse(ranges.today.to+'T00:00:00Z')+86400000),days:a.preset==='today'?[ranges.today.from]:['previous',ranges.today.from]},hourly:[{hour:1,spend:10,orders:0}]};}
   throw Error('Unexpected tool');
  }};
