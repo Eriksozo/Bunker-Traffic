@@ -63,8 +63,25 @@ test('External window diagnostics distinguish clock, identity and bounds failure
  assert.deepEqual(externalWindowIssues({...valid,lastSyncAt:null},project,'2026-11-01',now),['syncMissing']);
  assert.deepEqual(externalWindowIssues({...valid,currency:'foreign'},project,'2026-11-01',now),['metricsCurrency']);
  assert.ok(externalWindowIssues({...valid,period:{...valid.period,to:null}},project,'2026-11-01',now).includes('boundsMissing'));
- const s=await setup(),r=await collectExternalLearning(source({mutate:r=>{r.freshAt=date(now+200);}}),s,project,{now:()=>now});
+ const s=await setup(),r=await collectExternalLearning(source({mutate:r=>{r.freshAt=date(now+200);}}),s,project,{now:()=>now,wait:async()=>{}});
  assert.equal(r.code,'SOURCE_EXTERNAL_WINDOW');assert.deepEqual(r.windowFailure.issues,['freshAtFuture']);assert.equal(r.windowFailure.sourceClock.freshAt,date(now+200));persistExternalLearning(s,r,now);
  assert.deepEqual(s.externalLearningChecks[r.eventKey].windowFailure,r.windowFailure);assert.equal(s.decisionHistoryOutcomes,undefined);assert.equal(s.externalHistoryMeasurements,undefined);
  assert.equal(JSON.stringify(r.windowFailure).includes('revenue'),false);assert.equal(JSON.stringify(r.windowFailure).includes('token'),false);
+});
+test('A bounded asynchronous wait matures the original 726ms source clock before storing and recalling a comparison',async()=>{
+ const s=await setup(),c=source({mutate:r=>{r.freshAt=date(now+726);}});let clock=now,waits=[];
+ const r=await collectExternalLearning(c,s,project,{now:()=>clock,wait:async ms=>{waits.push(ms);clock=Math.max(clock,now+ms);}});
+ assert.equal(r.status,'Lida');assert.equal(c.calls.length,2);assert.ok(waits.length>0&&waits.length<=2);assert.ok(waits.every(n=>n>0&&n<=1000));assert.equal(r.before.fetchedAt,date(now+726));assert.equal(r.after.fetchedAt,date(now+726));assert.equal(persistExternalLearning(s,r,clock).status,'Favorável');assert.equal(s.externalHistoryMeasurements.length,2);assert.equal(externalLearningRecall(s,'p',[row],clock)[0].executionByBunker,false);assert.equal(s.executions,undefined);
+});
+test('A frozen clock, excess skew and unrelated source failures never become successful observations',async()=>{
+ for(const kind of ['frozen','excess','currency','timezone','sync']){
+  const s=await setup();let calls=0,clock=now;
+  const c=source({mutate:r=>{r.freshAt=date(now+(kind==='excess'?1001:726));if(kind==='currency')r.currency='foreign';if(kind==='timezone')r.period.timezone='foreign';if(kind==='sync')r.lastSyncAt=null;}});
+  const result=await collectExternalLearning(c,s,project,{now:()=>clock,wait:async ms=>{calls++;if(kind!=='frozen')clock+=ms;}});
+  assert.equal(result.code,'SOURCE_EXTERNAL_WINDOW');assert.equal(c.calls.length,2);if(kind==='frozen')assert.ok(calls>0);else assert.equal(calls,0);persistExternalLearning(s,result,clock);assert.equal(s.externalHistoryMeasurements,undefined);assert.equal(s.decisionHistoryOutcomes,undefined);
+ }
+});
+test('Measurement policy version revisits an old failed check only inside candidate selection, preserving the old journal',async()=>{
+ const s=await setup(),work=externalLearningCandidates(s,project,now)[0];s.externalLearningChecks={[work.event.eventKey]:{project:'p',eventKey:work.event.eventKey,evidenceVersion:'old-measurement-policy',lastCheckedAt:date(now),status:'Leitura indisponível',code:'SOURCE_EXTERNAL_WINDOW'}};
+ const before=structuredClone(s.externalLearningChecks);assert.equal(externalLearningCandidates(s,project,now).length,1);assert.deepEqual(s.externalLearningChecks,before);s.paused=true;assert.equal(externalLearningCandidates(s,project,now).length,0);
 });
