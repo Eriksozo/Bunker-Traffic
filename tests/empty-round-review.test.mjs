@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {emptyRoundEligibility,closeEmptyRound} from '../lib/empty-round-review.mjs';
+import {emptyRoundEligibility,closeEmptyRound,systemRoundEligibility,closeSystemRound} from '../lib/empty-round-review.mjs';
 import {ensureCollaboration,collaborationPlan,claimCollaboration} from '../lib/collaboration.mjs';
 import {createCloudEngine,cloudNext} from '../lib/cloud-engine.mjs';
 import {autonomousWorkPlan} from '../lib/autonomous-work.mjs';
@@ -24,4 +24,39 @@ test('System-only closed rounds are archivable without inventing a finished stag
 
 test('System triage never holds the next due collection as an unfinished four-agent analysis',async()=>{
  const {duePlan}=await import('../lib/cadence.mjs'),f=fixture();f.state.cadence={enabled:true,intervalMinutes:15,start:'06:00',end:'20:00',weekdays:[0,1,2,3,4,5,6],timezone:'UTC'};f.state.jobs[0].slotKey='2026-11-05:840:UTC';closeEmptyRound(f.state,f.round.id,now);const due=duePlan(f.state,new Date(now+15*60000));assert.equal(due.due.length,1);assert.equal(due.due[0].project,'p');assert.equal(due.held.length,0);
+});
+
+
+function pendingFixture(){
+ const f=fixture(Array.from({length:371},(_,i)=>({id:'known'+i,externalId:'c'+i,adAccountId:'a',provider:'meta',status:i<26?'ACTIVE':'PAUSED',name:'Sales '+i,spend:0}))),s=f.state;
+ const today=s.snapshots.find(c=>c.period==='today'&&c.level==='campaign');today.analysisScope={...today.analysisScope,trackedComplete:false,trackedCount:437,unavailableTracked:Array.from({length:66},(_,i)=>({id:'missing'+i,externalId:'missing-c'+i,adAccountId:'a',reason:'no-current-row',checkedAt:iso(now-1000)}))};
+ s.collaborationRounds=[];s.collaborationMessages=[];f.round=ensureCollaboration(s,s.jobs[0],now);return f;
+}
+function reseal(f){f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.round=ensureCollaboration(f.state,f.state.jobs[0],now);}
+test('Missing tracked campaigns are a pending source, never an empty universe, keep decision or completed agent analysis',async()=>{
+ const {closedSystemRound,systemRoundTitle}=await import('../lib/system-round-review.mjs'),{reviewPipeline}=await import('../lib/review-pipeline.mjs'),f=pendingFixture(),before=structuredClone(f.state.snapshots);
+ assert.equal(emptyRoundEligibility(f.state,f.round,now),false);assert.deepEqual(systemRoundEligibility(f.state,f.round,now),{kind:'unavailable-tracked-only',confirmedRows:371,unavailableTrackedCount:66});assert.equal(closeEmptyRound(f.state,f.round.id,now).status,'Releitura necessária');
+ const result=closeSystemRound(f.state,f.round.id,now);assert.equal(result.status,'Fonte pendente');assert.equal(closedSystemRound(f.round),true);assert.match(systemRoundTitle(f.round),/aguardando leitura/);assert.match(f.round.systemReview.reason,/371 linhas/);assert.match(f.round.systemReview.reason,/66 campanhas/);assert.match(f.round.systemReview.reason,/desconhecidos/);assert.deepEqual(f.state.snapshots,before);assert.equal(f.state.collaborationMessages.length,0);assert.equal(f.state.proposals.length,0);assert.equal(f.state.ownerChoices,undefined);assert.equal(f.state.campaignReviewCoverage,undefined);assert.throws(()=>claimCollaboration(f.state,{roundId:f.round.id,agentId:'traffic',executionRef:'not-real',clientId:'claim'},now),/triagem/);
+ const p=reviewPipeline(f.state,'p',now).projects[0];assert.equal(p.status,'Fonte pendente');assert.equal(p.completed,1);assert.equal(p.elapsedSeconds,null);assert.equal(p.stalled,false);assert.equal(p.canRequest,true);assert.equal(reviewPipeline(f.state,'p',now).counts.completed,0);assert.equal(autonomousWorkPlan(f.state,{},now).ready.length,0);
+});
+test('Only independently confirmed no-target source gaps may skip model work; eligible and unknown campaigns remain protected',()=>{
+ for(const mutate of [t=>t.analysisScope.activeComplete=false,t=>t.analysisScope.spentComplete=false,t=>t.analysisScope.trackedComplete=true,t=>delete t.analysisScope.unavailableTracked,t=>t.analysisScope.unavailableTracked[0].checkedAt=iso(now+1),t=>t.analysisScope.unavailableTracked[0].checkedAt=iso(now-3000),t=>t.analysisScope.unavailableTracked.push({...t.analysisScope.unavailableTracked[0]}),t=>t.analysisScope.unavailableTracked[0].externalId=t.rows[0].externalId,t=>t.rows[0].spend=1,t=>t.rows[0].spend=null,t=>delete t.rows[0].status,t=>t.analysisScope.trackedCount=1]){
+  const f=pendingFixture();mutate(f.state.snapshots.find(s=>s.period==='today'&&s.level==='campaign'));reseal(f);const before=structuredClone(f.state);assert.equal(systemRoundEligibility(f.state,f.round,now),false);assert.equal(closeSystemRound(f.state,f.round.id,now).status,'Releitura necessária');assert.deepEqual(f.state,before);
+ }
+});
+test('The autonomous worker triages the actual no-target shape in one system unit without provider or model calls',async()=>{
+ const f=pendingFixture();let state=f.state,calls=0;const engine=createCloudEngine({read:async()=>({state:structuredClone(state),revision:1}),write:async fn=>{const draft=structuredClone(state),out=await fn(draft,1);state=draft;return out;},source:{read:async()=>{calls++;throw Error('Unexpected read');},dispatch:async()=>{calls++;throw Error('Unexpected dispatch');}},ai:{run:async()=>{calls++;throw Error('Unexpected model');}},ops:{},now:()=>now});
+ const out=await engine.step();assert.equal(out.kind,'systemReview');assert.equal(out.status,'Fonte pendente');assert.equal(out.modelCalls,0);assert.equal(calls,0);assert.equal(cloudNext(state,[],now),null);assert.equal(state.collaborationMessages.length,0);assert.equal(state.executions,undefined);
+});
+test('A source-pending triage releases the next scheduled review without inventing an extra collection slot',async()=>{
+ const {duePlan}=await import('../lib/cadence.mjs'),f=pendingFixture();f.state.cadence={enabled:true,intervalMinutes:15,start:'06:00',end:'20:00',weekdays:[0,1,2,3,4,5,6],timezone:'UTC'};f.state.jobs[0].slotKey='2026-11-05:840:UTC';closeSystemRound(f.state,f.round.id,now);
+ assert.equal(duePlan(f.state,new Date(now)).due.length,0);const next=duePlan(f.state,new Date(now+15*60000));assert.equal(next.due.length,1);assert.equal(next.held.length,0);assert.equal(duePlan(f.state,new Date('2026-11-05T21:00:00Z')).due.length,0);assert.equal(f.state.jobs.length,1);
+});
+test('Closed missing-source triage is archivable, and malformed closure cannot masquerade as a completed system unit',async()=>{
+ const {compactCollaboration}=await import('../lib/collaboration.mjs'),{closedSystemRound}=await import('../lib/system-round-review.mjs'),f=pendingFixture();closeSystemRound(f.state,f.round.id,now);const closed=structuredClone(f.round);assert.equal(closedSystemRound({...closed,systemReview:{...closed.systemReview,at:iso(now+1)},completedAt:iso(now+1)},now),false);
+ for(const mutate of [r=>r.systemReview.author='traffic',r=>r.systemReview.sourceHash='other',r=>r.stages[0].status='Pendente',r=>r.stages[0].claimId='claim',r=>r.completedAt=iso(now+1)]){const copy=structuredClone(closed);mutate(copy);assert.equal(closedSystemRound(copy),false);}
+ for(let i=1;i<=3;i++)f.state.collaborationRounds.unshift({...structuredClone(f.round),id:'new'+i,createdAt:iso(now+i)});const result=compactCollaboration(f.state,now+10);const archive=result.archives.find(a=>a.payload.round.id===f.round.id);assert.ok(archive);assert.equal(archive.payload.round.status,'Fonte pendente');assert.equal(archive.payload.messages.length,0);
+});
+test('The original empty-source triage is no longer displayed as an active or stalled agent review',async()=>{
+ const {reviewPipeline}=await import('../lib/review-pipeline.mjs'),f=fixture();closeEmptyRound(f.state,f.round.id,now);const p=reviewPipeline(f.state,'p',now+600000).projects[0];assert.equal(p.status,'Sem campanhas elegíveis');assert.equal(p.elapsedSeconds,null);assert.equal(p.stalled,false);assert.equal(p.completed,1);assert.equal(p.canRequest,true);
 });
