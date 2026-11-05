@@ -51,3 +51,14 @@ Falhas de leitura MCP registram somente ferramenta, código/status seguros, cate
 Filtros de pais são divididos antes do pedido em lotes de até 25 campanhas. Um lote truncado é refinado novamente; contagens, identidade dos pais e presença das linhas inicialmente retornadas são conferidas. Partições divergentes ou incompletas preservam a fonte anterior. Tráfego, criativos, orçamento e gestão recebem tarefas distintas de verificação; a síntese não deve tratar quatro textos genéricos concordantes como sustentação suficiente. Revisão do agente continua diferente de aprovação do dono.
 
 A análise operacional usa analysisScope=meta-operating-cohort: 7d/3d/ontem incluem todo o gasto do recorte Meta; hoje inclui todas as campanhas ativas, com gasto, já acompanhadas e identificadas nas janelas fechadas. Os filhos ativos são recortados aos pais ativos; os filhos com gasto são lidos para todos os pais desse escopo. Arquivo antigo inativo fora desse universo não é declarado como auditado. Importar essa análise exige as 12 leituras independentes. coverage=active-spent-tracked continua exclusivo do cache visual e continua sendo recusado como fonte analítica. Aprovação, moedas, limites e janela de execução não mudam.
+
+
+## Recuperação limitada do transporte Malva MCP
+
+O bridge da nuvem pode repetir uma única vez apenas as ferramentas da lista de leitura, com os mesmos argumentos. A política aceita falhas de rede/timeout ou HTTP 408, 429, 500, 502, 503 e 504; acesso negado, validação, limites de entrada, JSON inválido e falhas de protocolo não são repetidos. O status HTTP da origem fica explícito, separado do HTTP 502 do bridge. Não converte qualquer erro 4xx em indisponibilidade transitória.
+
+Cada tentativa mantém o limite de 20 segundos; o orçamento total das leituras é 26 segundos, abaixo do transporte Supabase de 30 segundos. A segunda tentativa usa apenas o tempo restante. O intervalo padrão é 500 ms; `Retry-After` em segundos ou data é respeitado. Se exigir mais de 5 segundos de espera ou não couber no orçamento, a leitura falha explicitamente, preservando o intervalo no diagnóstico; nenhuma nova agenda ou reserva é criada.
+
+Uma recuperação registra `mcp_read_recovered` nos logs do bridge, sem credenciais, corpo da resposta ou argumentos das campanhas. Falhas definitivas preservam status, categoria, campos permitidos, tentativas e duração pelo bridge, transporte e diário da coleta. Os timestamps e métricas retornados pela origem permanecem inalterados e continuam sujeitos às validações de identidade, cobertura e atualização.
+
+`tracking_set_ad_budget` e `tracking_set_ad_status` têm sempre uma única tentativa de transporte. Timeout, erro HTTP, falha ao ler a resposta ou resposta ambígua nunca autorizam reenvio. Aprovação exata, consumo único do dispatch e conferência posterior permanecem independentes. Este mecanismo não adiciona retry de CAS, gravação de banco, inferência ou alterações na Meta.

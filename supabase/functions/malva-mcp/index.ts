@@ -1,5 +1,5 @@
 import {authenticateServer} from './server-auth.mjs';
-import {callRemoteMcp,cloudReadTools,cloudWriteTools,CloudError} from './cloud-malva.mjs';
+import {callRemoteMcp,cloudReadTools,cloudWriteTools,CloudError,safeMcpDiagnostic} from './cloud-malva.mjs';
 import {authorizeCloudDispatch} from './cloud-dispatch-guard.mjs';
 import {hydrateCoreState} from './core-storage.mjs';
 const result=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
@@ -22,6 +22,6 @@ Deno.serve(async(req:Request)=>{
    if(receipt.changes!==1)return result({dispatchGranted:false,verificationOnly:true});
   }
   const key=Deno.env.get('MALVA_MCP')||Deno.env.get('MALVA_API');
-  return result(await callRemoteMcp({key,tool,args}));
- }catch(e){if(e instanceof CloudError&&cloudReadTools.includes(requestedTool))console.warn(JSON.stringify({event:'mcp_read_failure',tool:requestedTool,code:e.code,providerCode:e.providerCode||null,providerStatus:e.providerStatus||null,providerCategory:e.providerCategory||null,providerFields:e.providerFields||[],requestShape}));return result({error:e instanceof CloudError?e.code:'MCP_BRIDGE_FAILED'},502);}
+  return result(await callRemoteMcp({key,tool,args,onRecovery:recovery=>console.info(JSON.stringify({event:'mcp_read_recovered',...recovery}))}));
+ }catch(e){const diagnostic=e instanceof CloudError?safeMcpDiagnostic(e):{};if(e instanceof CloudError&&cloudReadTools.includes(requestedTool))console.warn(JSON.stringify({event:'mcp_read_failure',tool:requestedTool,code:e.code,...diagnostic,requestShape}));return result({error:e instanceof CloudError?e.code:'MCP_BRIDGE_FAILED',diagnostic},502);}
 });
