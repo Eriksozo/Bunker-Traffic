@@ -11,6 +11,7 @@
 - O modal de aprovação bloqueia fechamento por Escape e clique externo enquanto envia, assim como já fazia o editor.
 - O histórico só apresenta aplicação conferida com o recibo arquivado ou com proposta, versão, identidade, valores e leitura posterior realmente correspondentes. Um status isolado de execução confirmada não basta. Leituras posteriores ao próprio instante de confirmação são rejeitadas como prova inconsistente.
 - Contas explicitamente inaptas não aceitam aumento no card. Uma inaptidão nova também bloqueia aumento/ativação na pré-conferência do executor. Pausa e redução seguem possíveis para contenção.
+- Horários de incidentes em milissegundos e leituras em ISO recebem o mesmo tratamento: um instante válido não aparece como Data N/D.
 - O histórico recebe os metadados dos períodos salvos para exibir a origem das métricas.
 
 ## Validação

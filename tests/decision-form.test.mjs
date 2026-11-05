@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {decisionPercent,validDecisionPercent,decisionBudgetAfter,decisionDraftError,exactDecisionProposal,sameDecisionSession} from '../lib/decision-form.mjs';
+import {decisionPercent,validDecisionPercent,decisionBudgetAfter,decisionDraftError,exactDecisionProposal,sameDecisionSession,decisionTimestamp} from '../lib/decision-form.mjs';
 const now=Date.parse('2026-11-05T14:00:00Z');
 function fixture(){
  const draft={action:'reduce',percent:'20',reason:''};
@@ -45,4 +45,10 @@ test('Source replacements invalidate editor sessions; unchanged reads preserve t
  assert.equal(sameDecisionSession(session,{...card,signature:'new-data'}),false);
  assert.equal(sameDecisionSession(session,{...card,id:'another-account-card'}),false);
  assert.equal(sameDecisionSession(session,null),false);
+});
+
+
+test('Incident epoch timestamps and ISO source times display the same valid instant',()=>{
+ assert.equal(decisionTimestamp(now),now);assert.equal(decisionTimestamp(new Date(now).toISOString()),now);assert.equal(decisionTimestamp(0),0);
+ for(const value of [null,undefined,'',' ','broken',Infinity,NaN,8640000000000001])assert.ok(Number.isNaN(decisionTimestamp(value)));
 });

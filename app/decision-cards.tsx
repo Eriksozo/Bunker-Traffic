@@ -6,7 +6,7 @@ import {ArrowDownRight,ArrowRight,ArrowUpRight,BookOpen,BrainCircuit,Check,Chevr
 import {decisionLearningPlan} from '../lib/decision-cards.mjs';
 import {decisionKanban,decisionSuggestion,decisionReviewState,matchesDecisionFilter} from '../lib/decision-kanban.mjs';
 import {readChoiceResolution,readLiveChoiceResolution} from '../lib/decision-resolution.mjs';
-import {decisionPercent as percentage,validDecisionPercent as validPercent,decisionBudgetAfter as nativeAfter,exactDecisionProposal as exactProposal,decisionDraftError,sameDecisionSession} from '../lib/decision-form.mjs';
+import {decisionPercent as percentage,validDecisionPercent as validPercent,decisionBudgetAfter as nativeAfter,exactDecisionProposal as exactProposal,decisionDraftError,sameDecisionSession,decisionTimestamp} from '../lib/decision-form.mjs';
 import {decisionQueue} from '../lib/decision-reconsider.mjs';
 import {decorateCampaignCard} from '../lib/campaign-live-context.mjs';
 import './decision-cards.css';
@@ -37,8 +37,8 @@ const array=(value:any):any[]=>Array.isArray(value)?value:[];
 const finite=(value:any):value is number=>typeof value==='number'&&Number.isFinite(value);
 const number=(value:any)=>finite(value)?value.toLocaleString('pt-BR',{maximumFractionDigits:2}):'N/D';
 const ratio=(value:any)=>finite(value)?number(value)+'x':'N/D';
-const stamp=(value:any)=>value&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('pt-BR',{timeZone:'America/Boa_Vista',dateStyle:'short',timeStyle:'short'}):'Data N/D';
-const time=(value:any)=>Number.isFinite(Date.parse(value))?Date.parse(value):NaN;
+const stamp=(value:any)=>Number.isFinite(decisionTimestamp(value))?new Date(decisionTimestamp(value)).toLocaleString('pt-BR',{timeZone:'America/Boa_Vista',dateStyle:'short',timeStyle:'short'}):'Data N/D';
+const time=decisionTimestamp;
 function dayLabel(value:any,timezone='America/Boa_Vista') {try{return Number.isFinite(time(value))?new Intl.DateTimeFormat('pt-BR',{timeZone:timezone,day:'2-digit',month:'2-digit'}).format(new Date(value)):'N/D';}catch{return 'N/D';}}
 function dayKey(value:any,timezone='America/Boa_Vista') {try{return Number.isFinite(time(value))?new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value)):null;}catch{return null;}}
 function windowMeta(card:any,id:string){return {...array(card.sourceCut).find(source=>source.period===id&&source.level==='campaign'),...card.windows?.[id]};}
