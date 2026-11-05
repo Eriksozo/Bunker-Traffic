@@ -42,12 +42,12 @@ test('A prior keep leaves the queue; a verified native-state difference reopens 
  assert.equal(current.row.status,'ACTIVE');assert.equal(s.campaignChanges.length,1);assert.equal(s.campaignChanges[0].executionByBunker,false);
  assert.equal(current.monitor.kind,'change');assert.equal(current.monitor.afterChoice,true);assert.equal(current.monitor.ready,false);assert.equal(current.actionable.keep,false);
  assert.deepEqual(decisionQueue(s,project,at+60000).map(c=>c.row.adAccountId),['account-a']);
- assert.throws(()=>keep(s,'premature',at+60000),/fonte/);assert.deepEqual(s.ownerChoices[0],saved);assert.equal(s.executions,undefined);
+ const intent=keep(s,'premature',at+60000);assert.equal(intent.intentOnly,true);assert.equal(intent.proposalId,null);assert.equal(card(s,at+60000).monitor.ready,false);assert.deepEqual(s.ownerChoices[0],saved);assert.equal(s.executions,undefined);
 });
 
-test('New campaign data needs the new round and three independent scoped opinions before another choice',()=>{
+test('New campaign data needs scoped opinions for team readiness, while manual intent remains available',()=>{
  const s=fixture(),first=keep(s),saved=structuredClone(first);refreshed(s);const round=newRound(s);
- assert.equal(card(s,at+60002).monitor.ready,false);assert.throws(()=>keep(s,'before-opinions',at+60002),/fonte/);
+ assert.equal(card(s,at+60002).monitor.ready,false);const intentState=structuredClone(s),intent=keep(intentState,'before-opinions',at+60002);assert.equal(intent.intentOnly,true);assert.equal(intentState.executions,undefined);assert.equal(card(intentState,at+60002).monitor.ready,false);
  opinions(s,round,{count:2});assert.equal(card(s,at+60004).monitor.ready,false);
  const claim=claimCollaboration(s,{roundId:round.id,agentId:'budget',executionRef:'budget-last',clientId:'budget-last'},at+60005);
  postCollaboration(s,{roundId:round.id,claimId:claim.claimId,executionRef:claim.executionRef,clientId:'budget-last-opinion',toAgent:'ops',kind:'conclusion',text:'Revisei o orçamento no novo cenário.',evidenceRefs:[{period:'today',level:'campaign',adAccountId:'account-a',externalId:'same-id',fetchedAt:iso(at+59000)}]},at+60006);

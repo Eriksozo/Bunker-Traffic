@@ -1,3 +1,4 @@
+import {isManualDecision} from './decision-intent.mjs';
 import {buildDecisionCards} from './decision-cards.mjs';
 import {campaignLiveDrift} from './campaign-live-context.mjs';
 import {storage} from './storage';
@@ -18,6 +19,9 @@ export async function updateLiveState(input:Record<string,unknown>,state?:unknow
 /** Cache is not evidence for analysis or approval. A newer divergent native
  * state can only veto a stale choice until a full reread has been completed. */
 export async function assertCurrentDecisionContext(state:any,input:any){
+ // Recording feedback never authorizes a provider command. Identity and the
+ // exact displayed source seal are still checked by recordOwnerChoice.
+ if(isManualDecision(input))return;
  if(input.op!=='cardDecision'&&!(input.op==='proposalReview'&&input.decision==='approve'))return;
  const proposal=input.op==='proposalReview'||input.op==='cardDecision'&&input.approveExact?(state.proposals||[]).find((p:any)=>p.id===(input.op==='proposalReview'?input.id:input.proposalId)):null;
  const project=input.project||proposal?.project;if(!project)return;

@@ -1,3 +1,4 @@
+import {recordIncident} from '../lib/campaign-incidents.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildDecisionCards,recordOwnerChoice,recordCardSuggestion,linkChoiceProposal,importDecisionHistory,decisionLearningPlan,decisionCardLimits} from '../lib/decision-cards.mjs';
@@ -91,9 +92,9 @@ test('Owner intentions freeze native before/after and do not approve or execute'
  const request={project,cardId:c.id,signature:c.signature,choice:'increase',percent:50,clientId:'choice',ownerId:'forged-client-owner'};assert.equal(recordOwnerChoice(f.state,request,'server-owner',now+1).id,record.id);assert.throws(()=>recordOwnerChoice(f.state,{...request,percent:100},'server-owner',now),/clientId/);assert.equal(recordOwnerChoice(f.state,{...request,clientId:'double-click'},'server-owner',now).id,record.id);assert.equal(f.state.ownerChoices.length,1);
 });
 
-test('Wrong signature, foreign project, changed source, old data and bad native values cannot submit financial choices',()=>{
+test('Wrong signature, foreign project, changed source and bad native values cannot submit financial choices',()=>{
  for(const mutation of [f=>f.state.snapshots[3].rows[0].dailyBudget=200,f=>f.state.snapshots[0].rows[0].spend=999,f=>f.state.config[project].targetRoas=3]){const f=fixture(),c=card(f);mutation(f);assert.throws(()=>recordOwnerChoice(f.state,{project,cardId:c.id,signature:c.signature,choice:'increase',percent:20,clientId:'changed'},'owner',now),/card mudou/);assert.equal(f.state.ownerChoices,undefined);}
- const old=fixture();assert.throws(()=>{const c=buildDecisionCards(old.state,project,now+61*60000)[0];recordOwnerChoice(old.state,{project,cardId:c.id,signature:c.signature,choice:'pause',clientId:'stale'},'owner',now+61*60000);},/fonte/);
+ const old=fixture(),at=now+61*60000,c=buildDecisionCards(old.state,project,at)[0];const intent=recordOwnerChoice(old.state,{project,cardId:c.id,signature:c.signature,choice:'pause',clientId:'stale'},'owner',at);assert.equal(intent.intentOnly,true);assert.equal(intent.status,'Pendente de revisão');assert.equal(old.state.executions,undefined);
  for(const row of [{budgetCurrency:undefined},{dailyBudget:null},{lifetimeBudget:1000},{dailyBudget:0}]){const f=fixture({row});assert.throws(()=>choose(f),/fonte/);assert.equal(f.state.ownerChoices,undefined);}
  for(const [choice,percent] of [['increase',0],['increase',1001],['reduce',100],['reduce',-1],['keep',20],['pause',10]])assert.throws(()=>choose(fixture(),{choice,percent}));
 });
@@ -249,4 +250,29 @@ test('Disabled accounts cannot receive owner increase choices; containment remai
  const before=structuredClone(f.state);
  assert.throws(()=>recordOwnerChoice(f.state,{project,cardId:card.id,signature:card.signature,choice:'increase',percent:50,clientId:'disabled-increase'},'owner',now),/não permitem/);
  assert.deepEqual(f.state,before);
+});
+
+
+test('Owner can record all four intentions during expired analysis, without authorizing a proposal',()=>{
+ for(const action of ['increase','reduce','pause','keep']){
+  const f=fixture(),at=now+70*60000,c=buildDecisionCards(f.state,project,at)[0];
+  const record=recordOwnerChoice(f.state,{project,cardId:c.id,signature:c.signature,choice:action,...(['increase','reduce'].includes(action)?{percent:30}:{}),clientId:'intent-'+action},'owner',at);
+  assert.equal(record.intentOnly,true);assert.equal(record.status,action==='keep'?'Mantido':'Pendente de revisão');assert.equal(record.proposalId,null);
+  assert.equal(f.state.executions,undefined);assert.equal(f.state.proposals.length,0);
+ }
+});
+test('Manual intention after an incident leaves exact execution blocked and preserves reference values',()=>{
+ for(const action of ['increase','reduce','pause','keep']){
+  const f=fixture({row:{level:'campaign'}});recordIncident(f.state,{project,op:'incidentReport',kind:'checkout',status:'Em retomada',note:'Checkout retomado',scope:{accountIds:[],objectIds:[]},clientId:'incident'},'owner',now-1000);
+  const c=buildDecisionCards(f.state,project,now)[0];assert.equal(c.monitor.requiresReview,true);assert.equal(c.actionable.keep,false);
+  const input={project,cardId:c.id,signature:c.signature,choice:action,...(['increase','reduce'].includes(action)?{percent:20}:{}),clientId:'manual-'+action};
+  assert.throws(()=>recordOwnerChoice(f.state,{...input,approveExact:true,clientId:'blocked-approval'},'owner',now));assert.equal(f.state.ownerChoices,undefined);
+  const record=recordOwnerChoice(f.state,input,'owner',now);assert.equal(record.intentOnly,true);assert.equal(record.before.dailyBudget,100);assert.equal(record.proposalId,null);assert.equal(f.state.executions,undefined);
+ }
+});
+test('Intentions still reject source replacement, disabled office and duplicate owner decisions',()=>{
+ const f=fixture(),c=card(f),input={project,cardId:c.id,signature:c.signature,choice:'keep',clientId:'keep-stale'};
+ f.state.paused=true;assert.throws(()=>recordOwnerChoice(f.state,input,'owner',now),/pausado/);assert.equal(f.state.ownerChoices,undefined);
+ f.state.paused=false;recordOwnerChoice(f.state,input,'owner',now);
+ const next=buildDecisionCards(f.state,project,now)[0];assert.throws(()=>recordOwnerChoice(f.state,{...input,signature:next.signature,clientId:'other'},'owner',now),/já tem uma decisão/);
 });
