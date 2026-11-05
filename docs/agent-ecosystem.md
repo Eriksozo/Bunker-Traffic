@@ -35,3 +35,9 @@ Somente a mensagem final completa do modelo é aceita. Saída truncada, ferramen
 O teste de compatibilidade utiliza dados sintéticos, chamadas reais ao binding Workers AI e os validadores da aplicação. Não publica pareceres sintéticos na operação nem altera campanhas. A passagem nesse teste demonstra compatibilidade do protocolo; não demonstra qualidade financeira ou decisões perfeitas. A confirmação operacional depende das rodadas reais após o deploy.
 
 Referências oficiais consultadas: [gpt-oss-120b na Cloudflare](https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/) e [modelo anterior](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/). Padrões externos já adaptados e suas licenças estão em `docs/references/agent-learning-sources.json`.
+
+## Revisão independente de proposta
+
+A revisão financeira usa o alvo exato da proposta e seu pai, dentro do lote admitido. Mantém os quatro períodos, a hierarquia e os pareceres da equipe referentes à campanha; as leituras dos demais alvos ficam omitidas de forma explícita apenas nesse pacote. Para proposta em conjunto/anúncio, o filho exato é incluído mesmo quando estiver abaixo dos quatro maiores gastos da amostra; períodos sem esse filho continuam desconhecidos.
+
+Alvo ausente, ambíguo, de outra conta ou fora do lote não toma emprestado o contexto de outra campanha. A tentativa é encerrada como falha e permanece rastreável. O parecer guarda modelo, tamanho do pacote e objeto revisado. Ele não altera o estado de aprovação do dono nem envia comandos. A análise inicial do lote continua abrangendo os seis alvos priorizados.
