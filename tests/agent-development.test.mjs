@@ -158,3 +158,35 @@ test('A memory confrontation survives archival as an authored judgment without b
  const plan=agentDevelopmentPlan(f.state,'p',now).agents.find(a=>a.id==='traffic');assert.equal(plan.memoryConfrontations,1);assert.equal(plan.memoryRejections,1);assert.equal(plan.financialSuccessRate,null);assert.deepEqual(plan.recall[0].memoryReview,m.memoryReview);
  const memory=cloudAgentMemory(f.state,{id:'next',project:'p'},'traffic',[{adAccountId:'a',externalId:'c'}],{},now);assert.equal(memory.episodes[0].memoryReview.sourceId,'prior-choice');assert.equal(cloudAgentMemory(f.state,{id:'next',project:'p'},'creative',[],{},now).episodes.length,0);
 });
+
+
+test('Consolidated recall uses current grounded evidence across projects, not project iteration or generic prose',()=>{
+ const f=fixture(),m=contribute(f,'traffic').message;
+ f.state.agentEpisodes=[{messageId:'q-new',project:'q',agentId:'traffic',roundId:'q-before',sourceHash:'q-source',createdAt:iso(now-100),reflection:{...m.reflection,nextCheck:'Conferir aquisição atual do outro projeto.',citations:[{...citation,externalId:'q-campaign'}]}},{messageId:'p-generic',project:'p',agentId:'traffic',roundId:'p-old',sourceHash:'old',createdAt:iso(now),reflection:{...m.reflection,citations:[],nextCheck:'Texto genérico sem evidência.'}}];
+ m.createdAt=iso(now-1000);const before=structuredClone(f.state),plan=agentDevelopmentPlan(f.state,'all',now),traffic=plan.agents[0];
+ assert.equal(traffic.recall[0].messageId,'q-new');assert.equal(traffic.recall.some(e=>e.messageId==='p-generic'),false);assert.equal(traffic.episodes,3);assert.equal(traffic.grounded,2);assert.equal(traffic.next,'Conferir aquisição atual do outro projeto.');assert.equal(traffic.financialSuccessRate,null);assert.deepEqual(f.state,before);
+ const local=cloudAgentMemory(f.state,{id:'next',project:'p'},'traffic',[{adAccountId:'a',externalId:'c'}],{},now);assert.deepEqual(local.episodes.map(e=>e.messageId),[m.id]);assert.notEqual(local.next,'Texto genérico sem evidência.');
+});
+test('The next check follows the actually retrieved object rather than a newer unrelated profile lesson',()=>{
+ const f=fixture(),m=contribute(f,'traffic').message;m.createdAt=iso(now-1000);m.reflection.nextCheck='Conferir compras novas desta campanha.';
+ f.state.agentEpisodes=[{messageId:'new-other',project:'p',agentId:'traffic',roundId:'old-other',sourceHash:'other',createdAt:iso(now),reflection:{...m.reflection,nextCheck:'Conferir outro objeto.',citations:[{...citation,externalId:'different'}]}}];
+ const c=cloudAgentMemory(f.state,{id:'next',project:'p'},'traffic',[{adAccountId:'a',externalId:'c'}],{},now);assert.equal(c.episodes[0].messageId,m.id);assert.equal(c.episodes[0].retrieval.sameObject,true);assert.equal(c.next,'Conferir compras novas desta campanha.');assert.equal(c.episodes[0].retrieval.financialCredit,false);
+});
+test('A compacted peer counterpoint survives pruning of the reviewer cache without becoming financial credit',()=>{
+ const f=fixture(),m=contribute(f,'traffic').message,r=reflection();m.createdAt=iso(now-2000);r.peerChecks=[{messageId:m.id,stance:'challenge',reason:'Aquisição precisa ser repetida.'}];const peer=contribute(f,'creative',r).message;
+ const archive={key:'collaboration:'+f.round.id,payload:{round:structuredClone(f.round),messages:structuredClone(f.state.collaborationMessages),proposals:[]}},original=structuredClone(archive);
+ const extra=Array.from({length:9},(_,i)=>({key:'collaboration:new'+i,payload:{round:{...f.round,id:'new'+i,sourceHash:'newhash'+i},messages:[{...peer,id:'newpeer'+i,roundId:'new'+i,createdAt:iso(now-100+i),reflection:{...peer.reflection,peerChecks:[]}}]}}));peer.createdAt=iso(now-1000);archive.payload.messages.find(x=>x.id===peer.id).createdAt=peer.createdAt;
+ retainAgentEpisodes(f.state,[archive,...extra]);assert.equal(f.state.agentEpisodes.some(e=>e.messageId===peer.id),false);f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];
+ const memory=cloudAgentMemory(f.state,{id:'next',project:'p'},'traffic',[{adAccountId:'a',externalId:'c'}],{},now),feedback=memory.episodes[0].peerFeedback[0];assert.equal(feedback.reviewMessageId,peer.id);assert.equal(feedback.fromAgent,'creative');assert.equal(feedback.roundId,f.round.id);assert.equal(feedback.sourceHash,f.round.sourceHash);assert.equal(feedback.stance,'challenge');assert.match(memory.next,/contrapontos/);
+ const plan=agentDevelopmentPlan(f.state,'p',now).agents[0];assert.equal(plan.challengesReceived,1);assert.equal(plan.measuredTeamCases,0);assert.equal(plan.financialSuccessRate,null);assert.deepEqual(archive.payload.messages.find(x=>x.id===m.id),original.payload.messages.find(x=>x.id===m.id));
+});
+test('A real challenge and the newer observation of the same campaign can both inform retrieval; repeated copies cannot fill it',()=>{
+ const f=fixture(),m=contribute(f,'traffic').message,r=reflection();r.peerChecks=[{messageId:m.id,stance:'challenge',reason:'Falta recorrência.'}];contribute(f,'creative',r);m.createdAt=iso(now-1000);
+ f.state.agentEpisodes=Array.from({length:5},(_,i)=>({messageId:'new'+i,project:'p',agentId:'traffic',roundId:'other'+i,sourceHash:'hash'+i,createdAt:iso(now-i),reflection:{...m.reflection,peerChecks:[]}}));
+ const before=structuredClone(f.state),memory=cloudAgentMemory(f.state,{id:'next',project:'p'},'traffic',[{adAccountId:'a',externalId:'c'}],{},now);assert.equal(memory.episodes.length,2);assert.equal(memory.episodes[0].messageId,m.id);assert.equal(memory.episodes[1].messageId,'new0');assert.equal(memory.episodes[0].retrieval.hasPeerChallenge,true);assert.equal(memory.episodes[1].retrieval.hasPeerChallenge,false);assert.deepEqual(f.state,before);
+});
+test('Archived counterpoints cannot cross project, role, round, source or clock boundaries',()=>{
+ const f=fixture(),m=contribute(f,'traffic').message;retainAgentEpisodes(f.state,[{key:'archive',payload:{round:f.round,messages:[m]}}]);f.state.collaborationRounds=[];f.state.collaborationMessages=[];
+ const base={reviewMessageId:'review',project:'p',roundId:f.round.id,sourceHash:f.round.sourceHash,fromAgent:'creative',stance:'challenge',reason:'Conferir aquisição.',createdAt:iso(now)};
+ for(const patch of [{project:'q'},{roundId:'other'},{sourceHash:'other'},{fromAgent:'traffic'},{fromAgent:'foreign'},{createdAt:iso(now+1)},{createdAt:iso(now-1)},{stance:'approve'}]){f.state.agentEpisodes[0].peerFeedback=[{...base,...patch}];const c=cloudAgentMemory(f.state,{id:'next',project:'p'},'traffic',[],{},now);assert.equal(c.episodes[0].peerFeedback.length,0);assert.equal(c.episodes[0].retrieval.hasPeerChallenge,false);}
+});
