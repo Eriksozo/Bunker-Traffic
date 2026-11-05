@@ -24,6 +24,20 @@ function fixture(){
  return {state,p,row};
 }
 function memory(f,loseSubmit=false){let state=f.state;return {get state(){return state;},write:async fn=>{const draft=structuredClone(state),r=await fn(draft,1);state=draft;if(loseSubmit&&r?.dispatchGranted===true)throw Error('lost response');return r;}};}
+test('A real peer question receives a dialogue answer without completing synthesis, approving or dispatching',async()=>{
+ const f=fixture();f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];f.state.executions=[];
+ for(const cut of f.state.snapshots)for(const r of cut.rows){r.spend=100;r.revenueNet=200;r.frontOrders=2;}
+ const round=ensureCollaboration(f.state,f.state.jobs[0]),refs=cloudEvidence(f.state,project,cloudFocus(f.state,project));let question;
+ for(const role of ['traffic','creative','budget']){
+  const claim=claimCollaboration(f.state,{roundId:round.id,agentId:role,executionRef:'actual-'+role,clientId:'prepare-'+role}),base={roundId:round.id,claimId:claim.claimId,executionRef:claim.executionRef,evidenceRefs:refs};
+  if(role==='budget')question=postCollaboration(f.state,{...base,kind:'message',toAgent:'ops',requiresReply:true,text:'Devemos aguardar novas compras após a última edição?',clientId:'budget-question'});
+  postCollaboration(f.state,{...base,kind:'conclusion',toAgent:'ops',text:'Conferir novas compras após a edição.',clientId:'conclusion-'+role});
+ }
+ const store=memory(f),before=structuredClone(round.stages);let calls=0;
+ const ai={run:async(_m,request)=>{calls++;const b=JSON.parse(request.messages[1].content),r=b.reflectionRequirements;assert.equal(b.context.campaignReviewPolicy,undefined);assert.equal(b.context.receivedQuestion.id,question.id);assert.equal(request.response_format.json_schema.properties.campaignReadings.maxItems,0);assert.equal(request.response_format.json_schema.properties.suggestions.maxItems,0);return {response:{decision:'Aguardar novas compras',reason:'Separar o resultado posterior à edição.',nextStep:'Conferir nova aquisição na síntese.',text:'Vamos separar as compras posteriores à edição antes de sugerir outro ajuste.',campaignReadings:[],suggestions:[],question:null,reflection:{lesson:'Comparar a resposta posterior ao ajuste.',uncertainty:'Efeito ainda não medido.',nextCheck:'Conferir compras novas.',citations:b.evidenceSelection.reflectionExamples.slice(0,1),peerChecks:r.requiredPeerRoles.map(role=>({messageId:r.peerConclusions.find(p=>p.role===role).messageId,stance:'inconclusive',reason:'Resultado posterior à edição ainda não medido.'}))}}};}};
+ const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{dispatch:async()=>{throw Error('No action authorized');}},ai,ops:{}});
+ const result=await engine.step();assert.equal(result.kind,'discussion');assert.equal(calls,1);const reply=store.state.collaborationMessages.find(m=>m.replyTo===question.id);assert.ok(reply);assert.equal(reply.kind,'message');assert.equal(reply.fromAgent,'ops');assert.deepEqual(store.state.collaborationRounds[0].stages,before);assert.equal(cloudNext(store.state).kind,'stage');assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);assert.equal(store.state.campaignReviewCoverage,undefined);
+});
 test('cloud dispatch uses the exact prepared command once, then real readback confirms',async()=>{
  const f=fixture(),store=memory(f);let calls=0;const source={dispatch:async(command,proof)=>{calls++;const a=authorizeCloudDispatch(store.state,{tool:command.tool,args:command.arguments,execution:proof});assert.equal(a.command.arguments.dailyBudget,80);}};
  const out=await cloudDispatch({write:store.write,source,prepareGuard:async()=>{},proposal:f.p,executionRef:'cloud-run',readObservation:async()=>({source:'Malva MCP',complete:true,projectId:project,level:'campaign',fetchedAt:iso(Date.now()),rows:[{...f.row,dailyBudget:calls?80:100}]})});

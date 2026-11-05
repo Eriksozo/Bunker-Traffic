@@ -221,3 +221,8 @@ As coletas já reservadas continuam ordenadas pelo início da reserva, preservan
 ### Relógios das comparações retrospectivas
 
 A política v2 permite uma única espera assíncrona de até 1 segundo quando os únicos erros da janela são timestamps da fonte ligeiramente no futuro. Depois da espera, o executor lê novamente seu relógio e repete todas as validações originais. Não altera timestamps, não adiciona tolerância aos validadores e não repete a chamada ao Malva. Relógio que não avançou, divergência maior ou falha de identidade/moeda/janela continuam recusados. A versão integra o fingerprint da medição: uma falha da política anterior pode ser reavaliada na próxima coleta já admitida, preservando o registro anterior e sem criar agenda ou reserva retroativa.
+
+
+### Perguntas entre agentes
+
+A resposta a uma pergunta da rodada é diálogo, não uma nova conclusão por campanha. Seu esquema permite `campaignReadings: []` e não permite sugestões financeiras; o servidor registra somente a resposta ligada à pergunta e às fontes reais. Ela não conclui a síntese nem credita cobertura individual. Etapas e revisões com `campaignReviewPolicy` continuam exigindo uma leitura verificada por alvo, sem omissões, duplicação ou números de outra conta.

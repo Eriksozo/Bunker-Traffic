@@ -33,6 +33,14 @@ test('Every supplied target needs an authored reading with exact numbers; omissi
  for(const mutate of [r=>r.pop(),r=>r.push(r[0]),r=>r[1]=r[0],r=>r[0].adAccountId='foreign',r=>r[0].citations[0].value=999,r=>r[0].citations=[],r=>r[0].citations[0].externalId='c1']){const r=structuredClone(valid);mutate(r);assert.throws(()=>validateCampaignReadings(r,c,'traffic'));}
  assert.throws(()=>validateCampaignReadings(undefined,c,'traffic'),e=>e.code==='CLOUD_CAMPAIGN_READING_REQUIRED');
 });
+test('Dialogue may omit individual assessments without claiming coverage; stage and review requirements stay strict',()=>{
+ const f=fixture(2),dialogue={...context(f.rows)};delete dialogue.campaignReviewPolicy;
+ assert.equal(validateCampaignReadings([],dialogue,'ops'),null);assert.equal(validateCampaignReadings(undefined,dialogue,'ops'),null);
+ for(const role of ['traffic','creative','budget','ops'])assert.throws(()=>validateCampaignReadings([],context(f.rows),role),e=>e.code==='CLOUD_CAMPAIGN_READING_REQUIRED');
+ assert.throws(()=>validateCampaignReadings([reading(f.rows[0])],dialogue,'ops'),e=>e.code==='CLOUD_CAMPAIGN_READING_REQUIRED');
+ const foreign=f.rows.map(reading);foreign[0].adAccountId='other-account';assert.throws(()=>validateCampaignReadings(foreign,dialogue,'ops'),e=>e.code==='CLOUD_CAMPAIGN_READING_SCOPE');
+ const wrong=f.rows.map(reading);wrong[0].citations[0].value=-1;assert.throws(()=>validateCampaignReadings(wrong,dialogue,'ops'),e=>e.code==='CLOUD_CAMPAIGN_READING_EVIDENCE');
+});
 test('Creative readings must cite a real numeric child; missing data cannot become a candidate',()=>{
  const f=fixture(1),c=context(f.rows),r=reading(f.rows[0]);c.campaigns[0].hierarchy=[{period:'today',level:'ad',rows:[{externalId:'ad',adAccountId:'a',spend:25}]}];assert.throws(()=>validateCampaignReadings([r],c,'creative'));r.citations=[{period:'today',level:'ad',externalId:'ad',metric:'spend',value:25}];assert.doesNotThrow(()=>validateCampaignReadings([r],c,'creative'));
  const empty=context([{externalId:'empty',adAccountId:'a'}]),unknown={adAccountId:'a',externalId:'empty',assessment:'candidate',reason:'Fonte ausente.',citations:[]};assert.throws(()=>validateCampaignReadings([unknown],empty,'traffic'));unknown.assessment='investigate';assert.doesNotThrow(()=>validateCampaignReadings([unknown],empty,'traffic'));
