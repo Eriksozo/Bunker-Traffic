@@ -16,7 +16,7 @@ Cada coleta confirma 12 fontes: campanha/conjunto/anúncio em 7 e 3 dias complet
 
 Cada unidade prioriza até seis campanhas para histórico e detalhe diário. O pacote do modelo pode reduzir essa amostra e os filhos exibidos para caber no limite: quantidades omitidas e campanhas adiadas são declaradas. A cobertura é declarada: coleta completa não significa parecer individual de toda campanha. Tráfego, criativos, orçamento e gestão fazem chamadas separadas ao modelo, com perguntas materiais e revisão vinculada. Sugestões de campanha são o escopo financeiro atual deste executor; hierarquia é lida para avaliar os filhos. Sem evidência, investigar/manter.
 
-O cache visual consulta até dois projetos por ciclo e preserva timestamps reais. É consulta periódica, não streaming nem garantia de atraso zero da Meta/Malva. Erros por projeto ficam visíveis sem transformar ausência em zero. Órbita ainda não tem credencial própria neste executor: aliases/contexto importados conservam data, sem alegar consulta atual independente.
+O cache visual consulta até dois projetos por ciclo e preserva timestamps reais. É consulta periódica, não streaming nem garantia de atraso zero da Meta/Malva. Erros por projeto ficam visíveis sem transformar ausência em zero. Órbita: `Orbita_token` alimenta a função `orbita-mcp` no Supabase. Etapas elegíveis atualizam o contexto editorial por projeto com intervalo mínimo de 60s, identidade conciliada e cobertura parcial explícita. Não há transições de produção nem alterações de anúncios por esse conector.
 
 ## Aprovação e envio
 

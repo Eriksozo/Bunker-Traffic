@@ -3,7 +3,7 @@
 ## Responsabilidade de cada conexão
 
 - **Malva MCP:** quatro períodos e três níveis Meta, aquisição front, custos, moedas, histórico de edição e leitura posterior à aplicação. O dado contém seu horário de coleta e sincronização. A origem pode atrasar.
-- **Órbita MCP:** identidade e situação de produção dos criativos, conciliadas por projeto e nomenclatura exata. Não representa vendas, entrega Meta ou rentabilidade. O executor independente precisa da conexão de servidor; a conexão do desktop não a substitui. Sem metadados atuais conciliados, o pacote declara a lacuna.
+- **Órbita MCP:** identidade e situação de produção dos criativos, conciliadas por projeto e nomenclatura exata. Não representa vendas, entrega Meta ou rentabilidade. O executor independente usa `Orbita_token` via função de servidor `orbita-mcp`; a conexão do desktop não a substitui. Sem metadados atuais conciliados, o pacote declara a lacuna.
 - **Memória do Bunker:** escolhas do dono, hipóteses individuais, contrapontos, aplicações confirmadas e resultados favoráveis, desfavoráveis ou inconclusivos. Preferência não demonstra eficácia. Casos e metas ficam vinculados ao próprio cliente.
 - **Cloudflare:** executa os quatro papéis e conserva a fila, reservas e política de aprovação. A cadência, pausa e horário do painel continuam sendo a autoridade.
 - **Supabase:** mantém a ponte e credenciais de servidor já configuradas; nenhuma chave é enviada aos modelos ou publicada no repositório.

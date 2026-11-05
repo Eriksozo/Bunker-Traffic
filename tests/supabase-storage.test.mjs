@@ -30,3 +30,8 @@ test('direct Malva RPC uses the edge function and preserves sanitized actionable
  let call;const db=new SupabaseStorage({url:'https://example.supabase.co',key:'server-test',fetch:async(url,r)=>{call={url,r};return Response.json({error:'MALVA_KEY_FORMAT_INVALID'},{status:503});}});
  await assert.rejects(db.rpc('malvaRead',{section:'projects'}),e=>e.code==='MALVA_KEY_FORMAT_INVALID');assert.equal(call.url,'https://example.supabase.co/functions/v1/malva-read');assert.deepEqual(JSON.parse(call.r.body),{section:'projects'});
 });
+test('Órbita RPC reaches only its server bridge and preserves credential failures without leaking details',async()=>{
+ let call;const db=new SupabaseStorage({url:'https://example.supabase.co',key:'server-test',fetch:async(url,r)=>{call={url,r};return Response.json({error:'ORBITA_AUTH_FAILED'},{status:502});}});
+ await assert.rejects(db.rpc('orbitaMcp',{tool:'quem_sou_eu',args:{}}),e=>e.code==='ORBITA_AUTH_FAILED');assert.equal(call.url,'https://example.supabase.co/functions/v1/orbita-mcp');assert.deepEqual(JSON.parse(call.r.body),{tool:'quem_sou_eu',args:{}});
+ const relay=new SupabaseStorage({gateway:'https://bunker.example/internal/storage',key:'server-test',fetch:async(url,r)=>{call={url,r};return Response.json({});}});await relay.rpc('orbitaMcp',{tool:'quem_sou_eu',args:{}});assert.deepEqual(JSON.parse(call.r.body),{operation:'orbitaMcp',input:{tool:'quem_sou_eu',args:{}}});
+});

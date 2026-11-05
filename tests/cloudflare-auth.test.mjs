@@ -65,3 +65,8 @@ test('private gateway sends Malva reads to service-authenticated edge function, 
  const r=await cloudflareAuth(new Request('https://bunker.example/internal/storage',{method:'POST',headers:{Authorization:'Bearer storage-test'},body:JSON.stringify({operation:'malvaRead',input:{section:'projects'}})}),{...env,BUNKER_STORAGE_TOKEN:'storage-test'});
  assert.equal(r.status,200);assert.equal(call.url,'https://example.supabase.co/functions/v1/malva-read');assert.equal(call.options.headers.Authorization,'Bearer server-test');assert.deepEqual(JSON.parse(call.options.body),{section:'projects'});
 });
+test('private gateway sends Órbita metadata through its separate authenticated function',async(t)=>{
+ let call;t.mock.method(globalThis,'fetch',async(url,options)=>{call={url,options};return Response.json({email:'owner@example.com'});});
+ const r=await cloudflareAuth(new Request('https://bunker.example/internal/storage',{method:'POST',headers:{Authorization:'Bearer storage-test'},body:JSON.stringify({operation:'orbitaMcp',input:{tool:'quem_sou_eu',args:{}}})}),{...env,BUNKER_STORAGE_TOKEN:'storage-test'});
+ assert.equal(r.status,200);assert.equal(call.url,'https://example.supabase.co/functions/v1/orbita-mcp');assert.equal(call.options.headers.Authorization,'Bearer server-test');assert.deepEqual(JSON.parse(call.options.body),{tool:'quem_sou_eu',args:{}});
+});

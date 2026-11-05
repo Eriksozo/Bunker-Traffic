@@ -1,6 +1,6 @@
 # Conexões e publicação
 
-O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o código; A Malva usa uma chave MCP de servidor dedicada; o executor e o modelo rodam na Cloudflare. A Órbita ainda exige um conector próprio de nuvem para atualizar produção/aliases automaticamente. Conexão técnica não concede autorização para mudar anúncios.
+O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o código; A Malva usa uma chave MCP de servidor dedicada; o executor e o modelo rodam na Cloudflare. A Órbita usa a Edge Function de servidor `orbita-mcp`, sem depender da sessão do Mac. Conexão técnica não concede autorização para mudar anúncios.
 
 ## Caminhos
 
@@ -10,7 +10,7 @@ O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o
 - Banco: Postgres, tabelas `bunker_records` e `bunker_reports`, com RLS e sem concessões a anon/authenticated. A função `bunker_store` é SECURITY INVOKER e exclusiva do backend service_role.
 - Agentes: o MCP privado existente no Sites permanece como compatibilidade autenticada. Seu armazenamento usa o gateway privado `/internal/storage` do Worker, portanto a interface nova e os agentes acessam a mesma base Supabase.
 - Malva: secret `MALVA_MCP` no Supabase, Edge Function `malva-mcp` com autenticação de serviço. Somente ferramentas explicitamente permitidas. Chave pessoal MCP, não a chave REST de relatórios.
-- Órbita: dados importados mantêm fonte/data. A ausência de credencial independente impede declarar atualização autônoma da produção. Nenhum token de sessão do Mac/GPT é copiado.
+- Órbita: secret `Orbita_token` no Supabase e função `orbita-mcp` com autenticação de serviço. Somente identidade, cadastros, produções e lateralizações. Durante etapas elegíveis de análise, o executor atualiza metadados do projeto no máximo uma vez por minuto; exige mesmo e-mail proprietário/Malva, workspace esperado e expert único. Nenhum token do desktop é copiado. Cobertura é somente dos registros retornados (até 100 produções e 100 lateralizações); a consulta não prova entrega Meta nem resultado financeiro. Falha preserva a fonte anterior e fica explícita nos pacotes dos agentes.
 
 ## Segredos
 
