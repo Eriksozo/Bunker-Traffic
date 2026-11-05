@@ -2,7 +2,7 @@
 import {createSourceWatch,createReadRecovery,SOURCE_WATCH_MS,mergeSourceFeed} from '../lib/source-watch.mjs';
 import {useCallback,useEffect,useRef,useState} from 'react';
 
-export type LiveSnapshot={projectId:string;projectName:string;period:'today';level:'campaign';source:'Malva MCP';from:string;to:string;timezone:string;fetchedAt:string;lastSyncAt:string|null;complete:boolean;coverage?:{kind:'active-spent-tracked';activeComplete:true;spentComplete:true;trackedComplete:true;trackedCount:number};rows:Record<string,unknown>[]};
+export type LiveSnapshot={projectId:string;projectName:string;period:'today';level:'campaign';source:'Malva MCP';from:string;to:string;timezone:string;fetchedAt:string;lastSyncAt:string|null;complete:boolean;coverage?:{kind:'active-spent-tracked';activeComplete:true;spentComplete:true;trackedComplete:boolean;unavailableTracked?:{id:string;externalId:string;adAccountId:string;reason:'no-current-row';checkedAt:string}[];trackedCount:number};rows:Record<string,unknown>[]};
 export type LiveItem={projectId:string;snapshot:LiveSnapshot|null;lastAttemptAt:string|null;lastSuccessAt:string|null;error:{code:string;message:string;at:string}|null;revision:number};
 export type LiveData={projects:{projectId:string;projectName:string}[];paused:boolean;items:LiveItem[];pollIntervalSeconds:number;creativeItems?:any[];creativeError?:string};
 
