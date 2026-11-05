@@ -16,6 +16,24 @@ const importSnapshot=(api,s,cut=snapshot(),expectedRevision)=>liveDataAction(api
 const failure=(api,s,expectedRevision)=>liveDataAction(api,s,{action:'failure',projectId:'nico',expectedRevision,error:{code:'MALVA_UNAVAILABLE',message:'A origem não retornou uma leitura confirmada.'}},now+1000);
 const envelope=input=>({id:'live-data',status:'Pendente',revision:0,note:JSON.stringify(input)});
 
+test('cloud-owned live feed rejects legacy errors and newer legacy imports without changing the cache',async()=>{
+ const {d,api}=db(),s=state();const saved=await liveDataAction(api,s,{action:'import',projectId:'nico',snapshot:snapshot(),expectedRevision:0},now,'cloudflare');assert.equal(saved.item.writer,'cloudflare');
+ const before=JSON.stringify((await readLiveData(api,s,'nico')).items[0]);
+ await assert.rejects(failure(api,s,1),e=>e.code==='LIVE_WRITER_CONFLICT');
+ await assert.rejects(importSnapshot(api,s,snapshot({fetchedAt:new Date(now).toISOString()}),1),e=>e.code==='LIVE_WRITER_CONFLICT');
+ assert.equal(JSON.stringify((await readLiveData(api,s,'nico')).items[0]),before);d.close();
+});
+test('real cloud failures remain visible and only a new verified cloud read clears them',async()=>{
+ const {d,api}=db(),s=state();await liveDataAction(api,s,{action:'import',projectId:'nico',snapshot:snapshot(),expectedRevision:0},now,'cloudflare');
+ const failed=await liveDataAction(api,s,{action:'failure',projectId:'nico',expectedRevision:1,error:{code:'MCP_UNAVAILABLE',message:'Cloud source unavailable.'}},now+1000,'cloudflare');assert.equal(failed.item.writer,'cloudflare');assert.equal(failed.item.snapshot.rows[0].spend,12.3);assert.equal(failed.item.error.code,'MCP_UNAVAILABLE');
+ const recovered=await liveDataAction(api,s,{action:'import',projectId:'nico',snapshot:snapshot({fetchedAt:new Date(now+2000).toISOString()}),expectedRevision:2},now+2000,'cloudflare');assert.equal(recovered.item.error,null);assert.equal(recovered.item.writer,'cloudflare');d.close();
+});
+test('writer identity cannot be supplied through a public envelope and takeover respects CAS',async()=>{
+ const {d,api}=db(),s=state();assert.throws(()=>parseLiveDataEnvelope(envelope({action:'failure',writer:'cloudflare'})),e=>e.code==='LIVE_INVALID_REQUEST');
+ await importSnapshot(api,s);await assert.rejects(liveDataAction(api,s,{action:'import',projectId:'nico',snapshot:snapshot({fetchedAt:new Date(now).toISOString()}),expectedRevision:0},now,'cloudflare'),e=>e.code==='LIVE_CONFLICT');
+ assert.equal((await readLiveData(api,s,'nico')).items[0].writer,undefined);await liveDataAction(api,s,{action:'import',projectId:'nico',snapshot:snapshot({fetchedAt:new Date(now).toISOString()}),expectedRevision:1},now,'cloudflare');assert.equal((await readLiveData(api,s,'nico')).items[0].writer,'cloudflare');d.close();
+});
+
 test('Compatibility envelope preserves live-only actions and the independent project revision',()=>{
  for(const input of [{action:'read'},{action:'read',projectId:'nico'},{action:'import',projectId:'nico',snapshot:snapshot(),expectedRevision:9},{action:'failure',projectId:'nico',expectedRevision:10,error:{code:'MALVA_UNAVAILABLE',message:'Sem leitura.'}}]){
   const args=envelope(input),before=JSON.stringify(args);assert.deepEqual(parseLiveDataEnvelope(args),input);assert.equal(JSON.stringify(args),before);
