@@ -236,3 +236,10 @@ Até três páginas por unidade. Uma paginação incompleta fica preservada como
 Os eventos retornados entram no mesmo histórico conferido: divergência preserva o registro original e coloca a fonte em conciliação; alterações concorrentes, mudanças dos filhos e incidentes continuam impedindo crédito favorável indevido. Uma comparação verificada é observacional e permanece separada da eficácia individual dos agentes e das aplicações aprovadas no Bunker.
 
 Uma paginação de comparação tem prioridade sobre novos exemplos da mesma fila. A leitura incremental continua fornecendo contexto recente aos agentes, mas preserva o cursor do reparo para seu dono. Na retomada, a primeira página do mesmo intervalo precisa conferir com os eventos preservados; mudanças deixam a comparação pendente em vez de simular uma cobertura estável.
+
+
+### Registro do contexto entregue aos agentes
+
+Conclusões, respostas entre agentes e revisões de propostas guardam `learningInputs`, produzido pelo servidor depois da compactação final do pacote. O registro identifica episódios, escolhas do dono, hipóteses, comparações verificadas e metadados da Órbita que realmente chegaram à chamada do modelo. Entradas omitidas não recebem crédito de entrega; o modelo não pode preencher ou substituir esse registro. As revisões também preservam a reflexão autoral com suas citações novamente conferidas no momento da gravação.
+
+Esse registro permite auditar disponibilidade de contexto, não comprova uso semântico nem eficácia. Órbita mantém cobertura `returned-items-only` e vínculo por nome exato; produção não é venda. Casos retrospectivos inconclusivos permanecem inconclusivos, separados de aplicações do Bunker. Nenhum registro aprova proposta ou altera orçamento/status.
