@@ -1,0 +1,59 @@
+{
+  "observedAt": "2026-11-05",
+  "mode": "Synthetic fixture against the real Cloudflare Workers AI binding; no Bunker contribution or provider mutation",
+  "model": "@cf/openai/gpt-oss-120b",
+  "roles": [
+    {
+      "role": "traffic",
+      "validated": true,
+      "reviewed": 6,
+      "peerChecks": 0,
+      "latencyMs": 27973,
+      "promptTokens": 14880,
+      "completionTokens": 1744
+    },
+    {
+      "role": "creative",
+      "validated": true,
+      "reviewed": 6,
+      "peerChecks": 1,
+      "latencyMs": 24650,
+      "promptTokens": 15764,
+      "completionTokens": 2004
+    },
+    {
+      "role": "budget",
+      "validated": true,
+      "reviewed": 6,
+      "peerChecks": 2,
+      "latencyMs": 60260,
+      "promptTokens": 16592,
+      "completionTokens": 1792
+    },
+    {
+      "role": "ops",
+      "validated": true,
+      "reviewed": 6,
+      "peerChecks": 3,
+      "latencyMs": 37334,
+      "promptTokens": 17458,
+      "completionTokens": 2339
+    }
+  ],
+  "boundedStress": {
+    "validated": true,
+    "requested": 6,
+    "reviewed": 5,
+    "childReadings": 5,
+    "transportBytes": 157094,
+    "latencyMs": 36806,
+    "promptTokens": 41306,
+    "deferred": 1
+  },
+  "limits": [
+    "Compatibility and source-reference validation only; no measured business efficacy.",
+    "Observed latency is not a service guarantee.",
+    "Stress case exceeded the internal packet budget; five campaigns were reviewed, one was explicitly deferred.",
+    "No owner approval, proposal application or ad mutation occurred."
+  ]
+}
