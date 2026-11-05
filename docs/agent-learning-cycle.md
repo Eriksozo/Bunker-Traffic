@@ -205,3 +205,9 @@ A fila continua priorizando conferências, execuções aprovadas e trabalho anal
 O conjunto de foco mantém quatro vagas de prioridade por gasto/perda e duas de rotação. Sua ordem interna passa a considerar a revisão completa mais antiga entre os seis, com desempate por gasto e identidade. Isso importa quando a compactação deixa só um prefixo: nem as prioridades nem a rotação podem ficar permanentemente de fora. O foco é congelado na coleta do job e não muda entre os papéis da mesma rodada. A cobertura só avança com os quatro pareceres realmente publicados para a campanha na mesma fonte; o teste simula capacidade de uma campanha e verifica que todas as doze campanhas recebem revisão ao longo de rodadas sucessivas.
 
 As conclusões da nuvem guardam `analysisCoverage` com alvos solicitados, efetivamente analisados e IDs adiados. O resultado operacional também diferencia solicitados e adiados. Esses contadores descrevem trabalho realizado, não taxa de acerto ou eficácia financeira; dados coletados e dados revisados continuam distintos.
+
+## Versão 12 — identidade acompanhada também no cache ao vivo
+
+Análise e acompanhamento usam a mesma extração de identidades: linhas Meta válidas e `unavailableTracked` da fonte atual. Assim, sair da tabela de desempenho ou das janelas históricas não apaga a obrigação de consultar novamente o objeto. O cache ao vivo carrega a exceção e exibe N/D enquanto não houver uma linha válida; não declara acompanhamento integral desses IDs. Identidades conflitantes continuam interrompendo a consulta.
+
+A consulta por nome só é necessária quando a listagem da conta foi truncada. Quando a conta retornou todas as suas linhas e o alvo não está ali, a consulta exata de detalhe faz a conferência seguinte diretamente. Isso remove uma chamada redundante por alvo ausente, preservando as mesmas verificações de conta/objeto/período. Listagem truncada continua exigindo a busca e o retorno nativo exato antes de declarar o alvo resolvido.
