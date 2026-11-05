@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {columnarSeries,economizeCloudPacket,modelPacketView} from '../lib/cloud-packet-economy.mjs';
+import {columnarSeries,economizeCloudPacket,modelPacketView,cloudPacketProfile} from '../lib/cloud-packet-economy.mjs';
 import {compactCloudContext} from '../lib/cloud-analysis.mjs';
 import {validateCampaignReadings} from '../lib/campaign-learning-coverage.mjs';
 function decode(table){return table.encoding==='columns/v1'?table.rows.map(row=>({...table.constants,...Object.fromEntries(table.columns.flatMap((k,i)=>row[i]&&typeof row[i]==='object'&&row[i].absent===true?[]:[[k,row[i]]]))})):table;}
@@ -21,4 +21,9 @@ test('Transport encoding is pure and repeatable, preserving pooled columns, cons
  const hydrate=value=>{if(!value||typeof value!=='object')return value;if(value.sharedText)return view.coverage.sharedTexts[value.sharedText];if(Array.isArray(value))return value.map(hydrate);if(value.encoding==='columns/v1')return decode({...value,columns:value.columns||view.coverage.sharedTableColumns[value.columnSet],constants:hydrate(value.constants)}).map(hydrate);return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,hydrate(v)]));};
  for(const h of view.campaigns[0].hierarchy)assert.deepEqual(hydrate(h.rows),rows);
  assert.equal(hydrate(view.campaigns[0].target).name,name);
+});
+
+test('Packet diagnostics measure actual UTF-8 sections without exposing source text or changing the packet',()=>{
+ const text='private actor text ç '.repeat(300),context={campaigns:[{target:{adAccountId:'a',externalId:'c'},windows:{today:{spend:12345.678901}},hierarchy:[]}],research:{details:[{history:{items:[{metaText:text}]},detail:{daily:[{day:'today',spend:17}],intraday:{hourly:[{hour:1,spend:2}]}}}]}},before=structuredClone(context),p=cloudPacketProfile(context);
+ assert.equal(p.canonicalBytes,new TextEncoder().encode(JSON.stringify(context)).length);assert.equal(p.transportBytes,new TextEncoder().encode(JSON.stringify(modelPacketView(context))).length);assert.ok(p.sectionCanonicalBytes.research>p.sectionCanonicalBytes.campaigns);assert.ok(p.researchDetails[0].historyBytes>p.researchDetails[0].hourlyBytes);assert.doesNotMatch(JSON.stringify(p),/private actor|12345\.678901|adAccountId|externalId/);assert.deepEqual(context,before);
 });
