@@ -64,3 +64,8 @@ test('exact execution evidence remains accessible without conferring a new autho
  assert.throws(()=>readReviewContext(s,{action:'read',section:'execution',projectId:'q',executionId:'sent'},now),/não encontrada/);
  assert.throws(()=>readReviewContext(s,{action:'read',section:'execution',projectId:'p',executionId:'sent',proposalId:'other'},now),/incompatíveis/);
 });
+
+test('Analysis failure diagnostics retain the scoped reason without leaking another project or model payload',()=>{
+ const s=state();s.collaborationRounds=[{id:'p-round',project:'p',stages:[],sourceCut:[]},{id:'q-round',project:'q',stages:[],sourceCut:[]}];s.cloudAttemptFailures={p:{roundId:'p-round',agentId:'creative',code:'CLOUD_CAMPAIGN_READING_EVIDENCE',at:at(0),attempt:2,readingFailure:{adAccountId:'a',externalId:'c',reason:'child_citation_required'},raw:'not-for-output'},q:{roundId:'q-round',agentId:'traffic',code:'FOREIGN'}};
+ const before=structuredClone(s),out=readReviewContext(s,{action:'read',projectId:'p',section:'context',roundId:'p-round'},now);assert.equal(out.analysisFailures.length,1);assert.equal(out.analysisFailures[0].readingFailure.reason,'child_citation_required');assert.equal(out.analysisFailures[0].raw,undefined);assert.deepEqual(s,before);
+});
