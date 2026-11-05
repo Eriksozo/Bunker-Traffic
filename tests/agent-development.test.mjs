@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeAgentReflection,retainAgentEpisodes,agentDevelopmentPlan,cloudAgentMemory} from '../lib/agent-development.mjs';
 import {ensureCollaboration,claimCollaboration,postCollaboration,compactCollaboration} from '../lib/collaboration.mjs';
-import {runCloudAnalyst,validateCloudReflection,cloudAnalysisContext,compactCloudContext} from '../lib/cloud-analysis.mjs';
+import {runCloudAnalyst,validateCloudReflection,cloudAnalysisContext,compactCloudContext,cloudReflectionRequirements} from '../lib/cloud-analysis.mjs';
 const now=Date.parse('2026-11-04T16:00:00Z'),iso=x=>new Date(x).toISOString();
 const citation={period:'today',level:'campaign',adAccountId:'a',externalId:'c',metric:'spend',value:309.83};
 const reflection=()=>({lesson:'Uma venda isolada não sustenta aquisição.',uncertainty:'Atribuição pode mudar.',nextCheck:'Conferir novas compras após a edição.',citations:[{...citation}],peerChecks:[]});
@@ -62,8 +62,8 @@ test('unknown reflection keys cannot smuggle config or automatic execution permi
 });
 const output=()=>({decision:'Conter',reason:'Conferir perda',nextStep:'Conferir fontes',text:'Aguardar aprovação exata.',suggestions:[{adAccountId:'a',objectId:'c',action:'reduce',percent:20,reason:'Perda'}],question:null,reflection:reflection()});
 function packet(){return {campaigns:[{target:{adAccountId:'a',externalId:'c'},windows:{today:{spend:309.83}},hierarchy:[]}],priorOpinions:['traffic','creative','budget'].map(role=>({id:role,kind:'conclusion',fromAgent:role})),agentMemory:{role:'ops'}};}
-test('synthesis without all three independent peer checks is held, not silently approved',()=>{
- const c=packet(),out=output();validateCloudReflection(out,c,'ops');assert.equal(out.suggestions.length,0);out.reflection.peerChecks=c.priorOpinions.map(m=>({messageId:m.id,stance:'support',reason:'Conferido neste escopo.'}));out.suggestions=output().suggestions;validateCloudReflection(out,c,'ops');assert.equal(out.suggestions.length,1);
+test('synthesis without all three independent peer checks cannot record a completed reflection',()=>{
+ const c=packet(),out=output();assert.throws(()=>validateCloudReflection(out,c,'ops'),e=>e.code==='CLOUD_REFLECTION_PEER_REQUIRED');out.reflection.peerChecks=c.priorOpinions.map(m=>({messageId:m.id,stance:'support',reason:'Conferido neste escopo.'}));validateCloudReflection(out,c,'ops');assert.equal(out.suggestions.length,1);
 });
 test('material challenge, unanswered question or unknown peer verdict holds financial suggestions',()=>{
  for(const mode of ['challenge','inconclusive','pending','question']){const c=packet(),out=output();out.reflection.peerChecks=c.priorOpinions.map(m=>({messageId:m.id,stance:'support',reason:'Conferido.'}));if(mode==='pending')c.priorOpinions.push({id:'q',kind:'message',requiresReply:true});else if(mode==='question')out.question={toAgent:'traffic',text:'Conferir aquisição?'};else out.reflection.peerChecks[0].stance=mode;validateCloudReflection(out,c,'ops');assert.equal(out.suggestions.length,0);}
@@ -86,4 +86,42 @@ test('Measured adverse cases become local corrective context and never individua
  const development=agentDevelopmentPlan(f.state,'p',now,[outcome]);assert.equal(development.agents[0].measuredTeamCases,1);assert.equal(development.agents[0].adverseTeamCases,1);assert.equal(development.agents[0].financialSuccessRate,null);assert.match(development.agents[0].next,/desfavorável/);
  const memory=cloudAgentMemory(f.state,{...f.round,id:'next'},'traffic',[{adAccountId:'a',externalId:'c'}],{items:[],actionOutcomes:[outcome,{...outcome,id:'other',project:'q'}]},now);assert.equal(memory.measuredOutcomes.length,1);assert.match(memory.next,/desfavorável/);assert.equal(memory.measuredOutcomes[0].outcomeId,'measured');
  const unverified=cloudAgentMemory(f.state,{...f.round,id:'next'},'traffic',[{adAccountId:'a',externalId:'c'}],{items:[],actionOutcomes:[{...outcome,verified:false}]},now);assert.equal(unverified.measuredOutcomes.length,0);
+});
+
+test('every role must ground available data even without financial suggestions',()=>{
+ for(const role of ['traffic','creative','budget','ops']){
+  const c=packet(),out=output();c.priorOpinions=[];out.suggestions=[];out.reflection.citations=[];
+  assert.throws(()=>validateCloudReflection(out,c,role),e=>e.code==='CLOUD_REFLECTION_EVIDENCE_REQUIRED');
+  out.reflection.citations=[{...citation}];assert.doesNotThrow(()=>validateCloudReflection(out,c,role));
+ }
+});
+test('absent values do not invent evidence, while zero is a real available observation',()=>{
+ const c=packet(),out=output();c.priorOpinions=[];out.suggestions=[];out.reflection.citations=[];c.campaigns[0].windows.today={spend:null,frontOrders:null};
+ assert.equal(cloudReflectionRequirements(c,'traffic').numericCitationRequired,false);assert.doesNotThrow(()=>validateCloudReflection(out,c,'traffic'));
+ c.campaigns[0].windows.today.frontOrders=0;assert.equal(cloudReflectionRequirements(c,'traffic').numericCitationRequired,true);assert.throws(()=>validateCloudReflection(out,c,'traffic'));
+});
+test('creative reflection uses visible children and does not satisfy hierarchy checks with parent-only citations',()=>{
+ const c=packet(),out=output();c.priorOpinions=[];out.suggestions=[];c.campaigns[0].hierarchy=[{period:'today',level:'ad',rows:[{adAccountId:'a',externalId:'child',spend:12,frontOrders:0}]}];
+ assert.throws(()=>validateCloudReflection(out,c,'creative'),e=>e.code==='CLOUD_REFLECTION_EVIDENCE_REQUIRED');
+ out.reflection.citations=[{...citation,level:'ad',externalId:'child',value:12}];assert.doesNotThrow(()=>validateCloudReflection(out,c,'creative'));
+ assert.equal(cloudReflectionRequirements(c,'creative').examples[0].externalId,'child');
+ c.campaigns[0].hierarchy=[];out.reflection.citations=[{...citation}];assert.doesNotThrow(()=>validateCloudReflection(out,c,'creative'));
+});
+test('peer confrontation is required for observation too; challenge and uncertainty remain valid',()=>{
+ const c=packet(),out=output();out.suggestions=[];c.priorOpinions=[{id:'traffic-actual',kind:'conclusion',fromAgent:'traffic'},{id:'not-a-conclusion',kind:'message',fromAgent:'budget'}];
+ assert.throws(()=>validateCloudReflection(out,c,'creative'),e=>e.code==='CLOUD_REFLECTION_PEER_REQUIRED');
+ for(const stance of ['challenge','inconclusive']){out.reflection.peerChecks=[{messageId:'traffic-actual',stance,reason:'Falta confirmar o efeito após edição.'}];assert.doesNotThrow(()=>validateCloudReflection(out,c,'creative'));}
+ out.reflection.peerChecks[0].messageId='not-a-conclusion';assert.throws(()=>validateCloudReflection(out,c,'creative'));
+});
+test('model schema requires grounding and real peer IDs only when those sources exist',async()=>{
+ const c=packet(),out=output();out.suggestions=[];out.reflection.peerChecks=c.priorOpinions.map(m=>({messageId:m.id,stance:'inconclusive',reason:'Sem demonstração de causalidade.'}));let req;
+ await runCloudAnalyst({run:async(_m,r)=>{req=r;return {response:out};}},'ops',c);
+ const schema=req.response_format.json_schema.properties.reflection.properties;
+ assert.equal(schema.citations.minItems,1);assert.equal(schema.peerChecks.minItems,3);assert.deepEqual(schema.peerChecks.items.properties.messageId.enum,['traffic','creative','budget']);
+ const input=JSON.parse(req.messages[1].content);assert.equal(input.reflectionRequirements.examples[0].value,309.83);assert.equal(out.reflection.peerChecks[0].stance,'inconclusive');
+});
+test('ungrounded historical prose remains in history but cannot reinforce model recall',()=>{
+ const f=fixture(),r=reflection();contribute(f,'traffic');r.citations=[];contribute(f,'creative',r);
+ const memory=cloudAgentMemory(f.state,{...f.round,id:'next'},'creative',[{adAccountId:'a',externalId:'c'}],{},now);
+ assert.equal(memory.episodes.length,0);assert.equal(memory.ungroundedRecallOmitted,true);assert.equal(agentDevelopmentPlan(f.state,'p',now).agents.find(a=>a.id==='creative').episodes,1);assert.equal(f.state.collaborationMessages.length,2);
 });

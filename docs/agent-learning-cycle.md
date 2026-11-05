@@ -106,3 +106,11 @@ A memória individual recebe correções do dono e resultados medidos; um caso d
 A leitura do cache Órbita passa a integrar o contexto do modelo: nomenclatura, nome Meta, origem declarada, estágio e expert/squad. O vínculo exige nome exato nos anúncios das campanhas priorizadas. Duplicidades não são resolvidas por suposição; não remover sufixos de Avatar ou limpeza automaticamente. Produção publicada ou resultado informado na Órbita não comprova receita atribuída na Meta.
 
 O contexto declara disponibilidade, idade e cobertura apenas dos registros retornados. Uma coleta pelo MCP do chat pode atualizar o cache, mas não constitui credencial independente da Órbita na nuvem. Quando o cache vence, o agente recebe a limitação, sem alegar consulta ao vivo ou ausência de criativos. A conexão financeira permanece exclusivamente pelo MCP Malva, nos valores e na versão aprovados pelo dono.
+
+### Conferência obrigatória do aprendizado
+
+No protocolo de memória da nuvem, todo papel precisa citar ao menos uma métrica bruta quando houver número disponível no pacote final. Para criativos, a citação precisa vir de um conjunto ou anúncio quando esses filhos tiverem dados visíveis. A exigência é recalculada depois de qualquer compactação; dados omitidos ou ausentes não geram citação obrigatória nem são convertidos em zero.
+
+Cada agente confronta os papéis que já concluíram a mesma rodada, inclusive quando apenas observa e não sugere ajuste. Os IDs permitidos vêm das conclusões reais. `challenge` e `inconclusive` são respostas válidas; registrar confronto não significa concordar. A síntese financeira continua retida diante de discordância material ou pergunta não resolvida. Falta de evidência ou confronto exigido impede gravar uma reflexão concluída, sem preencher automaticamente o conteúdo pelo agente.
+
+O modelo recebe exemplos exatos e limitados de citações disponíveis para reduzir erros de transcrição. São dados de referência, não lições ou pareceres fabricados. Reflexões antigas sem citação permanecem no histórico e nos contadores, mas não alimentam a memória recuperada para a próxima análise. Isso evita reforçar texto genérico por repetição. As tentativas continuam limitadas; não há um novo ciclo de chamadas ou aumento de permissões.
