@@ -1,3 +1,4 @@
+import {runtimeFailure} from '../lib/cloud-failure-diagnostics.mjs';
 import {DurableObject} from 'cloudflare:workers';
 import {SupabaseStorage} from '../lib/supabase-storage.mjs';
 import {readPersistedState,commitPersistedState} from '../lib/persistence.mjs';
@@ -61,7 +62,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     if(['idle','blocked'].includes(result.kind))break;
    }
    if((await this.setting()).enabled)await this.syncLive();
-  }catch(e:any){const latest=await this.setting(),code=/^[A-Z_]{3,80}$/.test(e.code||'')?e.code:e.message==='CONFLICT'?'CLOUD_REVISION_CONFLICT':'CLOUD_STEP_FAILED';await this.ctx.storage.put('runtime',{...latest,lastError:code,lastErrorDetail:String(e.message||code).replace(/(?:mck_|mvk_|sb_secret_)[A-Za-z0-9_-]+/g,'[redacted]').replace(/eyJ[A-Za-z0-9_.-]{20,}/g,'[redacted]').slice(0,400),lastUnitAt:new Date().toISOString()});}
+  }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
   finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+60000);}
  }
 }
