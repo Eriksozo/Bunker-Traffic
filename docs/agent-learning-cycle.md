@@ -226,3 +226,11 @@ A política v2 permite uma única espera assíncrona de até 1 segundo quando os
 ### Perguntas entre agentes
 
 A resposta a uma pergunta da rodada é diálogo, não uma nova conclusão por campanha. Seu esquema permite `campaignReadings: []` ou apenas as campanhas citadas na pergunta, com identidade e números conferidos, e não permite sugestões financeiras; o servidor registra somente a resposta ligada à pergunta e às fontes reais. Ela não conclui a síntese nem credita cobertura individual. Etapas e revisões com `campaignReviewPolicy` continuam exigindo uma leitura verificada por alvo, sem omissões, duplicação ou números de outra conta.
+
+### Cobertura explícita dos dias comparados
+
+A política retrospectiva v3 mantém a consulta de período máximo e os incrementos do histórico. Quando falta cobertura para os dias antes/depois de um ajuste, a própria coleta já admitida consulta esse intervalo exato em `tracking_ad_changes`, com `who: all`, a campanha original e seus filhos. Os limites precisam vir da fonte no fuso do projeto; o fim consultado não é estendido ao horário da coleta.
+
+Até três páginas por unidade. Uma paginação incompleta fica preservada como reparo daquele mesmo intervalo e pode continuar na próxima coleta elegível, sem criar agenda, consumir outra reserva ou tomar a paginação de outro trabalho. Não registra métricas de aprendizado nem resultado antes de fechar a cobertura. O preenchimento de uma janela antiga não recua o cursor incremental mais recente.
+
+Os eventos retornados entram no mesmo histórico conferido: divergência preserva o registro original e coloca a fonte em conciliação; alterações concorrentes, mudanças dos filhos e incidentes continuam impedindo crédito favorável indevido. Uma comparação verificada é observacional e permanece separada da eficácia individual dos agentes e das aplicações aprovadas no Bunker.

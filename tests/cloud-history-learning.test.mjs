@@ -5,6 +5,20 @@ import {importDecisionHistory} from '../lib/decision-cards.mjs';
 import {historyNow,historyProject,historyRow,historyEvent} from './fixtures/history-learning.mjs';
 const page=(items,nextCursor=null)=>({items,nextCursor,timezone:'UTC',period:{from:null,to:null,timezone:'UTC'}});
 const base=()=>({config:{p:{projectName:'John'}},snapshots:[],proposals:[],executions:[],paused:false});
+const boundedPage=(items=[],nextCursor=null)=>({items,nextCursor,timezone:'UTC',period:{from:'2026-11-01T00:00:00.000Z',to:'2026-11-04T00:00:00.000Z',timezone:'UTC'}});
+test('An explicit closed history window proves its empty beginning without extending its end to collection time',async()=>{
+ const state=base(),calls=[],client={read:async(_t,a)=>{calls.push(a);return boundedPage([historyEvent(3)]);}};
+ const range={from:'2026-11-01',to:'2026-11-03'},result=await collectHistoryLearning(client,historyProject,historyRow,null,{now:()=>historyNow,range});assert.equal(result.batch.from,'2026-11-01T00:00:00.000Z');assert.equal(result.batch.to,'2026-11-04T00:00:00.000Z');assert.equal(calls[0].anytime,undefined);assert.equal(calls[0].who,'all');assert.equal(calls[0].from,range.from);persistHistoryLearning(state,result,historyNow);assert.equal(state.historyLearning.scopes[historyLearningKey('p','a','c')].intervals[0].to,result.batch.to);
+ const empty=await collectHistoryLearning({read:async()=>boundedPage()},historyProject,historyRow,null,{now:()=>historyNow,range});assert.equal(empty.batch.events.length,0);assert.equal(empty.batch.from,result.batch.from);assert.equal(empty.batch.to,result.batch.to);
+});
+test('Repairing older history preserves the newer incremental cursor and unions only proven intervals',async()=>{
+ const state=base(),initial=await collectHistoryLearning({read:async()=>page([historyEvent(3)])},historyProject,historyRow,null,{now:()=>historyNow});persistHistoryLearning(state,initial,historyNow);const key=historyLearningKey('p','a','c'),prior=structuredClone(state.historyLearning.scopes[key].scope);
+ const repair=await collectHistoryLearning({read:async()=>boundedPage([historyEvent(3)])},historyProject,historyRow,state.historyLearning.scopes[key],{now:()=>historyNow+1000,range:{from:'2026-11-01',to:'2026-11-03'}});persistHistoryLearning(state,repair,historyNow+1000);assert.deepEqual(state.historyLearning.scopes[key].scope,prior);assert.equal(state.historyLearning.scopes[key].intervals[0].from,repair.batch.from);assert.equal(state.historyLearning.scopes[key].intervals[0].to,prior.to);assert.equal(state.decisionHistory.length,1);
+});
+test('A range repair rejects absent or changed bounds, future days and out-of-window source events',async()=>{
+ for(const mutate of [p=>p.period.from=null,p=>p.period.to=null,p=>p.period.from='2026-11-02T00:00:00Z',p=>p.items=[historyEvent(5)]])await assert.rejects(collectHistoryLearning({read:async()=>{const p=boundedPage();mutate(p);return p;}},historyProject,historyRow,null,{now:()=>historyNow,range:{from:'2026-11-01',to:'2026-11-03'}}),e=>e.code==='SOURCE_HISTORY_RANGE');
+ for(const range of [{from:'2026-11-04',to:'2026-11-03'},{from:'2026-11-01',to:'2026-11-05'}])await assert.rejects(collectHistoryLearning({read:async()=>{throw Error('Must not read');}},historyProject,historyRow,null,{now:()=>historyNow,range}),e=>e.code==='SOURCE_HISTORY_RANGE');
+});
 test('Maximum history pagination resumes across jobs and imports only after the final page',async()=>{
  const requests=[],client={read:async(t,a)=>{requests.push(a);return page([historyEvent(Number(a.cursor||1))],Number(a.cursor||1)<5?String(Number(a.cursor||1)+1):null);}},s=base();
  const first=await collectHistoryLearning(client,historyProject,historyRow,null,{now:()=>historyNow});assert.equal(first.calls,3);assert.equal(first.pending.items.length,3);assert.equal(first.batch,null);persistHistoryLearning(s,first,historyNow);assert.equal(s.decisionHistory,undefined);
