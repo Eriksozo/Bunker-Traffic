@@ -94,3 +94,8 @@ body .app .dc-windows caption { white-space:normal; line-height:1.6; text-align:
 }
 @media(prefers-reduced-motion:reduce) { body .app .dc-kanban-card[data-slot=card] { transition:none; } }
 @media print { body .app .dc-kanban { display:block; overflow:visible; } body .app .dc-kanban-column { margin-bottom:15px; break-inside:avoid; } body .app .dc-kanban-card>footer>button { display:none; } }
+
+body .app .dc-review-counts { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:12px; color:var(--ink-muted); font-size:10px; }
+body .app .dc-review-counts span { display:inline-flex; gap:5px; }
+body .app .dc-review-counts b { color:var(--ink-soft); font-weight:500; font-variant-numeric:tabular-nums; }
+body .app .dc-reviewing .dc-kanban-recommendation { color:var(--selection); }

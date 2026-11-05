@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {decisionColumns,decisionKanban} from '../lib/decision-kanban.mjs';
+import {decisionColumns,decisionKanban,decisionSuggestion,matchesDecisionFilter,decisionReviewState} from '../lib/decision-kanban.mjs';
 import {recordOwnerChoice} from '../lib/decision-cards.mjs';
 import {decisionQueue,reopenDecision} from '../lib/decision-reconsider.mjs';
 
@@ -26,19 +26,77 @@ test('Diagnostic keep remains analysis even when three agent opinions exist',()=
  assert.deepEqual(groupedIds(decisionKanban(cards)),{analysis:['diagnostic'],suggestions:['genuine-keep'],approval:[]});
 });
 
+test('Manter filters only current authored recommendations, never diagnostic defaults or stale choices',()=>{
+ const keep={id:'real-keep',teamReady:true,suggestion:{origin:'team',action:'keep'}};
+ const cards=[{id:'default',suggestion:{origin:'diagnostic',action:'keep'}},{...keep,id:'no-team',teamReady:false},{...keep,id:'stale',analysisStale:true},{...keep,id:'changed',liveDrift:{kind:'native'}},{...keep,id:'incident',monitor:{requiresReview:true}},keep,{id:'increase',teamReady:true,suggestion:{origin:'team',action:'increase'}}];
+ const before=structuredClone(cards);
+ assert.deepEqual(cards.filter(c=>matchesDecisionFilter(c,'keep')).map(c=>c.id),['real-keep']);
+ assert.deepEqual(cards.filter(c=>matchesDecisionFilter(c,'pending')).map(c=>c.id),['default','no-team','stale','changed','incident']);
+ assert.deepEqual(cards.filter(c=>matchesDecisionFilter(c,'reread')).map(c=>c.id),['stale','changed','incident']);
+ assert.equal(cards.filter(c=>matchesDecisionFilter(c,'all')).length,cards.length);
+ assert.deepEqual(cards,before);
+});
+
+test('all four action filters reject diagnostic, unknown and unreviewed actions',()=>{
+ for(const action of ['keep','increase','reduce','pause']){
+  assert.equal(matchesDecisionFilter({teamReady:true,suggestion:{origin:'diagnostic',action}},action),false);
+  assert.equal(matchesDecisionFilter({teamReady:false,suggestion:{origin:'team',action}},action),false);
+  assert.equal(matchesDecisionFilter({teamReady:true,suggestion:{origin:'team',action}},action),true);
+ }
+ assert.equal(decisionSuggestion({teamReady:true,suggestion:{origin:'team',action:'invented'}}),null);
+ assert.equal(decisionSuggestion(null),null);
+});
+
+test('reassessment always stays in review, even if a caller offers an approval callback',()=>{
+ const cards=[{id:'changed',teamReady:true,liveDrift:{kind:'native'},suggestion:{origin:'team',action:'keep'}},{id:'diagnostic',teamReady:true,suggestion:{origin:'diagnostic',action:'keep'}}];
+ assert.deepEqual(groupedIds(decisionKanban(cards,()=>true)),{analysis:['changed','diagnostic'],suggestions:[],approval:[]});
+});
+
+function liveReview(){
+ const card={project:'john',roundId:'round',row:{adAccountId:'account',externalId:'campaign'},suggestion:{origin:'diagnostic',action:'keep'}};
+ const state={paused:false,cloudResearch:{john:{jobId:'job',focus:[{adAccountId:'account',externalId:'campaign'}]}},collaborationRounds:[{id:'round',project:'john',jobId:'job',stages:[{status:'Em análise',claimId:'claim',executionRef:'cloud-worker',startedAt:'2026-11-02T19:59:00Z',leaseUntil:'2026-11-02T20:01:00Z'}]}]};
+ return {card,state};
+}
+
+test('only the exact campaign in a live claimed batch is described as in review',()=>{
+ const {card,state}=liveReview(),before=structuredClone(state),at=Date.parse('2026-11-02T20:00:00Z');
+ assert.equal(decisionReviewState(card,state,at).id,'reviewing');
+ assert.equal(decisionReviewState({...card,row:{...card.row,adAccountId:'other-account'}},state,at).id,'pending');
+ assert.equal(decisionReviewState({...card,project:'nico'},state,at).id,'pending');
+ assert.equal(decisionReviewState({...card,roundId:'other-round'},state,at).id,'pending');
+ assert.deepEqual(state,before);
+});
+
+test('expired, future, paused or abandoned claims cannot simulate an active review',()=>{
+ const at=Date.parse('2026-11-02T20:00:00Z');
+ for(const patch of [{leaseUntil:'2026-11-02T19:59:59Z'},{leaseUntil:'invalid'},{startedAt:'2026-11-02T20:00:01Z'},{status:'Falhou'},{status:'Concluída'},{claimId:null},{executionRef:null}]){
+  const {card,state}=liveReview();Object.assign(state.collaborationRounds[0].stages[0],patch);
+  assert.equal(decisionReviewState(card,state,at).id,'pending');
+ }
+ const {card,state}=liveReview();state.paused=true;assert.equal(decisionReviewState(card,state,at).id,'pending');
+ state.paused=false;state.cloudResearch.john.jobId='previous-job';assert.equal(decisionReviewState(card,state,at).id,'pending');
+});
+
+test('changed context gets a reread label; three opinions alone never imply a completed recommendation',()=>{
+ const {card,state}=liveReview(),at=Date.parse('2026-11-02T20:00:00Z');
+ assert.equal(decisionReviewState({...card,liveDrift:{kind:'native'}},state,at).id,'reread');
+ assert.equal(decisionReviewState({...card,teamReady:true,suggestion:{origin:'diagnostic',action:'keep'}},{},at).id,'pending');
+ assert.equal(decisionReviewState({...card,teamReady:true,suggestion:{origin:'team',action:'keep'}},state,at).id,'suggestion');
+});
+
 test('A proposal label or status cannot grant approval readiness without the caller validating its exact scope',()=>{
  const cards=[
   {id:'in-review',teamReady:true,suggestion:{origin:'proposal',action:'increase'},proposal:{status:'Em revisão'}},
   {id:'apparently-ready',teamReady:true,suggestion:{origin:'proposal',action:'increase'},proposal:{status:'Aguardando aprovação'}},
   {id:'already-approved',teamReady:true,suggestion:{origin:'proposal',action:'increase'},proposal:{status:'Aprovada'}},
  ];
- assert.deepEqual(groupedIds(decisionKanban(cards)),{analysis:cards.map(card=>card.id),suggestions:[],approval:[]});
- assert.deepEqual(groupedIds(decisionKanban(cards,card=>card.id==='apparently-ready')),{analysis:['in-review','already-approved'],suggestions:[],approval:['apparently-ready']});
+ assert.deepEqual(groupedIds(decisionKanban(cards)),{analysis:['already-approved'],suggestions:['in-review','apparently-ready'],approval:[]});
+ assert.deepEqual(groupedIds(decisionKanban(cards,card=>card.id==='apparently-ready')),{analysis:['already-approved'],suggestions:['in-review'],approval:['apparently-ready']});
  assert.deepEqual(cards.map(card=>card.proposal.status),['Em revisão','Aguardando aprovação','Aprovada']);
 });
 
 test('Every stage receives its complete filtered population before a display limit is applied',()=>{
- const cards=[...Array.from({length:17},(_,i)=>({id:'triage-'+i,suggestion:{origin:'diagnostic',action:'keep'}})),{id:'late-suggestion',teamReady:true,suggestion:{origin:'team',action:'reduce'}},{id:'late-approval',suggestion:{origin:'proposal',action:'pause'}}];
+ const cards=[...Array.from({length:17},(_,i)=>({id:'triage-'+i,suggestion:{origin:'diagnostic',action:'keep'}})),{id:'late-suggestion',teamReady:true,suggestion:{origin:'team',action:'reduce'}},{id:'late-approval',teamReady:true,suggestion:{origin:'proposal',action:'pause'},proposal:{status:'Aguardando aprovação'}}];
  const columns=decisionKanban(cards,card=>card.id==='late-approval'),limit=6;
  assert.deepEqual(columns.map(column=>column.cards.length),[17,1,1]);
  assert.deepEqual(columns.map(column=>column.cards.slice(0,limit).map(card=>card.id)),[cards.slice(0,6).map(card=>card.id),['late-suggestion'],['late-approval']]);
