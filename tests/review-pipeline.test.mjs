@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {reviewPipeline,requestReviewBatch,readReviewContext} from '../lib/review-pipeline.mjs';
 import {briefAgentState,briefAgentPlans} from '../lib/agent-briefing.mjs';
+import {learningCyclePlan} from '../lib/learning-cycle.mjs';
 const now=Date.parse('2026-11-04T15:00:00Z'),at=n=>new Date(now+n).toISOString();
 const state=()=>({config:{p:{projectName:'Alpha'},q:{projectName:'Beta'}},snapshots:[],jobs:[],agents:{},events:[],paused:false,cadence:{enabled:false},collaborationRounds:[],collaborationMessages:[],proposals:[]});
 const snapshot=(extra={})=>({projectId:'p',period:'today',level:'campaign',from:at(-3600000),to:at(3600000),fetchedAt:at(-1000),lastSyncAt:at(-2000),source:'Malva MCP',complete:true,rows:[],...extra});
@@ -51,6 +52,11 @@ test('compact briefing excludes bulky immutable journals without deleting or fab
  assert.ok(JSON.stringify(brief).length<JSON.stringify(s).length*0.01);
  const plans=briefAgentPlans({learning:{stats:{patterns:1},items:[large]},knowledge:[{project:'p',items:[large]}],watch:{signalCount:1,signals:[large]},execution:{executions:[{id:'real-dispatch'}]}},s);
  assert.equal(plans.watch.signalCount,1);assert.equal(plans.watch.signals,undefined);assert.deepEqual(plans.execution.executions,[{id:'real-dispatch'}]);assert.equal(plans.knowledge[0].itemCount,1);
+});
+test('The agent briefing retains automatic hypothesis status and protections without exposing or changing the research journal',()=>{
+ const s=state();s.knowledge=[{id:'hypothesis',project:'p',topic:'Hipótese de Tráfego',claim:'Lição autoral ainda não validada financeiramente.',status:'Hipótese',confidence:0,revision:1,createdAt:at(-1000),updatedAt:at(-1000),sources:[{system:'Bunker',reference:'conclusion:real-message',observedAt:at(-1000),summary:'Hipótese com origem preservada.'}],supportCases:[],revisions:[],agentOrigin:{kind:'cloud-reflection',agentId:'traffic',lastRecordedRevision:1,latestMessageId:'real-message'}}];
+ const before=structuredClone(s),learning=learningCyclePlan(s,null,now),plans=briefAgentPlans({learning},s);
+ assert.deepEqual(plans.learning.automaticHypotheses,learning.automaticHypotheses);assert.equal(plans.learning.automaticHypotheses.registered,1);assert.equal(plans.learning.automaticHypotheses.roles.find(r=>r.agentId==='traffic').active,1);assert.equal(plans.learning.automaticHypotheses.policy.providerWrites,false);assert.equal(plans.learning.stats.advisory,0);assert.equal(plans.learning.items,undefined);assert.ok(!JSON.stringify(plans).includes(s.knowledge[0].claim));assert.deepEqual(s,before);
 });
 test('expired collections allow a new request without pretending an expired worker is running',()=>{
  const s=state();s.jobs=[{id:'old',project:'p',status:'Em análise',startedAt:at(-46*60000),createdAt:at(-46*60000)}];s.agents.p={jobId:'old'};
