@@ -6,6 +6,7 @@ import {commitPersistedState,readPersistedState,centralByteLimit} from '../lib/p
 import {reportsQuery,reportPage} from '../lib/report-archive.mjs';
 import {ensureCollaboration,claimCollaboration} from '../lib/collaboration.mjs';
 import {randomBytes} from 'node:crypto';
+import {hydrateCoreState} from '../lib/core-storage.mjs';
 import {suggestionHistoryQuery,suggestionHistoryPage} from '../lib/suggestion-history.mjs';
 
 function adapter(database){
@@ -103,4 +104,32 @@ test('Large real journal structures persist losslessly without hiding reports fr
  const saved=await commitPersistedState(api,state,0),read=await readPersistedState(api,empty);assert.deepEqual(read.state,saved.state);assert.equal(read.storage.format,'gzip-base64-v2');assert.ok(read.storage.storedBytes<centralByteLimit);
  assert.equal(d.prepare('SELECT COUNT(*) AS n FROM bunker_reports').get().n,1);
  await assert.rejects(commitPersistedState(api,empty(),0),/CONFLICT/);assert.deepEqual((await readPersistedState(api,empty)).state,read.state);d.close();
+});
+
+function splitFixture(){const state=empty();state.tasks=[{id:'journal',text:randomBytes(675000).toString('base64')}];state.snapshots=[snapshot()];state.snapshots[0].rows[0].name=randomBytes(675000).toString('base64');return state;}
+test('Snapshot blobs remove the combined row ceiling without raising either codec limit or losing financial seals',async()=>{
+ const {d,api}=db(),state=splitFixture();state.executions=[{id:'sent',status:'Verificação necessária',submittedAt:'2026-11-03T10:20:00Z'}];state.ownerChoices=[{id:'choice',signature:'exact-owner-proof'}];
+ const result=await commitPersistedState(api,state,0),read=await readPersistedState(api,empty);
+ assert.deepEqual(read.state,result.state);assert.equal(read.storage.format,'gzip-base64-v3');
+ const rows=d.prepare('SELECT key,payload FROM bunker_records').all();assert.equal(rows.length,2);assert.ok(rows.every(r=>Buffer.byteLength(r.payload)<centralByteLimit));assert.ok(rows.reduce((n,r)=>n+Buffer.byteLength(r.payload),0)>centralByteLimit);
+ const stored=JSON.parse(rows.find(r=>r.key==='central').payload);delete stored._commitToken;
+ // The Supabase financial bridge hydrates only the core. Its authorization
+ // proofs must remain available without resolving observation blobs.
+ const authorized=await hydrateCoreState(stored);assert.deepEqual(authorized.executions,state.executions);assert.deepEqual(authorized.ownerChoices,state.ownerChoices);
+ await commitPersistedState(api,{...read.state,paused:true},read.revision);assert.equal(d.prepare("SELECT COUNT(*) n FROM bunker_records WHERE key LIKE 'snapshots:%'").get().n,1,'unchanged sources deduplicate across journal writes');d.close();
+});
+test('A losing CAS never writes source blobs, and a source-write failure rolls back the central revision',async()=>{
+ const {d,api}=db();await commitPersistedState(api,empty(),0);const before=(await readPersistedState(api,empty)).state;
+ const state=splitFixture();await assert.rejects(commitPersistedState(api,state,0),/CONFLICT/);assert.equal(d.prepare("SELECT COUNT(*) n FROM bunker_records WHERE key LIKE 'snapshots:%'").get().n,0);
+ d.exec("CREATE TRIGGER refuse_source BEFORE INSERT ON bunker_records WHEN NEW.key LIKE 'snapshots:%' BEGIN SELECT RAISE(ABORT,'source refused'); END;");
+ await assert.rejects(commitPersistedState(api,state,1),/source refused/);assert.equal((await readPersistedState(api,empty)).revision,1);assert.deepEqual((await readPersistedState(api,empty)).state,before);d.close();
+});
+test('Missing, tampered or misdirected blobs fail closed and never become an empty source',async()=>{
+ const {d,api}=db();await commitPersistedState(api,splitFixture(),0);
+ const original=d.prepare("SELECT key,payload FROM bunker_records WHERE key LIKE 'snapshots:%'").get();
+ d.prepare('DELETE FROM bunker_records WHERE key=?').run(original.key);await assert.rejects(readPersistedState(api,empty),e=>e.code==='STORAGE_INTEGRITY');
+ d.prepare('INSERT INTO bunker_records VALUES (?,?,1,?)').run(original.key,original.payload,'now');
+ const blob=JSON.parse(original.payload);blob.snapshotStorage.digest='sha256:'+'0'.repeat(64);d.prepare('UPDATE bunker_records SET payload=? WHERE key=?').run(JSON.stringify(blob),original.key);
+ await assert.rejects(readPersistedState(api,empty),e=>e.code==='STORAGE_INTEGRITY');
+ const central=JSON.parse(d.prepare("SELECT payload FROM bunker_records WHERE key='central'").get().payload);central.snapshotStorage.key='central';d.prepare("UPDATE bunker_records SET payload=? WHERE key='central'").run(JSON.stringify(central));await assert.rejects(readPersistedState(api,empty),e=>e.code==='STORAGE_INTEGRITY');d.close();
 });
