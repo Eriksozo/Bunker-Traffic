@@ -25,6 +25,7 @@ O teto por registro (1,75 MB), limites dos codecs e limites de expansão permane
 
 - Regressões de CAS, rollback, deduplicação, corrupção/ausência de fontes e disponibilidade das provas financeiras para o bridge.
 - Regressões de ausência de período, troca de dia, relógio futuro, falha de armazenamento por projeto e recuperação da leitura completa.
+- Invalidação de fonte permanece definitiva: uma coleta sucessora que falha não ressuscita uma triagem dispensada nem suas autorizações anteriores.
 - Suíte completa, tipos e build; na publicação, conferir revisão e formato armazenado, saúde e autenticação. Saúde HTTP não comprova conclusão de coleta ou parecer dos agentes.
 
 O controle de campanhas, as metas e a cadência não são alterados por esta entrega.
