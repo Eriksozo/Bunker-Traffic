@@ -298,3 +298,9 @@ test('A model format failure returns only its own safe diagnosis to the next eli
  assert.equal((await engine.step()).kind,'stage');assert.equal(packets[1].validationFeedback.code,'CLOUD_AI_INVALID');assert.deepEqual(packets[1].validationFeedback.modelFailure,failure.modelFailure);assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,1);
  assert.equal((await engine.step()).kind,'stage');assert.equal(packets[2].validationFeedback,undefined);assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);assert.equal(calls,3);
 });
+
+
+test('An exact owner-approved execution remains ahead of already admitted collection jobs',()=>{
+ const f=fixture(),other='55555555-5555-4555-8555-555555555555',now=Date.now();f.state.config[other]={projectName:'Reserved'};f.state.cadence={enabled:false};f.state.jobs.push({id:'waiting-collection',project:other,executor:'cloudflare',status:'Em análise',startedAt:iso(now-1000)});f.state.agents[other]={jobId:'waiting-collection'};
+ const next=cloudNext(f.state,[],now);assert.equal(next.kind,'execution');assert.equal(next.proposalId,f.p.id);assert.equal(f.state.jobs.find(j=>j.id==='waiting-collection').status,'Em análise');
+});

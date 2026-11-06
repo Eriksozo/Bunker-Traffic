@@ -3,16 +3,12 @@ import {cadenceOf,cadenceWindow,duePlan} from './cadence.mjs';
 import {sum} from './analysis.mjs';
 import {ensureCollaboration} from './collaboration.mjs';
 import {briefAgentState} from './agent-briefing.mjs';
+import {liveCollectionLease as liveLease} from './collection-lease.mjs';
 export const cadenceSchema=z.object({enabled:z.boolean(),intervalMinutes:z.number().int().min(5).max(1440).refine(n=>n%5===0,'Use intervalos de 5 em 5 minutos.'),start:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),end:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),weekdays:z.array(z.number().int().min(0).max(6)).min(1).max(7),timezone:z.enum(['America/Boa_Vista','America/Sao_Paulo'])}).refine(c=>c.start<=c.end,'O fim deve ser no mesmo dia e após o início.').refine(c=>[c.start,c.end].every(t=>Number(t.slice(3))%5===0),'Use horários de 5 em 5 minutos.');
 export function compactState(current:any){
  const s=current.state;return {...current,state:briefAgentState({...s,snapshots:s.snapshots.map((x:any)=>({...x,rows:undefined,rowCount:x.rows.length,totals:sum(x.rows)})),cadence:cadenceOf(s)}),plan:duePlan(s),runbook:'Na etapa de análise, somente leitura nos sistemas externos e gravação no Bunker. Coletar 7 e 3 dias completos, ontem e hoje parcial com limites/fuso explícitos; completar truncamentos; revisar hierarquia e última edição antes de ações. Fonte e dado ausente nunca viram zero. Execução externa depende exclusivamente do contrato de proposta aprovada e executor descrito a seguir; análise não é autorização.'};
 }
-const leaseMs=45*60000;
 const terminal=new Set(['Concluída','Cancelada','Falhou']);
-function liveLease(job:any,now:number){
- const started=Date.parse(job.startedAt||'');
- return Number.isFinite(started)&&started<=now&&now-started<leaseMs;
-}
 function expirePrevious(state:any,project:string,exceptId:string,now:string){
  for(const prior of state.jobs){
   if(prior.id===exceptId||prior.project!==project||prior.status!=='Em análise')continue;
