@@ -18,6 +18,14 @@ test('Each step preserves whether Meta confirmation exists; one echoed action ca
  const f=await sequenceFixture(),unconfirmed=f.state.decisionHistory.find(e=>e.action==='reduce');delete unconfirmed.nativeEcho;unconfirmed.originObservations=[];const sequence=externalAdjustmentSequence(f.state,f.event,f.comparison,now);
  assert.equal(sequence.steps.find(s=>s.action==='reduce').metaApplicationObserved,false);assert.equal(sequence.steps.find(s=>s.selectedEvent).metaApplicationObserved,true);assert.equal(sequence.financialClassification,'Inconclusivo');
 });
+test('Automatic processing transitions do not crowd out budget changes, pauses or activations; a selected status is still retained',async()=>{
+ const f=await sequenceFixture(),comparison=structuredClone(f.comparison);
+ for(let i=0;i<20;i++){const id='processing-'+i,e={...f.event,id,eventKey:JSON.stringify(['p',id]),field:'status',action:'status',before:i%2?'PROCESSING':'ACTIVE',after:i%2?'ACTIVE':'PROCESSING',automatic:true,occurredAt:new Date(Date.parse(f.event.occurredAt)+i*1000).toISOString()};f.state.decisionHistory.push(e);comparison.competingEventIds.push(id);}
+ const sequence=externalAdjustmentSequence(f.state,f.event,comparison,now);
+ assert.equal(sequence.steps.length,6);assert.equal(sequence.coverage.knownDecisionSteps,4);assert.equal(sequence.coverage.shownDecisionSteps,4);assert.equal(sequence.coverage.omittedDecisionSteps,0);assert.equal(sequence.coverage.knownOperationalStatuses,20);assert.equal(sequence.coverage.shownOperationalStatuses,2);assert.deepEqual(sequence.steps.filter(s=>s.action!=='status').map(s=>s.action),['increase','increase','reduce','pause']);assert.equal(sequence.financialClassification,'Inconclusivo');
+ const selectedStatus=f.state.decisionHistory.find(e=>e.id==='processing-0'),statusSequence=externalAdjustmentSequence(f.state,selectedStatus,{...comparison,eventId:selectedStatus.id,competingEventIds:[...comparison.competingEventIds,f.event.id]},now);
+ assert.equal(statusSequence.steps.find(s=>s.selectedEvent).historyId,selectedStatus.id);assert.equal(statusSequence.coverage.shownDecisionSteps,4);
+});
 test('Foreign identities, invalid values, heating, missing and ambiguous references remain omitted with explicit counts',async()=>{
  const f=await sequenceFixture();
  for(const mutate of [e=>e.project='q',e=>e.adAccountId='foreign',e=>e.objectId='foreign',e=>e.currency='BRL',e=>e.before=NaN,e=>e.name='[ENGAJAMENTO]',e=>e.occurredAt=new Date(now+1).toISOString(),e=>e.action='keep']){
