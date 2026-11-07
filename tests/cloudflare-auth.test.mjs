@@ -122,3 +122,14 @@ test('a forged companion header never authorizes and every reused or short compa
   assert.ok(r instanceof Response);assert.equal(r.status,401);
  }
 });
+test('a refused sign-in e-mail explains the Supabase reason without echoing the address',async(t)=>{
+ const {otpFailure}=await import('../lib/cloudflare-auth.mjs');
+ assert.equal((await otpFailure(new Response(JSON.stringify({error_code:'over_email_send_rate_limit'}),{status:429}))).status,429);
+ assert.match((await otpFailure(new Response('{}',{status:429}))).message,/Limite de envio/);
+ assert.equal((await otpFailure(new Response(JSON.stringify({error_code:'email_address_invalid'}),{status:400}))).code,'email_address_invalid');
+ assert.equal((await otpFailure(new Response('oops',{status:502}))).status,503);
+ assert.equal((await otpFailure(null)).code,'network');
+ t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify({error_code:'over_email_send_rate_limit'}),{status:429}));
+ const r=await cloudflareAuth(new Request('https://bunker.example/auth/email',{method:'POST',headers:{Origin:'https://bunker.example','Content-Type':'application/x-www-form-urlencoded'},body:'email=owner%40example.com'}),env);
+ assert.equal(r.status,429);const text=await r.text();assert.match(text,/Limite de envio/);assert.doesNotMatch(text,/owner@example/);
+});
