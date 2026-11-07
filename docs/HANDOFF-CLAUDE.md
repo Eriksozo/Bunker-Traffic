@@ -323,3 +323,20 @@ Escopo pedido pelo dono: filtro Hoje em Mudanças de orçamento e status, preser
   - Conferência visual do notch pelo dono (a captura de tela não está liberada para o Claude).
   - Aprovar no notch exige login de dono (segunda etapa).
   - Executor com 8 falhas na última hora no momento da leitura.
+
+## Autoria das mudanças e incidente de carga na central (registro escrito às 2026-11-07 14:43:07 UTC por `date -u`)
+
+- **Autoria:** o executor consulta, só leitura, o histórico de edições Malva (`tracking_ad_changes`, mesmos validadores da coleta) para campanhas com mudanças observadas sem autor nas últimas 72h.
+  - Até 6 campanhas a cada 3 minutos; casa a mesma transição na janela da observação.
+  - Guarda quem fez e a hora exata no armazenamento do próprio executor (7 dias, teto de 3.000; nova tentativa em 6h se não achar). Nada vai para a central nem para `decisionHistory`, que tem teto fixo de 5.000.
+  - Expostos em `GET /api/attribution` (dono) e no resumo do app do Mac; o log de atividade junta isso à mudança observada.
+  - Primeira rodada real (14:39 UTC): 6 campanhas, 6 de 6 autores encontrados, 335 eventos lidos, 0 falhas. Diagnóstico em `attribution` no status do executor.
+- **Incidente:** de 14:05 a ~14:38 UTC, todo pulso do executor falhou com `get central` em timeout de 30 s.
+  - Coincidiu com a rota do app do Mac lendo a central inteira a cada minuto e com a autoria lendo mais uma vez.
+  - Somou-se o Site `chatgpt.site` (versão antiga) consultando a cada 2 s por aba: 68 de 77 chamadas a `/internal/storage` canceladas em 70 s. Havia uma aba do Claude aberta, que foi fechada.
+- **Correções** (commits `d1f36ea` e `8305994`, versão `02b49885`):
+  - A autoria reaproveita a leitura do acompanhamento ao vivo.
+  - O executor monta os resumos do app do Mac a partir da leitura que já fez, e `/api/companion` lê só essa cópia (503 "em preparação" se não houver); o app consulta a cada 2 min.
+  - O envelope MCP `cloud-data` não lê mais a central.
+  - Às 14:42 UTC: coletas e etapas sem falha.
+- **Pendência:** o Site antigo ainda consulta a central a cada 2 s por aba aberta. Republicar o Site ou usar o Worker reduziria essa carga. Investigar com o Codex se os timeouts voltarem.
