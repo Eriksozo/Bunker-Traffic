@@ -187,6 +187,7 @@ enum SelfTest {
         guard let cards = try? JSONDecoder().decode(OwnerCards.self, from: Data(json.utf8)), let card = cards.cards.first, let p = cards.approvals.first else { check(false, #line); return }
         let intent = OwnerAdjust.intent(card: card, revision: 9, action: "pause", percent: 30, reason: " ok ", clientId: "notch-owner-test1")
         check(intent["approveExact"] as? Bool == false && intent["percent"] == nil && intent["reason"] as? String == "ok" && intent["revision"] as? Int == 9, #line)
+        check(Format.statusName("in_process") == "em processamento" && Format.statusName("PENDING_REVIEW") == "em análise", #line)
         let applied = OwnerAdjust.applied(card: card, revision: 9, action: "reduce", percent: 30, reason: "", clientId: "notch-owner-test3")
         check(applied["applied"] as? Bool == true && applied["approveExact"] as? Bool == false && applied["percent"] as? Double == 30, #line)
         check(OwnerAdjust.canDecide(card) && OwnerAdjust.canReportApplied(card, action: "pause") && !OwnerAdjust.canReportApplied(card, action: "keep"), #line)

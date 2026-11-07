@@ -61,6 +61,13 @@ enum Format {
         case "PAUSED", "CAMPAIGN_PAUSED": return "pausada"
         case "ARCHIVED": return "arquivada"
         case "DELETED": return "excluída"
+        // States only Meta sets (the activity log names Meta as their author).
+        case "IN_PROCESS", "PROCESSING": return "em processamento"
+        case "PENDING_REVIEW", "IN_REVIEW": return "em análise"
+        case "PREAPPROVED": return "pré-aprovada"
+        case "DISAPPROVED": return "reprovada"
+        case "WITH_ISSUES": return "com problemas"
+        case "PENDING_BILLING_INFO": return "aguardando pagamento"
         default: return (value ?? "N/D").lowercased()
         }
     }
