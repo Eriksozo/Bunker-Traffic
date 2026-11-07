@@ -297,11 +297,14 @@ export default function DecisionCards({state,project,write,saving,compact=false,
   const saved=array(state.ownerChoices).filter(choice=>choice.project===inlineTarget.project&&choice.adAccountId===inlineTarget.adAccountId&&choice.objectId===inlineTarget.objectId).at(-1);
   return <div className="dc-inline-editor" aria-label="Decidir sem sair da visão geral">
    {notice&&<p className="dc-notice" role="status">{notice}</p>}
+   {state.paused&&<p className="dc-notice dc-warning" role="status">O escritório está pausado. Retome para registrar decisões ou autorizar uma execução.</p>}
    {card?<>
     <ActivityChip card={card} state={state} now={now}/><MetricEvolution card={card}/>
     <MonitoringContext card={card}/>
+    <DecisionContingency state={state} card={card} proposal={exactProposal(card,drafts[keyOf(card)]||initialDraft(card),now)} action={(drafts[keyOf(card)]||initialDraft(card)).action} percent={percentage(drafts[keyOf(card)]||initialDraft(card))} liveItems={liveItems} now={now}/>
     <ActionBox card={card} state={state} draft={drafts[keyOf(card)]||initialDraft(card)} setDraft={draft=>updateDraft(card,draft)} saving={saving||busy} now={now} onSave={(c,d)=>void save(c,d)} onApprove={openApproval} liveItems={liveItems}/>
     <details className="dc-detail"><summary><BookOpen size={14}/> Conferir períodos e pareceres<ChevronDown size={14}/></summary><Windows card={card}/><TeamOpinions card={card} state={state}/><CampaignActivityLog card={card} state={state} now={now}/></details>
+    {array(card.blockedReasons).length>0&&<details className="dc-detail dc-pending"><summary><Clock3 size={13}/> Pontos para conferir<ChevronDown size={13}/></summary><ul>{array(card.blockedReasons).map((text:any,index:number)=><li key={index}>{String(text)}</li>)}</ul></details>}
     <SourceStamps card={card}/>
    </>:saved?<div role="status"><strong>Decisão registrada no Histórico</strong><p>{actions[actionOf(saved.action)].label} · {choiceStatus(saved,state)}</p><Button type="button" disabled={saving||busy||state.paused} onClick={()=>void reopen(saved)}>Rever cenário</Button></div>:<p role="status">Ainda não há um card conciliado para esta campanha. Aguarde a leitura antes de registrar uma decisão.</p>}
    {dialogs}
