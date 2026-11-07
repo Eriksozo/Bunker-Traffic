@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+enum NotchTab: String, CaseIterable { case now = "Agora", managers = "Gestores", agents = "Agentes", system = "Sistema" }
+
 /// Island geometry for a screen: the real notch when there is one, otherwise a slim bar under the menu bar centre.
 struct NotchGeometry: Equatable {
     let hasNotch: Bool
@@ -35,10 +37,12 @@ final class NotchPanel: NSPanel {
 final class NotchState: ObservableObject {
     @Published var expanded = false
     @Published var activityFilter: String?
+    @Published var tab: NotchTab = .now
+    @Published var hovered: String?
     @Published var geometry: NotchGeometry
     init(geometry: NotchGeometry) { self.geometry = geometry }
 
-    static let expandedSize = CGSize(width: 640, height: 520)
+    static let expandedSize = CGSize(width: 660, height: 540)
     var islandSize: CGSize {
         expanded ? Self.expandedSize : CGSize(width: geometry.width + 150, height: geometry.height + (geometry.hasNotch ? 0 : 2))
     }

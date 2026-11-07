@@ -18,26 +18,21 @@ struct IslandShape: Shape {
     }
 }
 
-enum Palette {
-    static let accent = Color(red: 0.72, green: 0.61, blue: 0.91)
-    static let good = Color(red: 0.21, green: 0.79, blue: 0.61)
-    static let bad = Color(red: 0.94, green: 0.44, blue: 0.47)
-    static let warn = Color(red: 0.95, green: 0.73, blue: 0.38)
-    static let muted = Color.white.opacity(0.6)
-}
-
 struct NotchRootView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                IslandShape(radius: notch.expanded ? 22 : 10).fill(Color.black)
-                if notch.expanded { ExpandedView().padding(.top, notch.geometry.height + 6).transition(.opacity) }
-                else { CollapsedView() }
+                IslandShape(radius: notch.expanded ? DS.Radius.island : 10).fill(DS.Color.canvas)
+                if notch.expanded {
+                    ExpandedView().padding(.top, notch.geometry.height + DS.Space.s).transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    CollapsedView().transition(.opacity)
+                }
             }
             .frame(width: notch.islandSize.width, height: notch.islandSize.height)
-            .shadow(color: .black.opacity(notch.expanded ? 0.45 : 0), radius: 18, y: 8)
+            .shadow(color: .black.opacity(notch.expanded ? 0.5 : 0), radius: 24, y: 10)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -45,253 +40,394 @@ struct NotchRootView: View {
     }
 }
 
-/// Resting state: ears on both sides of the camera notch.
+/// Health of the companion itself: error, paused, attention, or calm.
+@MainActor func healthTone(_ store: Store) -> Tone {
+    if store.error != nil { return .bad }
+    if store.summary?.paused == true || store.summary?.executor?.paused == true { return .warn }
+    return store.attention > 0 ? .warn : .good
+}
+
+/// Resting state: ears on both sides of the camera.
 struct CollapsedView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
     var body: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 5) {
-                Circle().fill(statusColor).frame(width: 7, height: 7)
-                Image(systemName: "square.stack.3d.up.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.accent)
-            }.frame(width: 75, alignment: .center)
+            HStack(spacing: 6) {
+                StatusDot(tone: healthTone(store), size: 6)
+                Image(systemName: "square.stack.3d.up.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(DS.Color.accent)
+            }.frame(width: 75)
             Spacer(minLength: notch.geometry.width)
-            HStack(spacing: 4) {
-                if store.attention > 0 {
-                    Text("\(store.attention)").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(Palette.warn)
-                } else {
-                    Text(Format.ratio(store.summary?.today.today?.roas)).font(.system(size: 10, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
-                }
-            }.frame(width: 75, alignment: .center)
+            Group {
+                if store.attention > 0 { Pill(text: "\(store.attention)", tone: .warn) }
+                else { Text(Format.ratio(store.summary?.today.today?.roas)).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(DS.Color.inkSoft) }
+            }.frame(width: 75)
         }
         .frame(height: notch.geometry.height)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Bunker: \(store.attention) itens pedem atenção")
     }
-    var statusColor: Color {
-        if store.error != nil { return Palette.bad }
-        if store.summary?.paused == true || store.summary?.executor?.paused == true { return Palette.warn }
-        return store.attention > 0 ? Palette.warn : Palette.good
-    }
 }
 
 struct ExpandedView: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var notch: NotchState
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Header()
-            if let error = store.error { Banner(text: error, color: Palette.bad) }
+            if let error = store.error { Banner(text: error, tone: .bad) }
             if let s = store.summary {
+                KPIStrip(s: s)
+                TabBar(s: s)
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        TodaySection(s: s)
-                        if s.approvals.count > 0 { ApprovalsSection(s: s) }
-                        QueueSection(s: s)
-                        ActivitySection(s: s)
-                        AgentsSection(s: s)
-                        ExecutorLine(s: s)
-                        Text(s.notice).font(.system(size: 10)).foregroundStyle(Palette.muted)
-                    }.padding(.bottom, 14)
+                    Group {
+                        switch notch.tab {
+                        case .now: NowTab(s: s)
+                        case .managers: ManagersTab(s: s)
+                        case .agents: AgentsTab(s: s)
+                        case .system: SystemTab(s: s)
+                        }
+                    }
+                    .padding(.bottom, DS.Space.l)
                 }
             } else if store.error == nil {
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity, alignment: .center)
+                HStack(spacing: DS.Space.s) { ProgressView().controlSize(.small); Text("Lendo o Bunker…").font(DS.Font.body).foregroundStyle(DS.Color.inkMuted) }
+                    .frame(maxWidth: .infinity, alignment: .center).padding(.top, DS.Space.xl)
             }
         }
-        .padding(.horizontal, 18)
-        .foregroundStyle(.white)
+        .padding(.horizontal, DS.Space.xl)
+        .foregroundStyle(DS.Color.ink)
     }
 }
 
 struct Header: View {
     @EnvironmentObject var store: Store
     var body: some View {
-        HStack(spacing: 8) {
-            Text("BUNKER").font(.system(size: 11, weight: .heavy)).tracking(1.5).foregroundStyle(Palette.accent)
-            Picker("Projeto", selection: $store.project) {
-                Text("Todos os projetos").tag("all")
-                ForEach(store.summary?.projects ?? [], id: \.id) { Text($0.name).tag($0.id) }
-            }.labelsHidden().frame(width: 180).controlSize(.small)
-            Spacer()
-            if let at = store.summary?.analysisAt { Text("Análise \(Format.stamp(at))").font(.system(size: 10)).foregroundStyle(Palette.muted) }
-            Button { Task { await store.refresh() } } label: { Image(systemName: store.loading ? "hourglass" : "arrow.clockwise") }
-                .buttonStyle(.plain).help("Atualizar agora")
-            Button { store.open("#cards") } label: { Label("Abrir Bunker", systemImage: "arrow.up.right.square") }
-                .buttonStyle(.borderedProminent).tint(Palette.accent.opacity(0.85)).controlSize(.small)
+        HStack(spacing: DS.Space.s) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(DS.Color.accent)
+                Text("BUNKER").font(DS.Font.mark).tracking(1.6).foregroundStyle(DS.Color.accent)
+            }
+            ProjectMenu()
+            Spacer(minLength: DS.Space.s)
+            HStack(spacing: 6) {
+                StatusDot(tone: healthTone(store), size: 6)
+                Text(freshness).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
+            }
+            .help(store.summary?.analysisAt.map { "Base de análise: " + Format.stamp($0) } ?? "")
+            IconButton(symbol: "arrow.clockwise", help: "Atualizar agora", spinning: store.loading) { Task { await store.refresh() } }
+            Button { store.open("#cards") } label: {
+                HStack(spacing: 5) { Text("Abrir Bunker").font(DS.Font.bodyStrong); Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)) }
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .foregroundStyle(.black.opacity(0.85))
+                    .background(DS.Color.accent, in: Capsule())
+            }.buttonStyle(.plain).help("Abrir os cards de decisão no navegador")
         }
+    }
+    var freshness: String {
+        if store.loading && store.summary == nil { return "Atualizando…" }
+        guard let at = store.lastFetch else { return "Sem leitura" }
+        return "Atualizado " + Format.relative(at)
+    }
+}
+
+struct IconButton: View {
+    let symbol: String; let help: String; var spinning = false; let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+                .rotationEffect(.degrees(spinning ? 360 : 0))
+                .animation(spinning ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: spinning)
+                .frame(width: 24, height: 24)
+                .foregroundStyle(DS.Color.inkSoft)
+                .background(DS.Color.surface, in: Circle())
+        }.buttonStyle(.plain).help(help)
+    }
+}
+
+struct ProjectMenu: View {
+    @EnvironmentObject var store: Store
+    var body: some View {
+        Menu {
+            Button("Todos os projetos") { store.project = "all" }
+            Divider()
+            ForEach(store.summary?.projects ?? [], id: \.id) { p in Button(p.name) { store.project = p.id } }
+        } label: {
+            HStack(spacing: 5) {
+                Text(store.summary?.projectName ?? "Projeto").font(DS.Font.bodyStrong).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(DS.Color.inkMuted)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(DS.Color.surface, in: Capsule())
+            .overlay(Capsule().stroke(DS.Color.stroke))
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
     }
 }
 
 struct Banner: View {
-    let text: String; let color: Color
+    let text: String; let tone: Tone
     var body: some View {
-        Text(text).font(.system(size: 11)).padding(8).frame(maxWidth: .infinity, alignment: .leading)
-            .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(color.opacity(0.4)))
-    }
-}
-
-struct SectionTitle: View {
-    let text: String; var detail: String? = nil
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(text.uppercased()).font(.system(size: 10, weight: .bold)).tracking(1.2).foregroundStyle(Palette.muted)
-            if let detail { Text(detail).font(.system(size: 10)).foregroundStyle(Palette.muted.opacity(0.8)) }
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(tone.color)
+            Text(text).font(DS.Font.body).foregroundStyle(DS.Color.ink)
         }
+        .padding(DS.Space.s).frame(maxWidth: .infinity, alignment: .leading)
+        .background(tone.color.opacity(0.12), in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
     }
 }
 
-struct TodaySection: View {
+// MARK: - KPIs
+
+struct KPIStrip: View {
     let s: Summary
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Hoje em 1 minuto", detail: s.projectName)
-            HStack(spacing: 8) {
-                Metric(label: "ROAS", value: Format.ratio(s.today.today?.roas), base: "Ontem \(Format.ratio(s.today.yesterday?.roas)) · 7d \(Format.ratio(s.today.week?.roas))", delta: s.today.deltas["roas"], higherIsBetter: true)
-                Metric(label: "ROI", value: Format.ratio(s.today.today?.roi), base: "Ontem \(Format.ratio(s.today.yesterday?.roi)) · 7d \(Format.ratio(s.today.week?.roi))", delta: s.today.deltas["roi"], higherIsBetter: true)
-                Metric(label: "CPA front", value: Format.money(s.today.today?.cpaFront), base: "Ontem \(Format.money(s.today.yesterday?.cpaFront)) · 7d \(Format.money(s.today.week?.cpaFront))", delta: s.today.deltas["cpaFront"], higherIsBetter: false)
-            }
+        HStack(spacing: DS.Space.s) {
+            StatTile(label: "ROAS hoje", value: Format.ratio(s.today.today?.roas), base: "ontem \(Format.ratio(s.today.yesterday?.roas)) · 7d \(Format.ratio(s.today.week?.roas))", delta: s.today.deltas["roas"], higherIsBetter: true)
+            StatTile(label: "ROI hoje", value: Format.ratio(s.today.today?.roi), base: "ontem \(Format.ratio(s.today.yesterday?.roi)) · 7d \(Format.ratio(s.today.week?.roi))", delta: s.today.deltas["roi"], higherIsBetter: true)
+            StatTile(label: "CPA front hoje", value: Format.money(s.today.today?.cpaFront), base: "ontem \(Format.money(s.today.yesterday?.cpaFront)) · 7d \(Format.money(s.today.week?.cpaFront))", delta: s.today.deltas["cpaFront"], higherIsBetter: false)
         }
     }
 }
 
-struct Metric: View {
+struct StatTile: View {
     let label: String; let value: String; let base: String; let delta: Summary.Delta?; let higherIsBetter: Bool
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label + " hoje").font(.system(size: 10)).foregroundStyle(Palette.muted)
-            Text(value).font(.system(size: 18, weight: .semibold, design: .rounded))
-            Text(base).font(.system(size: 9.5)).foregroundStyle(Palette.muted).lineLimit(1)
-            HStack(spacing: 6) { chip(delta?.yesterday, "ontem"); chip(delta?.week, "7d") }
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+            Text(value).font(DS.Font.stat).lineLimit(1).minimumScaleFactor(0.8)
+            HStack(spacing: DS.Space.xs) { pill(delta?.yesterday, "ontem"); pill(delta?.week, "7d") }
+            Text(base).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.85)
         }
-        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+        .padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
     }
-    @ViewBuilder func chip(_ value: Double?, _ label: String) -> some View {
-        if let value {
-            let flat = abs(value) < 0.05, good = (value > 0) == higherIsBetter
-            Text("\(Format.percent(value * 100)) \(label)").font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(flat ? Palette.muted : good ? Palette.good : Palette.bad)
-        } else {
-            Text("N/D \(label)").font(.system(size: 9.5)).foregroundStyle(Palette.muted)
-        }
+    func pill(_ value: Double?, _ label: String) -> some View {
+        guard let value else { return Pill(text: "N/D \(label)") }
+        let flat = abs(value) < 0.05
+        return Pill(text: "\(Format.percent(value * 100)) \(label)", tone: flat ? .neutral : (value > 0) == higherIsBetter ? .good : .bad,
+                    icon: flat ? nil : value > 0 ? "arrow.up" : "arrow.down")
     }
 }
 
-struct ApprovalsSection: View {
-    @EnvironmentObject var store: Store
-    let s: Summary
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Aguardando você", detail: "\(s.approvals.count) proposta(s) exata(s)")
-            ForEach(s.approvals.items) { a in
-                Button { store.open("#cards") } label: {
-                    Row(icon: "checkmark.seal", tint: Palette.warn, title: a.title ?? "Proposta exata", detail: (a.project ?? "") + (a.expiresAt.map { " · vence \(Format.stamp($0))" } ?? ""), trailing: "Conferir")
-                }.buttonStyle(.plain)
-            }
-        }
-    }
-}
+// MARK: - Tabs
 
-struct QueueSection: View {
-    @EnvironmentObject var store: Store
-    let s: Summary
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "O que fazer agora", detail: "\(s.queue.count) de \(s.queueSize) na fila")
-            if s.queue.isEmpty { Text("Nada pedindo ação agora.").font(.system(size: 11)).foregroundStyle(Palette.muted) }
-            ForEach(s.queue) { q in
-                let loss = q.kind == "loss"
-                Button { store.open("#cards") } label: {
-                    Row(icon: loss ? "arrow.down.right" : "arrow.up.right", tint: loss ? Palette.bad : Palette.good,
-                        title: q.campaign ?? "Campanha",
-                        detail: "\(q.period == "today" ? "Hoje" : "3 dias"): gasto \(Format.money(q.spend)) · ROAS \(Format.ratio(q.roas)) · 7d \(Format.ratio(q.roas7d))",
-                        trailing: loss ? (q.basis == "result" ? "−\(Format.money(q.amount))" : "receita −\(Format.money(q.amount))") : "+\(Format.money(q.amount))")
-                }.buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-struct ActivitySection: View {
-    let s: Summary
+struct TabBar: View {
     @EnvironmentObject var notch: NotchState
-    private var open: String? { notch.activityFilter }
+    let s: Summary
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Gestores · últimas \(s.activity.hours)h", detail: "toque numa caixa para ver quem, quando e quanto")
-            HStack(spacing: 6) {
-                ForEach(["increase", "reduce", "pause", "activate"], id: \.self) { key in
-                    let b = s.activity.summary[key]
-                    Button { notch.activityFilter = open == key ? nil : key } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(Format.actionLabels[key] ?? key).font(.system(size: 10)).foregroundStyle(Palette.muted)
-                            Text("\(b?.count ?? 0)").font(.system(size: 16, weight: .semibold, design: .rounded))
-                            Text(names(b)).font(.system(size: 9.5)).foregroundStyle(Palette.muted).lineLimit(2)
-                        }
-                        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(open == key ? 0.12 : 0.06), in: RoundedRectangle(cornerRadius: 9))
-                    }.buttonStyle(.plain).disabled((b?.count ?? 0) == 0)
+        HStack(spacing: DS.Space.xs) {
+            ForEach(NotchTab.allCases, id: \.self) { tab in
+                let selected = notch.tab == tab
+                Button { withAnimation(DS.Motion.quick) { notch.tab = tab } } label: {
+                    HStack(spacing: 5) {
+                        Text(tab.rawValue).font(DS.Font.bodyStrong)
+                        if let badge = badge(tab) { Pill(text: badge.0, tone: badge.1) }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .foregroundStyle(selected ? DS.Color.ink : DS.Color.inkMuted)
+                    .background(selected ? DS.Color.surfaceSelected : .clear, in: Capsule())
+                    .contentShape(Capsule())
+                }.buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(3)
+        .background(DS.Color.surface, in: Capsule())
+    }
+    func badge(_ tab: NotchTab) -> (String, Tone)? {
+        switch tab {
+        case .now:
+            let n = s.approvals.count + s.queue.filter { $0.kind == "loss" }.count
+            return n > 0 ? ("\(n)", s.approvals.count > 0 ? .warn : .bad) : nil
+        case .managers:
+            let n = s.activity.summary.values.reduce(0) { $0 + $1.count }
+            return n > 0 ? ("\(n)", .neutral) : nil
+        case .agents: return s.agents.recent.isEmpty ? nil : ("\(s.agents.recent.count)", .neutral)
+        case .system:
+            guard let e = s.executor else { return nil }
+            return e.recentFailures > 0 ? ("\(e.recentFailures)", .warn) : nil
+        }
+    }
+}
+
+/// Hoverable row: highlight, trailing value with caption, chevron when it opens something.
+struct ListRow: View {
+    @EnvironmentObject var notch: NotchState
+    let id: String; let symbol: String; let tone: Tone
+    let title: String; let subtitle: String; var tag: String? = nil
+    var value: String? = nil; var valueCaption: String? = nil
+    var action: (() -> Void)? = nil
+    var body: some View {
+        let hovered = notch.hovered == id
+        let row = HStack(alignment: .center, spacing: DS.Space.m) {
+            IconBadge(symbol: symbol, tone: tone)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
+                HStack(spacing: DS.Space.xs) {
+                    if let tag { Pill(text: tag, tone: .accent) }
+                    Text(subtitle).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
                 }
             }
-            ForEach(s.activity.recent.filter { open == nil || $0.action == open }.prefix(open == nil ? 4 : 12)) { e in
-                Row(icon: icon(e.action), tint: ["increase", "activate"].contains(e.action) ? Palette.good : Palette.bad,
-                    title: Format.who(e) + " · " + Format.change(e),
-                    detail: (e.campaign ?? "Campanha") + " · " + (e.origin == "observed" && e.from != nil ? "entre \(Format.stamp(e.from)) e \(Format.stamp(e.at))" : Format.stamp(e.at)),
-                    trailing: nil)
+            Spacer(minLength: DS.Space.s)
+            if let value {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(value).font(DS.Font.number).foregroundStyle(tone.color)
+                    if let valueCaption { Text(valueCaption).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted) }
+                }
             }
+            if action != nil { Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(DS.Color.inkMuted).opacity(hovered ? 1 : 0.35) }
         }
-    }
-    func names(_ b: Summary.Bucket?) -> String {
-        guard let b, b.count > 0 else { return "nenhuma" }
-        var parts = b.actors.sorted { $0.value > $1.value }.prefix(2).map { "\($0.key) (\($0.value))" }
-        if b.unknown > 0 { parts.append("\(b.unknown) sem autor") }
-        return parts.joined(separator: " · ")
-    }
-    func icon(_ action: String) -> String {
-        ["increase": "arrow.up.right", "reduce": "arrow.down.right", "pause": "pause.fill", "activate": "play.fill"][action] ?? "clock.arrow.circlepath"
-    }
-}
-
-struct AgentsSection: View {
-    let s: Summary
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: "Agentes", detail: "últimas conclusões e perguntas")
-            if s.agents.recent.isEmpty { Text("Sem conversa recente.").font(.system(size: 11)).foregroundStyle(Palette.muted) }
-            ForEach(s.agents.recent.prefix(4)) { m in
-                Row(icon: m.kind == "message" ? "bubble.left.and.bubble.right" : "person.crop.circle.badge.checkmark", tint: Palette.accent,
-                    title: "\(m.agent ?? "Agente")\(m.to.map { " → \($0)" } ?? ""): \(m.decision ?? "")",
-                    detail: (m.text ?? "") + " · " + Format.stamp(m.at), trailing: nil)
-            }
-        }
-    }
-}
-
-struct ExecutorLine: View {
-    let s: Summary
-    var body: some View {
-        if let e = s.executor {
-            HStack(spacing: 6) {
-                Circle().fill(!e.enabled || e.paused ? Palette.warn : e.recentFailures > 0 ? Palette.warn : Palette.good).frame(width: 6, height: 6)
-                Text("Executor na nuvem: \(e.paused ? "pausado" : e.enabled ? "ativo" : "desligado") · último pulso \(Format.stamp(e.lastPulseAt)) · \(e.recentFailures) falha(s) na última hora")
-                    .font(.system(size: 10.5)).foregroundStyle(Palette.muted)
-            }
-        }
-    }
-}
-
-struct Row: View {
-    let icon: String; let tint: Color; let title: String; let detail: String; let trailing: String?
-    var body: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: icon).font(.system(size: 11, weight: .bold)).foregroundStyle(tint).frame(width: 22, height: 22)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 11.5, weight: .medium)).lineLimit(2)
-                Text(detail).font(.system(size: 10)).foregroundStyle(Palette.muted).lineLimit(2)
-            }
-            Spacer(minLength: 6)
-            if let trailing { Text(trailing).font(.system(size: 11, weight: .semibold, design: .rounded)).foregroundStyle(tint) }
-        }
+        .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
+        .background(hovered ? DS.Color.surfaceHover : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
         .contentShape(Rectangle())
+        .onHover { inside in withAnimation(DS.Motion.quick) { if inside { notch.hovered = id } else if notch.hovered == id { notch.hovered = nil } } }
+        if let action { Button(action: action) { row }.buttonStyle(.plain) } else { row }
+    }
+}
+
+struct EmptyLine: View {
+    let text: String
+    var body: some View {
+        HStack(spacing: DS.Space.s) { Image(systemName: "checkmark.circle").foregroundStyle(DS.Color.good); Text(text) }
+            .font(DS.Font.body).foregroundStyle(DS.Color.inkMuted).padding(.vertical, DS.Space.s)
+    }
+}
+
+struct NowTab: View {
+    @EnvironmentObject var store: Store
+    let s: Summary
+    var showProject: Bool { s.project == "all" }
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            if s.approvals.count > 0 {
+                SectionHeader(title: "Aguardando você", detail: "\(s.approvals.count) proposta(s) exata(s) · aprovar no Bunker")
+                VStack(spacing: 2) {
+                    ForEach(s.approvals.items) { a in
+                        ListRow(id: "ap:" + a.id, symbol: "checkmark.seal.fill", tone: .warn, title: a.title ?? "Proposta exata",
+                                subtitle: a.expiresAt.map { "vence " + Format.stamp($0) } ?? "conferir e aprovar", tag: showProject ? a.project : nil,
+                                value: "Conferir", action: { store.open("#cards") })
+                    }
+                }
+            }
+            SectionHeader(title: "O que fazer agora", detail: "\(s.queue.count) de \(s.queueSize) na fila · ordenado por dinheiro em jogo")
+            if s.queue.isEmpty { EmptyLine(text: "Nada pedindo ação agora.") }
+            VStack(spacing: 2) {
+                ForEach(s.queue) { q in
+                    let loss = q.kind == "loss"
+                    ListRow(id: "q:" + q.id, symbol: loss ? "arrow.down.right" : "arrow.up.right", tone: loss ? .bad : .good,
+                            title: q.campaign ?? "Campanha",
+                            subtitle: "\(q.period == "today" ? "Hoje" : "3 dias"): gasto \(Format.money(q.spend)) · ROAS \(Format.ratio(q.roas)) · 7d \(Format.ratio(q.roas7d))",
+                            tag: showProject ? q.project : nil,
+                            value: (loss ? "−" : "+") + Format.money(q.amount),
+                            valueCaption: loss ? (q.basis == "result" ? (q.period == "today" ? "prejuízo hoje" : "prejuízo em 3 dias") : "receita abaixo da mídia") : "resultado em 3 dias",
+                            action: { store.open("#cards") })
+                }
+            }
+        }
+    }
+}
+
+struct ManagersTab: View {
+    @EnvironmentObject var notch: NotchState
+    let s: Summary
+    let keys = ["increase", "reduce", "pause", "activate"]
+    let symbols = ["increase": "arrow.up.right", "reduce": "arrow.down.right", "pause": "pause.fill", "activate": "play.fill"]
+    let tones: [String: Tone] = ["increase": .good, "reduce": .bad, "pause": .bad, "activate": .good]
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            SectionHeader(title: "Gestores · últimas \(s.activity.hours)h", detail: "clique numa caixa para filtrar quem, quando e quanto")
+            HStack(alignment: .top, spacing: DS.Space.s) {
+                ForEach(keys, id: \.self) { key in box(key) }
+            }
+            let list = s.activity.recent.filter { notch.activityFilter == nil || $0.action == notch.activityFilter }
+            SectionHeader(title: notch.activityFilter.map { (Format.actionLabels[$0] ?? $0) + " recentes" } ?? "Mais recentes", detail: "\(list.count) registro(s) no resumo")
+            if list.isEmpty { EmptyLine(text: "Nenhuma mudança neste filtro.") }
+            VStack(spacing: 2) {
+                ForEach(list) { e in
+                    ListRow(id: "a:" + e.id, symbol: symbols[e.action] ?? "clock", tone: tones[e.action] ?? .neutral,
+                            title: Format.who(e), subtitle: (e.campaign ?? "Campanha") + " · " + Format.change(e),
+                            value: Format.relative(e.at), valueCaption: e.origin == "observed" ? "intervalo da leitura" : Format.stamp(e.at))
+                }
+            }
+        }
+    }
+    func box(_ key: String) -> some View {
+        let b = s.activity.summary[key], selected = notch.activityFilter == key, count = b?.count ?? 0
+        let people = (b?.actors ?? [:]).sorted { $0.value > $1.value }
+        return Button { withAnimation(DS.Motion.quick) { notch.activityFilter = selected ? nil : key } } label: {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                HStack(spacing: 5) {
+                    Image(systemName: symbols[key] ?? "circle").font(.system(size: 9.5, weight: .bold)).foregroundStyle((tones[key] ?? .neutral).color)
+                    Text(Format.actionLabels[key] ?? key).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft)
+                }
+                Text("\(count)").font(DS.Font.stat)
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(people.prefix(2), id: \.key) { p in Text("\(p.key) · \(p.value)").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkSoft).lineLimit(1) }
+                    if let u = b?.unknown, u > 0 { Text("\(u) sem autor").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted) }
+                    if count == 0 { Text("nenhuma").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted) }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(DS.Space.m).frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104, alignment: .topLeading)
+            .card(selected: selected)
+            .contentShape(Rectangle())
+        }.buttonStyle(.plain).disabled(count == 0)
+    }
+}
+
+struct AgentsTab: View {
+    let s: Summary
+    let roleTones: [String: Tone] = ["traffic": .good, "creative": .accent, "budget": .warn, "ops": .neutral]
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            SectionHeader(title: "Agentes", detail: "últimas conclusões e perguntas entre eles")
+            if s.agents.recent.isEmpty { EmptyLine(text: "Sem conversa recente.") }
+            VStack(spacing: 2) {
+                ForEach(s.agents.recent) { m in
+                    HStack(alignment: .top, spacing: DS.Space.m) {
+                        Text(String((m.agent ?? "?").prefix(1))).font(.system(size: 11, weight: .bold))
+                            .frame(width: 26, height: 26).foregroundStyle((roleTones[m.role ?? ""] ?? .neutral).color)
+                            .background((roleTones[m.role ?? ""] ?? .neutral).color.opacity(0.15), in: Circle())
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: DS.Space.xs) {
+                                Text(m.agent ?? "Agente").font(DS.Font.bodyStrong)
+                                if let to = m.to { Text("→ \(to)").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted) }
+                                if s.project == "all", let p = m.project { Pill(text: p, tone: .accent) }
+                                Spacer(minLength: 0)
+                                Text(Format.relative(m.at)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                            }
+                            if let d = m.decision, !d.isEmpty { Text(d).font(DS.Font.body).foregroundStyle(DS.Color.ink).lineLimit(2) }
+                            if let t = m.text { Text(t).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(2) }
+                        }
+                    }
+                    .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
+                }
+            }
+        }
+    }
+}
+
+struct SystemTab: View {
+    let s: Summary
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            SectionHeader(title: "Executor na nuvem")
+            if let e = s.executor {
+                HStack(spacing: DS.Space.s) {
+                    StatusDot(tone: !e.enabled || e.paused ? .warn : e.recentFailures > 0 ? .warn : .good)
+                    Text(e.paused ? "Pausado" : e.enabled ? "Ativo" : "Desligado").font(DS.Font.bodyStrong)
+                    Pill(text: "\(e.recentFailures) falha(s) na última hora", tone: e.recentFailures > 0 ? .warn : .neutral)
+                    Spacer()
+                    Text("último pulso " + Format.relative(e.lastPulseAt)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                }.padding(DS.Space.m).card()
+            } else { EmptyLine(text: "Status do executor indisponível nesta leitura.") }
+            SectionHeader(title: "Dados")
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text("Base de análise: " + (s.analysisAt.map(Format.stamp) ?? "N/D")).font(DS.Font.body)
+                Text("Resumo gerado " + Format.relative(s.generatedAt) + " · atualiza a cada minuto").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                if s.paused { Pill(text: "Escritório pausado", tone: .warn) }
+            }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+            Text(s.notice).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+        }
     }
 }

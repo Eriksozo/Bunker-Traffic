@@ -36,6 +36,16 @@ enum Format {
         f.dateFormat = "dd/MM HH:mm"
         return f.string(from: d)
     }
+    /// "agora", "há 5 min", "há 2 h"; older than a day falls back to the full stamp.
+    static func relative(_ value: Date?, now: Date = Date()) -> String {
+        guard let value else { return "N/D" }
+        let seconds = max(0, now.timeIntervalSince(value))
+        if seconds < 60 { return "agora" }
+        if seconds < 3600 { return "há \(Int(seconds / 60)) min" }
+        if seconds < 86400 { return "há \(Int(seconds / 3600)) h" }
+        return stamp(isoFull.string(from: value))
+    }
+    static func relative(_ value: String?, now: Date = Date()) -> String { relative(date(value), now: now) }
     static func statusName(_ value: String?) -> String {
         switch (value ?? "").uppercased() {
         case "ACTIVE": return "ativa"
