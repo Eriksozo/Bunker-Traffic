@@ -454,3 +454,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Pedido do dono:** um avatar interagindo, chamado Bunk. Personagem original (cúpula de bunker, visor, antena); o Coucou foi consultado só pela licença: código MIT, mas nome, personagem, expressões, animações e sons do Mochi são protegidos e não foram usados.
 - **Comportamento:** humor espelha a operação (vigiando com pulso recente do executor; alerta com perda, proposta aguardando ou conta perto do limite; feliz com ROAS acima de ontem; dormindo fora das 06h–20h, pausado ou silenciado; pensando com resumo em preparação; preocupado em erro). Hover olha para o ponteiro; clique fala o próximo assunto mais importante num balão. Respeita "reduzir movimento". `Bunker --render-bunk arquivo.png` gera a folha de humores.
 - **Validação:** self-test do app (humor, falas, horário). Conferência visual da folha renderizada; o comportamento ao vivo no notch fica com o dono.
+
+## Detalhe da campanha no notch: janelas fechadas sem gasto (registro escrito às 2026-11-07 22:02:08 UTC por `date -u`)
+
+- **Pedido do dono:** testes novos mostravam N/D em Ontem, 3 e 7 dias no detalhe do notch. Causa: as fontes fechadas guardam só linhas com gasto, e uma campanha que começou hoje não aparece nelas.
+- **Mudança (commit `da8d9f7`, versão Cloudflare `161b767a`):** `lib/companion-summary.mjs` usa o `noSpendPeriods` já verificado (`verifiedNoSpendPeriods`: fonte Malva completa, terminando onde hoje começa, lida e sincronizada depois). Nesses períodos o notch mostra "sem gasto" e gasto zero; pedidos, ROAS e ROI continuam N/D (fonte só de gasto não observa vendas). Qualquer outra ausência continua N/D. App do Mac reinstalado (`mac/build.sh`, self-test ok).
+- **Pendente:** conferir no notch após o próximo resumo do executor.
