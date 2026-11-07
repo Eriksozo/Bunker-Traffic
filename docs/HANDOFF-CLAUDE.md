@@ -395,3 +395,14 @@ Escopo pedido pelo dono: filtro Hoje em Mudanças de orçamento e status, preser
 - Validação: testes Auth e do contador/reload, suíte completa, typecheck/build e self-test nativo. O proprietário foi solicitado a colar o link recebido no notch, sem enviar credenciais no chat. Gmail MCP indisponível nesta sessão; leitura de envio não comprova recebimento nem sessão iniciada. Nenhuma campanha alterada.
 
 - Conferência nativa revelou que Referrer-Policy:no-referrer no formulário produzia Origem inválida no WKWebView. A página de e-mail usa same-origin para preservar o Origin da submissão sem divulgar a origem a outros domínios. A validação estrita de Origin no backend permaneceu igual; origens nulas/estrangeiras não foram liberadas.
+
+## Autoria de gestores na web e no notch — 07/11/2026
+
+Correção solicitada pelo dono: nomes disponíveis no Malva não podiam permanecer ausentes nas duas interfaces.
+
+- A consulta anterior dependia de mudanças captadas entre duas leituras, cobria seis campanhas por vez e guardava ausência de autor por seis horas. Uma alteração seguida de reversão entre leituras nem entrava nessa busca.
+- O executor agora lê o histórico recente de orçamento/status de campanhas por projeto Meta configurado, incluindo campanhas fora da fila e mudanças entre observações. Rotação de dois projetos por pulso existente, página atual mais uma página de continuação, retenção de sete dias e teto de 3.000 registros no próprio Durable Object. Cursores, falhas e limite permanecem explícitos; não grava fontes financeiras nem aumenta a cadência do executor. Respeita pausa.
+- Normaliza `daily_budget` e status minúsculos do Malva. Nomes técnicos/chaves não viram nomes de gestores. A união privilegia o nome disponível do mesmo evento e preserva transições repetidas de eventos diferentes; conta, projeto, moeda e intervalo observado precisam conferir.
+- Web, detalhe expandido da visão geral e resumo do notch usam a mesma atividade enriquecida. O card expandido da visão geral antes recebia o estado sem essa autoria.
+- Testes incluem paginação/continuação, identidade, datas inválidas, falha sem resultado parcial, ausência real de autor, transições repetidas e paridade web/notch. Conferência somente leitura com os 17 eventos humanos do Nico de hoje: nenhum nome divergente/ausente após a transformação; somatórios web/notch iguais. Os dados desse teste real ficaram fora do Git.
+- Isso não garante atualização instantânea da origem. Produção precisa confirmar os projetos na cobertura do executor após deploy. Nenhuma alteração de campanha ou aprovação foi feita.

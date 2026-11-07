@@ -16,9 +16,9 @@ import {collectCloudProject,trackedCloudCampaigns} from '../lib/cloud-collector.
 import {CLOUD_MODEL} from '../lib/cloud-analysis.mjs';
 import {cloudModelPolicy,cloudProductionModelPolicy} from '../lib/cloud-model-policy.mjs';
 import {checkCloudModel} from '../lib/cloud-model-check.mjs';
-import {historyPageOf} from '../lib/cloud-history-learning.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
-import {pendingAttributions,attributionRequest,matchAttributions,expiredAttribution,usableAttributions,attributionPolicy} from '../lib/change-attribution.mjs';
+import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
+import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
@@ -36,33 +36,38 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
   return current.state;
  }
- /** Who changed what: read-only Malva history lookups for observed changes, stored in this object only (never the central). */
+ /** Recent Malva campaign edits, including edits between reads and campaigns not in the analysis queue. */
  private async syncAttribution(state:any){
   if(!state||state.paused)return;
-  const now=Date.now(),last:any=await this.ctx.storage.get('attributionStatus');
-  // Every few minutes is enough for authorship; it never adds a central read of its own.
-  if(last?.at&&now-Date.parse(last.at)<attributionPolicy.intervalMs)return;
-  const current={state},stored=await this.ctx.storage.list<any>({prefix:'attr:'});
+  const now=Date.now(),stored=await this.ctx.storage.list<any>({prefix:'attr:'});
   const expired=[...stored].filter(([,v])=>expiredAttribution(v,now)).map(([k])=>k);
   for(let i=0;i<expired.length;i+=128)await this.ctx.storage.delete(expired.slice(i,i+128));
-  const known=new Map([...stored].filter(([k])=>!expired.includes(k)).map(([k,v])=>[k.slice(5),v]));
-  if(known.size>=attributionPolicy.maxEntries)return;
-  const groups=pendingAttributions(current.state,known,now);if(!groups.length)return;
+  const statuses=await this.ctx.storage.list<any>({prefix:'activity-project:'});
+  const selected=activityHistoryProjects(state,[...statuses.values()],now);if(!selected.length)return;
   const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});
-  let matched=0,checked=0,failed=0,itemsSeen=0;const codes:Record<string,number>={};
-  for(const g of groups){
-   const project=listed.items?.find((x:any)=>x.id===g.project&&x.name===current.state.config?.[g.project]?.projectName);if(!project)continue;
+  let checked=0,matched=0,failed=0,itemsSeen=0;const codes:Record<string,number>={};
+  for(const selectedProject of selected){
+   if(!(await this.setting()).enabled)break;
+   const prior:any=statuses.get('activity-project:'+selectedProject.id);
+   const project=listed.items?.find((x:any)=>x.id===selectedProject.id&&x.name===selectedProject.name);
    try{
-    const raw=await source.read('tracking_ad_changes',attributionRequest(g,project.timezone,Date.now()));
-    const page=historyPageOf(raw,project,{adAccountId:g.adAccountId,externalId:g.objectId,budgetCurrency:g.currency},Date.now(),Date.now());
-    itemsSeen+=page.items.length;const entries=matchAttributions(g,page,Date.now());checked+=entries.length;matched+=entries.filter((e:any)=>e.matched).length;
-    await this.ctx.storage.put(Object.fromEntries(entries.map((e:any)=>['attr:'+e.key,e])));
+    if(!project)throw Object.assign(Error('ACTIVITY_PROJECT_IDENTITY'),{code:'ACTIVITY_PROJECT_IDENTITY'});
+    const result=await collectActivityHistory(source,project,prior);
+    if(!(await this.setting()).enabled)break;
+    for(let i=0;i<result.events.length;i+=128)await this.ctx.storage.put(Object.fromEntries(result.events.slice(i,i+128).map((e:any)=>['attr:'+e.key,e])));
+    const {events,...status}=result;await this.ctx.storage.put('activity-project:'+project.id,status);
+    checked++;itemsSeen+=events.length;matched+=events.filter((e:any)=>!!e.actor).length;
    }catch(error:any){
-    failed++;const at=new Date().toISOString(),code=/^[A-Z_]+$/.test(error?.code||'')?error.code:'ATTRIBUTION_READ_FAILED';codes[code]=(codes[code]||0)+1;
-    await this.ctx.storage.put(Object.fromEntries(g.changes.map((c:any)=>['attr:'+c.key,{key:c.key,changeId:c.changeId,project:g.project,checkedAt:at,actor:null,matched:false,error:code}])));
+    failed++;const code=/^[A-Z_]+$/.test(error?.code||'')?error.code:'ACTIVITY_HISTORY_READ_FAILED';codes[code]=(codes[code]||0)+1;
+    // Preserve the last good events and cursor on failure; no six-hour negative cache.
+    await this.ctx.storage.put('activity-project:'+selectedProject.id,{...prior,project:selectedProject.id,checkedAt:new Date().toISOString(),error:code});
    }
   }
-  await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),campaigns:groups.length,checked,matched,failed,itemsSeen,codes,known:known.size});
+  const all=await this.ctx.storage.list<any>({prefix:'attr:'});
+  const overflow=[...all].sort(([,a],[,b])=>Date.parse(b.at||b.checkedAt)-Date.parse(a.at||a.checkedAt)).slice(activityHistoryPolicy.maxEntries).map(([k])=>k);
+  for(let i=0;i<overflow.length;i+=128)await this.ctx.storage.delete(overflow.slice(i,i+128));
+  const progress=await this.ctx.storage.list<any>({prefix:'activity-project:'});
+  await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),version:activityHistoryPolicy.version,projects:checked,checked,matched,failed,itemsSeen,codes,limited:overflow.length>0,known:all.size-overflow.length,coverage:[...progress.values()]});
  }
  /** Mac companion summaries built from the central state this pulse already read; served from this object, never re-reading the central. */
  private async storeCompanion(state:any){

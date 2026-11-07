@@ -85,3 +85,16 @@ test('an executor attribution names the author of an observed change and keeps i
  assert.equal(log.length,1);assert.equal(log[0].actor,'Jorge Raimundo');assert.equal(log[0].at,iso(1.1));assert.equal(log[0].name,'Campanha 9');
  assert.equal(activitySummary(log).pause.unknown,0);
 });
+
+test('named history wins over an anonymous duplicate, but repeated real transitions retain their own managers',()=>{
+ const state={decisionHistory:[history('missing','status','ACTIVE','PAUSED',1.1,null,{eventId:'e1'})],changeAttributions:[
+  {key:'same',eventId:'e1',project:'p',adAccountId:'act',objectId:'c1',field:'status',before:'ACTIVE',after:'PAUSED',at:iso(1.1),actor:'Jorge',currency:'BRL'},
+  {key:'another',eventId:'e2',project:'p',adAccountId:'act',objectId:'c1',field:'status',before:'ACTIVE',after:'PAUSED',at:iso(2),actor:'Leonardo',currency:'BRL'}]};
+ const log=activityLog(state,{now});assert.equal(log.length,2);assert.deepEqual(log.map(e=>e.actor),['Jorge','Leonardo']);
+});
+
+test('observed transition only merges within its observed interval; distinct account, currency and project never borrow an author',()=>{
+ const observed={id:'o',project:'p',adAccountId:'act',objectId:'c1',observedAt:iso(1),previousObservedAt:iso(1.25),changes:[{field:'dailyBudget',before:100,after:200}],before:{budgetCurrency:'BRL'},after:{budgetCurrency:'BRL'}};
+ const s={campaignChanges:[observed],decisionHistory:[history('outside','dailyBudget',100,200,2,'Outra'),history('currency','dailyBudget',100,200,1.1,'Dolar',{currency:'USD'}),history('account','dailyBudget',100,200,1.1,'Outra conta',{adAccountId:'act2'}),history('project','dailyBudget',100,200,1.1,'Outro projeto',{project:'q',projects:['q']})]};
+ const log=activityLog(s,{project:'p',now});assert.equal(log.find(e=>e.origin==='observed').actor,null);assert.equal(log.length,4);
+});
