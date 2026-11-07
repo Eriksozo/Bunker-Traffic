@@ -34,11 +34,12 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
  if(r.method==='server/discover')result={supportedVersions:['2026-07-28'],capabilities:{tools:{}}};
  else if(r.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'bunker-trafego',version:'1.2.0'}};
  else if(r.method==='tools/list')result={tools};
- else if(r.method==='tools/call'){const {name,arguments:a={}}=r.params||{};const cur=await readState();
- if(name==='bunker_atualizar_rodada'&&a.id==='cloud-data'){
+ else if(r.method==='tools/call'&&r.params?.name==='bunker_atualizar_rodada'&&r.params?.arguments?.id==='cloud-data'){const a=r.params.arguments;
+  // Executor/identity reads never need the central: keep them available while the central is slow.
   if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope inválido.');const input=JSON.parse(a.note||'{}');if(!['status','identity','orbitaIdentity'].includes(input.action))throw Error('Somente leitura.');result={content:[{type:'text',text:JSON.stringify(input.action==='status'?await executorControl({action:'status'}):input.action==='orbitaIdentity'?await cloudOrbitaClient(storage()).read('quem_sou_eu',{}):await cloudMalvaClient(storage()).read('workspace_whoami',{}))}]};
  }
- else if(name==='bunker_atualizar_rodada'&&a.id==='source-data'){
+ else if(r.method==='tools/call'){const {name,arguments:a={}}=r.params||{};const cur=await readState();
+ if(name==='bunker_atualizar_rodada'&&a.id==='source-data'){
   if(a.revision!==0||a.status!=='Pendente')throw Error('Envelope de origem inválido.');
   result={content:[{type:'text',text:JSON.stringify(await readMalvaSource(storage(),cur.state,JSON.parse(a.note||'{}')))}]};
  }

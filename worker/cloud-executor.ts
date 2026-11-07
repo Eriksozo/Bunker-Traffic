@@ -29,35 +29,39 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async write(fn:(s:any,revision:number)=>any){
   const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);return result;
  }
- private async syncLive(){
-  const current=await this.read();if(current.state.paused)return;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
+ private async syncLive():Promise<any>{
+  const current=await this.read();if(current.state.paused)return null;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
   const projects=live.projects.sort((a:any,b:any)=>Date.parse(live.items.find((i:any)=>i.projectId===a.projectId)?.lastSuccessAt||'1970-01-01')-Date.parse(live.items.find((i:any)=>i.projectId===b.projectId)?.lastSuccessAt||'1970-01-01')).slice(0,2);
   for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
+  return current.state;
  }
  /** Who changed what: read-only Malva history lookups for observed changes, stored in this object only (never the central). */
- private async syncAttribution(){
-  const current=await this.read();if(current.state.paused)return;
-  const now=Date.now(),stored=await this.ctx.storage.list<any>({prefix:'attr:'});
+ private async syncAttribution(state:any){
+  if(!state||state.paused)return;
+  const now=Date.now(),last:any=await this.ctx.storage.get('attributionStatus');
+  // Every few minutes is enough for authorship; it never adds a central read of its own.
+  if(last?.at&&now-Date.parse(last.at)<attributionPolicy.intervalMs)return;
+  const current={state},stored=await this.ctx.storage.list<any>({prefix:'attr:'});
   const expired=[...stored].filter(([,v])=>expiredAttribution(v,now)).map(([k])=>k);
   for(let i=0;i<expired.length;i+=128)await this.ctx.storage.delete(expired.slice(i,i+128));
   const known=new Map([...stored].filter(([k])=>!expired.includes(k)).map(([k,v])=>[k.slice(5),v]));
   if(known.size>=attributionPolicy.maxEntries)return;
   const groups=pendingAttributions(current.state,known,now);if(!groups.length)return;
   const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});
-  let matched=0,checked=0,failed=0;
+  let matched=0,checked=0,failed=0,itemsSeen=0;const codes:Record<string,number>={};
   for(const g of groups){
    const project=listed.items?.find((x:any)=>x.id===g.project&&x.name===current.state.config?.[g.project]?.projectName);if(!project)continue;
    try{
     const raw=await source.read('tracking_ad_changes',attributionRequest(g,project.timezone,Date.now()));
     const page=historyPageOf(raw,project,{adAccountId:g.adAccountId,externalId:g.objectId,budgetCurrency:g.currency},Date.now(),Date.now());
-    const entries=matchAttributions(g,page,Date.now());checked+=entries.length;matched+=entries.filter((e:any)=>e.matched).length;
+    itemsSeen+=page.items.length;const entries=matchAttributions(g,page,Date.now());checked+=entries.length;matched+=entries.filter((e:any)=>e.matched).length;
     await this.ctx.storage.put(Object.fromEntries(entries.map((e:any)=>['attr:'+e.key,e])));
    }catch(error:any){
-    failed++;const at=new Date().toISOString(),code=/^[A-Z_]+$/.test(error?.code||'')?error.code:'ATTRIBUTION_READ_FAILED';
+    failed++;const at=new Date().toISOString(),code=/^[A-Z_]+$/.test(error?.code||'')?error.code:'ATTRIBUTION_READ_FAILED';codes[code]=(codes[code]||0)+1;
     await this.ctx.storage.put(Object.fromEntries(g.changes.map((c:any)=>['attr:'+c.key,{key:c.key,changeId:c.changeId,project:g.project,checkedAt:at,actor:null,matched:false,error:code}])));
    }
   }
-  await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),campaigns:groups.length,checked,matched,failed});
+  await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),campaigns:groups.length,checked,matched,failed,itemsSeen,codes,known:known.size});
  }
  private async assertEnabled(){if(!(await this.setting()).enabled){const error:any=new Error('CLOUD_EXECUTOR_PAUSED');error.code='CLOUD_EXECUTOR_PAUSED';throw error;}}
  private engine(){const source=cloudMalvaClient(this.db());return createCloudEngine({read:()=>this.read(),write:(fn:any)=>this.write(fn),source:{read:source.read,dispatch:async(command:any,execution:any)=>{await this.assertEnabled();return source.dispatch(command,execution);}},ai:this.env.AI,modelPolicy:cloudProductionModelPolicy,prepareGuard:async(s:any,args:any)=>{await this.assertEnabled();return assertCurrentExecutionContingency(s,args);},ops:{creativeItems:async(s:any,projectId:string)=>syncCloudCreatives({db:this.db(),state:s,projectId,source:cloudOrbitaClient(this.db()),malva:source,expectedEmail:this.env.BUNKER_OWNER_EMAIL,expectedWorkspace:(await this.setting()).check?.workspaceId,readCurrent:async()=>{const current=(await this.read()).state;await this.assertEnabled();return current;}}),liveItems:async(s:any)=>(await readLiveData(this.db(),s)).items,claimBatch,updateRun,importBundle:(s:any,b:any)=>apply(s,{op:'import',bundle:b}),answer:(s:any,id:string,text:string)=>{const m=s.messages.find((m:any)=>m.id===id);if(!m)throw Error('CLOUD_QUESTION_MISSING');return answerOfficeMessage(m,text,new Date().toISOString());}}});}
@@ -65,7 +69,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
-  if(input.action==='status'){return Response.json({...runtime,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
+  if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus');return Response.json({...runtime,attribution:attribution||null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
   if(input.action==='check'){
    const started=Date.now();const results=await Promise.allSettled([this.engine().identity(),checkCloudModel(this.env.AI)]);
    const identity=results[0],model=results[1],malva=identity.status==='fulfilled',ai=model.status==='fulfilled'&&model.value===true;
@@ -93,9 +97,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     const result=await engine.step(),at=new Date().toISOString();const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,lastErrorDetail:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});
     if(['idle','blocked'].includes(result.kind))break;
    }
-   if((await this.setting()).enabled)await this.syncLive();
+   const liveState=(await this.setting()).enabled?await this.syncLive():null;
    // Optional attribution never turns into an executor failure.
-   if((await this.setting()).enabled)await this.syncAttribution().catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
+   if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
   }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
   finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+60000);}
  }

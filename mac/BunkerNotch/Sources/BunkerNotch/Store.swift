@@ -24,7 +24,7 @@ final class Store: ObservableObject {
     func start() {
         requestNotifications()
         Task { await refresh() }
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
         }
     }

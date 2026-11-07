@@ -424,7 +424,7 @@ struct SystemTab: View {
             SectionHeader(title: "Dados")
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text("Base de análise: " + (s.analysisAt.map(Format.stamp) ?? "N/D")).font(DS.Font.body)
-                Text("Resumo gerado " + Format.relative(s.generatedAt) + " · atualiza a cada minuto").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                Text("Resumo gerado " + Format.relative(s.generatedAt) + " · atualiza a cada 2 minutos").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 if s.paused { Pill(text: "Escritório pausado", tone: .warn) }
             }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
             Text(s.notice).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
