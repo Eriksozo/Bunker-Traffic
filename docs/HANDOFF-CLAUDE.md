@@ -88,3 +88,17 @@ Limitações observadas, sem correção nesta etapa:
 - O histórico recente do executor (30 eventos, ≈01:33–02:01 UTC) tem quatro `CLOUD_STEP_FAILED`, com o último detalhe "Falha no armazenamento Supabase (500)". Investigar antes da próxima janela; não foi reprocessado nem repetido.
 - O armazenamento da central estava em ≈1,30 MB de 1,75 MB (72 fontes). É uma leitura pontual, não uma tendência.
 - Pendência para o Claude: recarregar Malva, Supabase e Cloudflare numa sessão que enxergue o OAuth concluído e repetir somente as leituras de identidade.
+
+### Confirmação após abrir uma sessão nova — 07/11/2026, 02:05 UTC
+
+Esta conferência substitui as pendências de autenticação da tabela anterior. Na sessão **Operação Bunker validação de conexões**, os cinco MCPs responderam pelas ferramentas do próprio Claude: Malva (`workspace_whoami` e projetos), Órbita (`quem_sou_eu`), Supabase (URL do projeto e nomes das tabelas), Cloudflare (usuário/contas) e Bunker (`bunker_ler`). Nenhum permaneceu em `needs_auth`. GitHub já estava confirmado pelo Git SSH e pelos pushes. Claude conduz a implementação; Codex revisa e valida como copiloto.
+
+- Malva: espaço Epidemia, Tracking com acesso de gerente e escopo `tracking:ads`; seis projetos Meta identificados. Gabe Kwai e a conta MGID do John permanecem fora do escopo.
+- Órbita: identidade SOZO e papéis de Tráfego/Líder confirmados, conciliados com a identidade Malva.
+- Supabase: projeto Bunker Traffic; `bunker_records` e `bunker_reports` encontrados com RLS ativo. Nenhum payload ou secret foi exportado.
+- Cloudflare: conta Erik Sozo confirmada pelo MCP, além do Wrangler já validado.
+- Bunker: revisão 5437 lida pelo MCP da sessão nova, sem pausa, nenhuma análise devida e nenhuma execução aprovada pendente naquele instante. A fonte do John foi indicada como vencida; conexão disponível não renova a análise.
+- O classificador de permissões do Claude bloqueou a leitura adicional de status pelo envelope `cloud-data`, pois a ferramenta se chama `bunker_atualizar_rodada`. Esse bloqueio não foi contornado. A leitura direta feita na sessão anterior continua sendo evidência pontual, não uma nova confirmação.
+- As falhas Supabase 500 registradas acima continuam pendentes de investigação. Não foram reprocessadas, e nenhuma campanha, aprovação, cadência ou pausa foi alterada nesta validação.
+
+Os OAuths pertencem ao cliente Claude e devem ser renovados pelo fluxo próprio quando necessário. A credencial dedicada do Bunker permanece em arquivo privado fora do Git. O próximo trabalho concreto deve começar pela investigação de persistência do executor, preservando histórico e reservas; este repasse não autoriza aprovar propostas pelo proprietário.
