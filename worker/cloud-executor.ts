@@ -21,7 +21,7 @@ import {expiredAttribution,usableAttributions} from '../lib/change-attribution.m
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy} from '../lib/autonomy-shadow.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
-import {buildAccountPanel,readMetaAccounts,accountPanelPolicy} from '../lib/account-limits.mjs';
+import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
@@ -75,7 +75,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async syncAccounts(state:any){
   if(!state||state.paused)return;
   const prior=await this.ctx.storage.get<any>('accountsPanel');
-  if(prior&&Date.now()-Date.parse(prior.generatedAt)<accountPanelPolicy.refreshMs)return;
+  if(prior?.version===accountPanelPolicy.version&&Date.now()-Date.parse(prior.generatedAt)<accountPanelPolicy.refreshMs)return;
   const source=cloudMalvaClient(this.db()),projects:any[]=[],projectErrors:Record<string,string>={};
   for(const [id,c] of Object.entries<any>(state.config||{})){
    try{const r:any=await source.read('tracking_ad_accounts',{projectId:id});projects.push({id,name:c?.projectName||id,items:Array.isArray(r?.items)?r.items:[]});}
@@ -84,7 +84,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let meta:any[]|null=null,metaError:string|null=null;
   try{meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN||'',{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});}
   catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';}
-  await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,meta,metaError}),projectErrors});
+  await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors});
  }
  /** Recent Malva campaign edits, including edits between reads and campaigns not in the analysis queue. */
  private async syncAttribution(state:any){

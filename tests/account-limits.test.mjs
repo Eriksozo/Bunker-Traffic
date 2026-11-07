@@ -25,12 +25,12 @@ test('Panel joins Malva projects with Meta by account id, flags near-limit and r
  assert.equal(panel.metaConnected,true);assert.equal(panel.rows.length,3,'Meta-only account 999 is ignored');
  const a=panel.rows.find(r=>r.accountId==='111');
  assert.deepEqual(a.projects,['John','Nico']);assert.equal(a.group,'FB Flix');assert.equal(a.dailyLimit,321.06);assert.equal(a.usedPct,90.3);assert.deepEqual(a.alerts,['Perto do limite diário']);
- assert.equal(a.runningLabel,'Rodando · John, Nico');assert.equal(a.spendTodayBrl,1000);
+ assert.equal(a.runningLabel,'Rodando · John, Nico');assert.equal(a.spendTodayBrl,900,'account-level spend is never summed across projects');
  const b=panel.rows.find(r=>r.accountId==='222');assert.equal(b.statusLabel,'Desabilitada');assert.ok(b.alerts.includes('Caiu nas últimas 24h'));assert.equal(b.dailyLimit,null);assert.equal(b.limitSource,'N/D');
  const c=panel.rows.find(r=>r.accountId==='333');assert.equal(c.group,'FB Max');assert.ok(c.alerts.includes('Ativa sem gasto em 7 dias'));
  assert.equal(panel.rows[0].accountId,'111','active accounts first, highest use first');
  const json=JSON.stringify(panel);for(const leak of ['Pessoa','Rua','Alguém','nunca'])assert.equal(json.includes(leak),false);
- assert.deepEqual(panel.counts,{total:3,active:2,running:1,disabled:1,nearLimit:1,withLimit:1});
+ assert.deepEqual(panel.counts,{total:3,active:2,running:1,disabled:1,nearLimit:1,withLimit:1,listed:3});
 });
 test('Without the Meta token the panel still works and every limit is N/D',()=>{
  const panel=buildAccountPanel({projects:[{id:'p',name:'John',items:[malva('111','CA 1',{spendToday:1,spend7d:1,active:1})]}],meta:null,metaError:'META_TOKEN_MISSING',now});
@@ -52,4 +52,16 @@ test('Meta reads keep the token in the header, page by cursor and return only fi
  await assert.rejects(readMetaAccounts(fake,''),{code:'META_TOKEN_MISSING'});
  await assert.rejects(readMetaAccounts(async()=>({ok:false,status:400,json:async()=>({error:{code:190,message:'token tok-123 expirou'}})}),'tok-123'),e=>e.code==='META_190'&&!String(e.message).includes('tok-123'));
  await assert.rejects(readMetaAccounts(async()=>{throw new Error('falhou em https://graph?access_token=tok-123');},'tok-123'),e=>e.code==='META_NETWORK'&&!String(e.message).includes('tok-123'));
+});
+
+test('Shared accounts are attributed by each project own campaign spend; old disabled accounts are counted but not listed',async()=>{
+ const {runningAccounts}=await import('../lib/account-limits.mjs');
+ const state={config:{p1:{projectName:'Gabe'},p2:{projectName:'Leandro'}},snapshots:[
+  {projectId:'p2',level:'campaign',period:'today',rows:[{provider:'meta',adAccountId:'u-111',spend:50}]},
+  {projectId:'p1',level:'campaign',period:'7d',rows:[{provider:'meta',adAccountId:'u-111',spend:0}]}]};
+ const running=runningAccounts(state);assert.deepEqual([...running.Leandro],['u-111']);assert.equal(running.Gabe.size,0);
+ const projects=[{id:'p1',name:'Gabe',items:[malva('111','CA 1137 - BRL Fbflix',{spendToday:900,spend7d:5000,active:4})]},{id:'p2',name:'Leandro',items:[malva('111','CA 1137 - BRL Fbflix',{spendToday:900,spend7d:5000,active:4}),malva('555','CA velha',{status:'disabled',changedAt:'2026-10-01T00:00:00Z'})]}];
+ const panel=buildAccountPanel({projects,running,meta:null,now});
+ assert.equal(panel.rows.find(r=>r.accountId==='111').runningLabel,'Rodando · Leandro','paused Gabe does not run in the shared account');
+ assert.equal(panel.counts.total,2);assert.equal(panel.counts.listed,1);assert.equal(panel.rows.some(r=>r.accountId==='555'),false);
 });
