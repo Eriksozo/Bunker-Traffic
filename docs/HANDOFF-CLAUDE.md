@@ -15,7 +15,7 @@ Data: 06/11/2026, horário do proprietário America/Boa_Vista. Este arquivo é o
 
 React/Vinext apresenta a dashboard. O Durable Object `BunkerCloudExecutor` na Cloudflare coordena coletas, pareceres, aprendizado e execuções exatas aprovadas. Supabase guarda estado, relatórios, arquivos e autenticação. Malva é a fonte e o caminho de ações de anúncios. Órbita fornece contexto de produção e nomenclaturas de criativos; cadastro/aprovação nela não comprova entrega na Meta.
 
-MCP privado do Bunker: `https://bunker-trafego-erik.eriksozo.chatgpt.site/mcp`. Ler `bunker_ler` no início para obter revisão, runbook e fila reais. Processar primeiro conferências e execuções aprovadas, depois a fila autônoma e coletas elegíveis. Não iniciar reserva ou coleta fora da agenda. Não criar uma segunda rotina para competir com a Cloudflare.
+MCP do Bunker para o Claude: `https://bunker-traffic.erik-iplou.workers.dev/mcp`, com credencial própria `BUNKER_CLAUDE_AGENT_TOKEN` entregue pelo `headersHelper` (ver seção "Status verificado em 07/11/2026"). O MCP privado do Sites (`https://bunker-trafego-erik.eriksozo.chatgpt.site/mcp`) continua compatível com o Codex, mas exige OAuth OpenAI sem registro dinâmico de cliente e não funciona para o Claude; não tentar autenticar o Claude por ele. Ler `bunker_ler` no início para obter revisão, runbook e fila reais. Processar primeiro conferências e execuções aprovadas, depois a fila autônoma e coletas elegíveis. Não iniciar reserva ou coleta fora da agenda. Não criar uma segunda rotina para competir com a Cloudflare.
 
 ## O que acabou de mudar
 
@@ -30,7 +30,7 @@ A conta Claude selecionada pelo proprietário foi autorizada para este repasse. 
 
 | Serviço | Caminho de acesso | Como confirmar |
 | --- | --- | --- |
-| Bunker | MCP privado acima; OAuth próprio do cliente | `bunker_ler` deve retornar revisão, fonte e plano atuais; não basta aparecer na lista. |
+| Bunker | Claude: Worker `/mcp` + `headersHelper` com token próprio. Codex: MCP privado do Sites com OAuth do próprio cliente | `bunker_ler` deve retornar revisão, fonte e plano atuais; não basta aparecer na lista. |
 | Malva | `https://malvadash.com/api/mcp` | Identidade/workspace e lista de projetos; conferir seis projetos Meta e seu alcance antes de escrever. |
 | Órbita | `https://dashops.forallsales.com.br/api/mcp`; configuração de usuário Claude já existente | `quem_sou_eu`; identidade e projeto/expert precisam corresponder. Não duplicar/expor seu cabeçalho existente. |
 | Supabase | MCP oficial limitado ao projeto Bunker Traffic | OAuth, identidade do projeto e uma consulta de metadados somente leitura. Não despejar `payload` ou secrets. |
@@ -69,3 +69,22 @@ Rodar deploy apenas após uma mudança autorizada e validada. Não executar este
 - Acompanhar crescimento dos registros imutáveis antes de definir retenção; não apagar histórico ou fontes pendentes para liberar espaço.
 - Concluir QA visual do estado de análise e dos cards quando houver controle de navegador disponível.
 - Preservar fila, aprovações, recibos de envio único, resultados favoráveis/desfavoráveis e incerteza causal dos aprendizados.
+
+## Status verificado em 07/11/2026 (≈02:05 UTC)
+
+Mudança desta etapa: commit `31afd92` (credencial dedicada do Claude restrita a `/mcp`), implantado automaticamente pela integração GitHub como versão Cloudflare `d18a97e2-4b63-49b1-ae1c-05c46ad6538a` (100%). O secret `BUNKER_CLAUDE_AGENT_TOKEN` foi enviado por stdin; a versão implantada mantém os sete secrets anteriores. O token de agente legado continua aceito. A credencial do Claude é recusada em `/internal/storage` e `/api/*` (401 conferido em produção) e não cria identidade de dono nem aprova propostas. Cliente: `.mcp.json` local (fora do Git) aponta `bunker` para o Worker com `headersHelper` → `scripts/claude-mcp-headers.sh`, que lê um arquivo privado fora do repositório (modo 600) e só responde à URL `/mcp` do Worker. Testes: 931 aprovados, typecheck e build aprovados.
+
+| Acesso | Status real | Evidência / limitação |
+| --- | --- | --- |
+| Bunker | Confirmado pela credencial própria (JSON-RPC direto ao `/mcp`) | `initialize`, `tools/list` (9 ferramentas) e `bunker_ler` com 200; status do executor pelo envelope `cloud-data` com 200. O conector `bunker` da sessão do Claude Desktop iniciada antes da mudança ainda mostrava a configuração antiga; recarregar em `/mcp` ou abrir sessão nova. |
+| Órbita | Confirmado (ferramenta MCP da sessão) | `quem_sou_eu`: usuário SOZO, papéis Tráfego/Líder de tráfego. O e-mail da Órbita difere do e-mail da conta Claude; a conciliação com o proprietário Malva é feita pelo backend. |
+| GitHub | Confirmado | `git ls-remote` e push SSH do commit `31afd92`. |
+| Cloudflare | Wrangler local confirmado; MCP oficial pendente nesta sessão | Wrangler: conta Erik Sozo, versões e secrets (somente nomes). O OAuth foi concluído pelo proprietário, mas a sessão aberta continuou `needs_auth`. |
+| Malva | Pendente nesta sessão | OAuth concluído pelo proprietário (espaço Epidemia), mas a sessão aberta continuou `needs_auth`; `workspace_whoami` não foi chamado pelo Claude. A última conferência do executor (04/11) registrou o workspace e sete projetos Malva, incluindo Gabe Kwai, que fica fora do escopo. |
+| Supabase | Pendente nesta sessão | OAuth concluído pelo proprietário (projeto Bunker Traffic), mas a sessão aberta continuou `needs_auth`; `get_project_url`/`list_tables` não foram chamados. |
+
+Limitações observadas, sem correção nesta etapa:
+- O executor está ativo e não pausado, fora da janela automática no momento da leitura (agenda 06:00–20:00, a cada 15 min, America/Sao_Paulo). Nenhuma análise devida.
+- O histórico recente do executor (30 eventos, ≈01:33–02:01 UTC) tem quatro `CLOUD_STEP_FAILED`, com o último detalhe "Falha no armazenamento Supabase (500)". Investigar antes da próxima janela; não foi reprocessado nem repetido.
+- O armazenamento da central estava em ≈1,30 MB de 1,75 MB (72 fontes). É uma leitura pontual, não uma tendência.
+- Pendência para o Claude: recarregar Malva, Supabase e Cloudflare numa sessão que enxergue o OAuth concluído e repetir somente as leituras de identidade.
