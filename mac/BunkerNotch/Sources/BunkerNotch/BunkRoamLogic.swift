@@ -128,3 +128,32 @@ enum BunkScreens {
 /// Optional: keep the notch and Bunk out of screen recordings, screenshots and shared screens (off by default,
 /// since it also hides them from the owner's own screenshots).
 enum CapturePrivacy { static let key = "hideFromCapture" }
+
+/// A window Bunk can stand on (AppKit coordinates, origin bottom-left). Lists are front to back.
+struct PerchWindow: Equatable { let id: Int; let frame: CGRect }
+
+/// Where Bunk's feet rest: the highest window top edge at or below his feet, wide enough under him,
+/// with room above, not covered at that point by a window in front; otherwise the screen floor.
+/// Idea studied in puck-mac (MIT, credited in mac/NOTICE.md); rewritten for Bunk.
+enum WindowPerch {
+    struct Surface: Equatable { let y: CGFloat; let windowID: Int?; let minX: CGFloat; let maxX: CGFloat }
+    static let edgeMargin: CGFloat = 18
+    static func surface(x: CGFloat, feetY: CGFloat, windows: [PerchWindow], floor: Surface, ceiling: CGFloat) -> Surface {
+        var best = floor
+        for (i, w) in windows.enumerated() {
+            let top = w.frame.maxY
+            guard x >= w.frame.minX + edgeMargin, x <= w.frame.maxX - edgeMargin else { continue }  // under his feet
+            guard top <= feetY + 1, top > best.y else { continue }                                     // below him, higher than the best so far
+            guard top + BunkDesk.bunkSize <= ceiling else { continue }                                  // maximized or too high: no room above
+            let probe = CGPoint(x: x, y: top + 2)
+            guard !windows[..<i].contains(where: { $0.frame.contains(probe) }) else { continue }        // covered by a window in front
+            best = Surface(y: top, windowID: w.id, minX: w.frame.minX + edgeMargin, maxX: w.frame.maxX - edgeMargin)
+        }
+        return best
+    }
+    /// One frame of falling with gravity; returns the new height, speed and whether he landed.
+    static func fall(y: CGFloat, speed: CGFloat, floorY: CGFloat, dt: CGFloat, gravity: CGFloat = 2600) -> (y: CGFloat, speed: CGFloat, landed: Bool) {
+        let v = speed + gravity * dt, next = y - v * dt
+        return next <= floorY ? (floorY, 0, true) : (next, v, false)
+    }
+}

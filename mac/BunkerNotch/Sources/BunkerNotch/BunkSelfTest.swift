@@ -57,6 +57,20 @@ extension SelfTest {
         expect(RoamPolicy.merge(["a"], "a") == ["a"] && RoamPolicy.merge(["a", "b", "c", "d"], "e") == ["b", "c", "d", "e"], #line)
         expect(BunkDesk.coversScreen(CGRect(x: -480, y: 1, width: 1919, height: 1080), ext) && !BunkDesk.coversScreen(CGRect(x: 0, y: 0, width: 800, height: 600), ext), #line)
         expect(BunkBrain.animatesAtRest(.alert) && !BunkBrain.animatesAtRest(.idle) && !BunkBrain.animatesAtRest(.watching) && !BunkBrain.animatesAtRest(.sleeping), #line)
+        // Standing on windows: highest edge below his feet, wide enough, room above, not covered in front; else the floor.
+        let floorS = WindowPerch.Surface(y: 6, windowID: nil, minX: 60, maxX: 1400)
+        let back = PerchWindow(id: 1, frame: CGRect(x: 100, y: 100, width: 800, height: 400))    // top 500
+        let front = PerchWindow(id: 2, frame: CGRect(x: 600, y: 50, width: 600, height: 500))    // top 550, in front, covers x 600…1200
+        let maxed = PerchWindow(id: 3, frame: CGRect(x: 0, y: 0, width: 1440, height: 900))      // reaches the menu bar
+        let wins = [front, back, maxed]
+        expect(WindowPerch.surface(x: 300, feetY: 700, windows: wins, floor: floorS, ceiling: 900).windowID == 1, #line)
+        expect(WindowPerch.surface(x: 700, feetY: 700, windows: wins, floor: floorS, ceiling: 900).windowID == 2, #line)
+        expect(WindowPerch.surface(x: 700, feetY: 520, windows: [front, back], floor: floorS, ceiling: 900).windowID == nil, #line) // back's edge is covered by front
+        expect(WindowPerch.surface(x: 300, feetY: 400, windows: wins, floor: floorS, ceiling: 900).windowID == nil, #line)          // edge above his feet
+        expect(WindowPerch.surface(x: 105, feetY: 700, windows: wins, floor: floorS, ceiling: 900).windowID == nil, #line)          // too close to the corner
+        expect(WindowPerch.surface(x: 300, feetY: 700, windows: [PerchWindow(id: 4, frame: CGRect(x: 100, y: 100, width: 800, height: 760))], floor: floorS, ceiling: 900).windowID == nil, #line) // no room above
+        let f1 = WindowPerch.fall(y: 500, speed: 0, floorY: 6, dt: 1.0 / 60.0)
+        expect(f1.y < 500 && !f1.landed && WindowPerch.fall(y: 10, speed: 800, floorY: 6, dt: 1.0 / 60.0).landed, #line)
         let s1 = BunkDesk.step(from: .zero, to: CGPoint(x: 10, y: 0), distance: 4)
         expect(s1.point == CGPoint(x: 4, y: 0) && !s1.arrived && BunkDesk.step(from: s1.point, to: CGPoint(x: 10, y: 0), distance: 8).arrived, #line)
     }

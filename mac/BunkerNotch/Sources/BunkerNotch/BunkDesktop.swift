@@ -75,6 +75,8 @@ struct BunkStageView: View {
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = true; self?.stopTimer() } }
         ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = false; self?.retime() } }
+        // Another app came forward: its windows may now be under (or over) Bunk, read them quickly for a few seconds.
+        ws.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.fastReadsUntil = Date().addingTimeInterval(3); self?.windowsReadAt = .distantPast } }
         // Locked screen: same pause as a sleeping display (public distributed notifications).
         let dnc = DistributedNotificationCenter.default()
         dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = true; self?.stopTimer() } }
@@ -138,13 +140,7 @@ struct BunkStageView: View {
     }
     /// Allowed screens without a full-screen app (presentations, video). Window bounds/layer only: no Screen Recording permission.
     private func screensInfo() -> [(frame: CGRect, visible: CGRect)] {
-        let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
-        let top = NSScreen.screens.first?.frame.maxY ?? 0
-        let bounds: [CGRect] = windows.compactMap { w in
-            guard (w[kCGWindowLayer as String] as? Int) == 0, let b = w[kCGWindowBounds as String] as? [String: CGFloat],
-                  let x = b["X"], let y = b["Y"], let width = b["Width"], let height = b["Height"] else { return nil }
-            return CGRect(x: x, y: top - y - height, width: width, height: height) // CG top-left → AppKit bottom-left
-        }
+        let bounds = readWindows().map(\.frame)
         let free = allowedScreens.filter { s in !bounds.contains { BunkDesk.coversScreen($0, s.frame) } }
         return (free.isEmpty ? [] : free).map { ($0.frame, $0.visibleFrame) }
     }
@@ -247,7 +243,7 @@ struct BunkStageView: View {
 
     private func retime() {
         guard panel != nil, !screenAsleep else { stopTimer(); return }
-        let rate: TimeInterval = !stops.isEmpty ? 1.0 / 60.0 : stage.mood == .sleeping ? 0.1 : 1.0 / 30.0
+        let rate: TimeInterval = !stops.isEmpty || falling || wanderTarget != nil ? 1.0 / 60.0 : stage.mood == .sleeping ? 0.1 : 1.0 / 30.0
         guard rate != timerRate || timer == nil else { return }
         stopTimer(); timerRate = rate
         let t = Timer(timeInterval: rate, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.frame() } }
@@ -294,12 +290,64 @@ struct BunkStageView: View {
         }
         // Living on the desktop: follow the pointer with the eyes, doze off when nothing happens.
         stage.look = gaze.x; stage.lookY = gaze.y
+        if resident && !dragging && !roaming { perch() }
         let distance = ((mouse.x - center.x) * (mouse.x - center.x) + (mouse.y - center.y) * (mouse.y - center.y)).squareRoot()
         let asleep = !roaming && BunkDesk.shouldSleep(idle: Date().timeIntervalSince(lastActivity), mouseDistance: distance)
         let mood: BunkMood = asleep ? .sleeping : BunkBrain.mood(store.summary, error: store.error, preparing: store.preparing, muted: store.muted)
         if mood == .sleeping && stage.mood != .sleeping && !yawned { yawned = true; react(.yawn, for: 1.6) }
         if mood != .sleeping { yawned = false }
         if stage.mood != mood { stage.mood = mood; retime() }
+    }
+
+    // MARK: - Standing on windows (gravity, falls, strolls along the edge)
+
+    private var falling = false, fallSpeed: CGFloat = 0, fallStartY: CGFloat = 0
+    private var wanderTarget: CGFloat?, nextWander = Date().addingTimeInterval(20)
+    private var perchWindows: [PerchWindow] = [], windowsReadAt = Date.distantPast, fastReadsUntil = Date.distantPast
+
+    /// Visible windows of other apps, front to back. Bounds, layer and owner only: no names, no Screen Recording permission.
+    private func readWindows() -> [PerchWindow] {
+        let me = Int(ProcessInfo.processInfo.processIdentifier), top = NSScreen.screens.first?.frame.maxY ?? 0
+        let list = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+        return list.compactMap { w in
+            guard (w[kCGWindowLayer as String] as? Int) == 0, (w[kCGWindowOwnerPID as String] as? Int) != me, ((w[kCGWindowAlpha as String] as? Double) ?? 1) > 0.1,
+                  let b = w[kCGWindowBounds as String] as? [String: CGFloat], let x = b["X"], let y = b["Y"], let width = b["Width"], let height = b["Height"],
+                  width >= 160, height >= 80 else { return nil }
+            return PerchWindow(id: (w[kCGWindowNumber as String] as? Int) ?? 0, frame: CGRect(x: x, y: top - y - height, width: width, height: height))
+        }
+    }
+
+    private func perch() {
+        let now = Date(), busy = falling || wanderTarget != nil || now < fastReadsUntil
+        // Adaptive reads: fast while moving or right after an app switch, slow while still, slowest asleep.
+        if now.timeIntervalSince(windowsReadAt) >= (busy ? 0.25 : stage.mood == .sleeping ? 3 : 1) { perchWindows = readWindows(); windowsReadAt = now }
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(CGPoint(x: feet.x, y: feet.y + 1)) }) ?? nearestAllowed(to: feet) else { return }
+        let v = screen.visibleFrame, half = BunkDesk.bunkSize / 2
+        let floor = WindowPerch.Surface(y: v.minY + RoamPlanner.floorInset, windowID: nil, minX: v.minX + BunkDesk.margin + half, maxX: v.maxX - BunkDesk.margin - half)
+        let surface = WindowPerch.surface(x: feet.x, feetY: feet.y, windows: perchWindows, floor: floor, ceiling: v.maxY)
+        let dt = CGFloat(timerRate)
+        if feet.y > surface.y + 0.5 {
+            // Nothing under him any more (window closed, moved or minimized): fall to the next edge or the floor.
+            if !falling { falling = true; fallStartY = feet.y; fallSpeed = 0; wanderTarget = nil; stage.walking = false; retime() }
+            let f = WindowPerch.fall(y: feet.y, speed: fallSpeed, floorY: surface.y, dt: dt)
+            feet.y = f.y; fallSpeed = f.speed
+            panel?.setFrameOrigin(BunkDesk.origin(feet: feet))
+            if f.landed { falling = false; if fallStartY - feet.y > 40 { land() } else { retime() } }
+            return
+        }
+        if feet.y < surface.y - 0.5 && surface.y - feet.y < 14 { feet.y = surface.y; panel?.setFrameOrigin(BunkDesk.origin(feet: feet)) }
+        guard stage.mood != .sleeping, stage.bubble == nil else {
+            if wanderTarget != nil { wanderTarget = nil; stage.walking = false; retime() }
+            return
+        }
+        if let target = wanderTarget {
+            let step = BunkDesk.step(from: feet, to: CGPoint(x: target, y: feet.y), distance: 90 * dt)
+            stage.walking = !step.arrived; stage.look = target > feet.x ? 1 : -1
+            feet = step.point; panel?.setFrameOrigin(BunkDesk.origin(feet: feet))
+            if step.arrived { wanderTarget = nil; stage.walking = false; nextWander = now.addingTimeInterval(.random(in: 20...60)); retime() }
+        } else if now >= nextWander, surface.maxX - surface.minX > 60 {
+            wanderTarget = .random(in: surface.minX...surface.maxX); retime()
+        }
     }
 
     // MARK: - Talking and reactions
