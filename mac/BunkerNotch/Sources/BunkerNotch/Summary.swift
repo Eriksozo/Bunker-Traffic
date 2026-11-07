@@ -16,7 +16,7 @@ struct Summary: Decodable, Equatable {
         let period: String?; let basis: String?; let amount: Double?; let spend: Double?; let roas: Double?; let roas7d: Double?
         let detail: Detail?
     }
-    struct Window: Decodable, Equatable { let spend: Double?; let roas: Double?; let roi: Double?; let frontOrders: Double?; let cpaFront: Double? }
+    struct Window: Decodable, Equatable { let spend: Double?; let roas: Double?; let roi: Double?; let frontOrders: Double?; let cpaFront: Double?; let noSpend: Bool? }
     struct Detail: Decodable, Equatable {
         let projectId: String?; let malvaObjectId: String?; let status: String?; let dailyBudget: Double?; let budgetCurrency: String?; let reason: String?
         let windows: [String: Window?]

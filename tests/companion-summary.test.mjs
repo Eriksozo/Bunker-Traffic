@@ -35,3 +35,13 @@ test('project board lists every project and queue items carry the campaign drill
  const d=out.queue[0].detail;assert.equal(d.projectId,'p');assert.equal(d.status,'ACTIVE');assert.equal(d.windows.today.spend,500);assert.equal(d.windows['7d'].roas,4000/3000);assert.equal(d.changes[0].actor,'Ana');
  assert.deepEqual(companionSummary(s,{project:'p',now,board:[{id:'x'}]}).board,[{id:'x'}]);
 });
+test('closed windows absent from a verified complete cut show no spend; other absences stay N/D',()=>{
+ const s=state(),closed=(period,from)=>({...snap('p',period,[]),from,to:'2026-11-07T00:00:00Z',fetchedAt:iso(0.2),lastSyncAt:iso(0.25)});
+ s.snapshots=[snap('p','today',[{...row('c1'),name:'07/11 - [TESTE] - c1',deliveryStartedAt:iso(5),...m(255,0,0)}]),closed('yesterday','2026-11-06T00:00:00Z'),closed('3d','2026-11-04T00:00:00Z'),closed('7d','2026-10-31T00:00:00Z')];
+ const w=companionSummary(s,{project:'p',now}).queue[0].detail.windows;
+ assert.equal(w.today.spend,255);
+ for(const p of ['yesterday','3d','7d'])assert.deepEqual(w[p],{spend:0,roas:null,roi:null,frontOrders:null,cpaFront:null,noSpend:true});
+ s.snapshots[1]={...s.snapshots[1],to:'2026-11-06T12:00:00Z'};s.snapshots.splice(3,1);
+ const w2=companionSummary(s,{project:'p',now}).queue[0].detail.windows;
+ assert.equal(w2.yesterday,null);assert.equal(w2['7d'],null);assert.equal(w2['3d'].noSpend,true);
+});

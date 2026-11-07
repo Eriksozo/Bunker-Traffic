@@ -657,7 +657,12 @@ struct CampaignDetailView: View {
                             let w = item.detail?.windows[key] ?? nil
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
-                                Text(Format.ratio(w?.roas)).font(DS.Font.stat).foregroundStyle((w?.roi ?? 1) >= 1 ? DS.Color.ink : DS.Color.bad)
+                                if w?.noSpend == true {
+                                    Text("sem gasto").font(DS.Font.stat).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.6)
+                                        .help("Fonte completa do período sem esta campanha: não houve gasto. Vendas ficam N/D.")
+                                } else {
+                                    Text(Format.ratio(w?.roas)).font(DS.Font.stat).foregroundStyle((w?.roi ?? 1) >= 1 ? DS.Color.ink : DS.Color.bad)
+                                }
                                 Text("ROI " + Format.ratio(w?.roi)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
                                 Text("gasto " + Format.compactMoney(w?.spend)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
                                 Text("front \(w?.frontOrders.map { String(Int($0)) } ?? "N/D")").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
