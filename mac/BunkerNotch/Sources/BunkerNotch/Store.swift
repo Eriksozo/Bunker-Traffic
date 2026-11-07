@@ -82,6 +82,17 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Malva has no per-campaign URL: open the project's campaign list (owner view) and copy the name for its search.
+    nonisolated static func malvaCampaignsURL(projectId: String?) -> URL? {
+        guard let id = projectId?.lowercased(), id.range(of: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", options: .regularExpression) != nil else { return nil }
+        return URL(string: "https://malvadash.com/tracking/\(id)/campanhas?sales=traffic&preset=today&level=campaign&status=all")
+    }
+    func openMalva(projectId: String?, campaign: String?) {
+        guard let url = Store.malvaCampaignsURL(projectId: projectId) else { return }
+        if let campaign, !campaign.isEmpty { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(campaign, forType: .string) }
+        NSWorkspace.shared.open(url)
+    }
+
     func open(_ path: String = "") {
         NSWorkspace.shared.open(URL(string: Store.base.absoluteString + "/" + path)!)
     }

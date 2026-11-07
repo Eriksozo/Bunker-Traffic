@@ -36,3 +36,7 @@
 .ca-badge{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-style:normal;font-size:10px;line-height:1.5;border:1px solid var(--warning-line,#f3ba6255);color:var(--warning,#f3ba62)}
 .ca-badge-increase,.ca-badge-activate{border-color:var(--success-line,#35c99b55);color:var(--success,#35c99b)}
 .ca-badge-reduce,.ca-badge-pause{border-color:var(--danger-line,#f0717855);color:var(--danger,#f07178)}
+
+.malva-link{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--accent,#b79ce8);text-decoration:none;padding:6px 10px;border:1px solid var(--border,#34303f);border-radius:8px}
+.malva-link:hover{border-color:var(--accent,#b79ce8)}
+.malva-link:focus-visible{outline:2px solid var(--accent,#b79ce8);outline-offset:2px}

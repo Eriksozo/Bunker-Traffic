@@ -22,6 +22,7 @@ import {campaignHistoryTrend} from '../lib/campaign-forecast.mjs';
 import './campaign-forecast.css';
 import {Button} from '@/components/ui/button';
 import {ActivityBadge,ActivityChip,MetricEvolution,CampaignActivityLog} from './campaign-activity';
+import MalvaLinkButton from './malva-link-button';
 import {Badge} from '@/components/ui/badge';
 import {Input} from '@/components/ui/input';
 import {Textarea} from '@/components/ui/textarea';
@@ -132,7 +133,7 @@ function Card({card,state,draft,setDraft,saving,now,onSave,onApprove,liveItems=[
   <ActionBox card={card} state={state} draft={draft} setDraft={setDraft} saving={saving} now={now} onSave={onSave} onApprove={onApprove} liveItems={liveItems}/>
   {blocked.length>0&&<details className="dc-detail dc-pending"><summary><Clock3 size={13}/>{blocked.length} {blocked.length===1?'ponto para conferir':'pontos para conferir'}<ChevronDown size={13}/></summary><ul>{blocked.map((text:any,index:number)=><li key={index}>{String(text)}</li>)}</ul></details>}
   <details className="dc-detail"><summary><BookOpen size={14}/> Ver períodos e pareceres<ChevronDown size={14}/></summary><Windows card={card}/><TeamOpinions card={card} state={state}/></details>
-  <footer className="dc-card-foot"><SourceStamps card={card}/><details><summary>IDs e origem</summary><dl><dt>Campanha Meta</dt><dd>{row.externalId||'N/D'}</dd><dt>Conta</dt><dd>{row.adAccountId||'N/D'}</dd><dt>Moeda do diário</dt><dd>{row.budgetCurrency||'N/D'}</dd><dt>Rodada</dt><dd>{card.roundId||'Sem rodada conjunta'}</dd></dl></details></footer>
+  <footer className="dc-card-foot"><MalvaLinkButton projectId={card.project} name={row.name}/><SourceStamps card={card}/><details><summary>IDs e origem</summary><dl><dt>Campanha Meta</dt><dd>{row.externalId||'N/D'}</dd><dt>Conta</dt><dd>{row.adAccountId||'N/D'}</dd><dt>Moeda do diário</dt><dd>{row.budgetCurrency||'N/D'}</dd><dt>Rodada</dt><dd>{card.roundId||'Sem rodada conjunta'}</dd></dl></details></footer>
  </UiCard>;
 }
 function KanbanTile({card,state,stage,now,onOpen,projectName}:{card:any;state:any;stage:string;now:number;onOpen:(card:any)=>void;projectName?:string}){
@@ -188,7 +189,7 @@ function DecisionList({rows,state,now,expanded,setExpanded,drafts,updateDraft,sa
      <details className="dc-list-guard" open={!!proposal}><summary><ShieldCheck size={14}/>Proteção da operação · {guard.blocked?(proposal?'bloqueia a aprovação':'pontos a resolver antes de aprovar'):'conferências da ação'}<ChevronDown size={13}/></summary><DecisionContingency state={state} card={card} proposal={proposal} action={draft.action} percent={percentage(draft)} liveItems={liveItems} now={now}/></details>
      <ActionBox card={card} state={state} draft={draft} setDraft={next=>updateDraft(card,next)} saving={saving} now={now} onSave={onSave} onApprove={onApprove} liveItems={liveItems}/>
      {blocked.length>0&&<details className="dc-detail dc-pending"><summary><Clock3 size={13}/>{blocked.length} {blocked.length===1?'ponto para conferir':'pontos para conferir'}<ChevronDown size={13}/></summary><ul>{blocked.map((text:any,index:number)=><li key={index}>{String(text)}</li>)}</ul></details>}
-     <div className="dc-list-more"><Button type="button" variant="outline" onClick={()=>onOpen(card)}><BookOpen size={14}/> Ver análise completa</Button><SourceStamps card={card}/></div>
+     <div className="dc-list-more"><Button type="button" variant="outline" onClick={()=>onOpen(card)}><BookOpen size={14}/> Ver análise completa</Button><MalvaLinkButton projectId={card.project} name={row.name}/><SourceStamps card={card}/></div>
     </div>}
    </li>;})}</ul>
   {rows.length>limit&&<Button type="button" variant="ghost" className="dc-column-more" onClick={onMore}>Mostrar mais {Math.min(25,rows.length-limit)}<ChevronDown size={14}/></Button>}

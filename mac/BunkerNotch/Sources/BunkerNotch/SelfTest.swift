@@ -11,7 +11,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope()
+        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
     }
@@ -53,6 +53,13 @@ enum SelfTest {
         check(Credential.valid(String(repeating: "a", count: 43)), #line)
         check(!Credential.valid("short"), #line)
         check(!Credential.valid(String(repeating: "a", count: 42) + "\""), #line)
+    }
+
+    private static func testMalvaLink() {
+        check(Store.malvaCampaignsURL(projectId: "72B71A6B-F55A-4563-A456-1B441DEC9851")?.absoluteString == "https://malvadash.com/tracking/72b71a6b-f55a-4563-a456-1b441dec9851/campanhas?sales=traffic&preset=today&level=campaign&status=all", #line)
+        check(Store.malvaCampaignsURL(projectId: "all") == nil, #line)
+        check(Store.malvaCampaignsURL(projectId: "../x") == nil, #line)
+        check(Store.malvaCampaignsURL(projectId: nil) == nil, #line)
     }
 
     private static func testWebScope() {

@@ -603,6 +603,9 @@ struct CampaignDetailView: View {
                         .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(DS.Color.accent, in: Capsule())
                 }.buttonStyle(.plain).help("Pausar, reduzir ou aumentar pelo card do Bunker, dentro do notch")
                 IconButton(symbol: "arrow.up.right.square", help: "Abrir o card no navegador") { store.open(deepLink) }
+                if Store.malvaCampaignsURL(projectId: item.detail?.projectId) != nil {
+                    IconButton(symbol: "chart.bar.xaxis", help: "Abrir na Malva (lista do projeto) e copiar o nome da campanha para a busca") { store.openMalva(projectId: item.detail?.projectId, campaign: item.campaign) }
+                }
             }
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: DS.Space.m) {
