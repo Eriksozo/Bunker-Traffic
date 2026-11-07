@@ -38,6 +38,10 @@ enum SelfTest {
         check(Format.money(1000).hasSuffix("1.000"), #line)
         check(Format.change(s.activity.recent[1]) == "ativa → pausada", #line)
         check(Format.who(s.activity.recent[0]) == "Bruno reduziu", #line)
+        check(Format.queueTag(project: nil, account: s.queue.first?.account) == "A", #line)
+        check(Format.queueTag(project: "John", account: "CA FbMax 720") == "John · CA FbMax 720", #line)
+        check(Format.queueTag(project: "John", account: nil) == "John", #line)
+        check(Format.queueTag(project: nil, account: "  ") == nil, #line)
         check(Format.who(s.activity.recent[1]) == "Pausas · autor não informado", #line)
     }
 

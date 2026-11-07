@@ -75,6 +75,11 @@ enum Format {
     }
     static let actionLabels: [String: String] = ["increase": "Aumentos", "reduce": "Reduções", "pause": "Pausas", "activate": "Ativações"]
     static let verbs: [String: String] = ["increase": "aumentou", "reduce": "reduziu", "pause": "pausou", "activate": "ativou"]
+    /// Same campaign name runs in several ad accounts; the account always shows so rows stay distinguishable.
+    static func queueTag(project: String?, account: String?) -> String? {
+        let parts = [project, account].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
     static func who(_ a: Summary.Activity) -> String {
         if let actor = a.actor { return "\(actor) \(verbs[a.action] ?? "alterou")" }
         return (actionLabels[a.action] ?? "Alteração") + " · autor não informado"

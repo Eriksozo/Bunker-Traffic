@@ -404,7 +404,7 @@ struct NowTab: View {
                     ListRow(id: "q:" + q.id, symbol: loss ? "arrow.down.right" : "arrow.up.right", tone: loss ? .bad : .good,
                             title: q.campaign ?? "Campanha",
                             subtitle: "\(q.period == "today" ? "Hoje" : "3 dias"): gasto \(Format.money(q.spend)) · ROAS \(Format.ratio(q.roas)) · 7d \(Format.ratio(q.roas7d))",
-                            tag: showProject ? q.project : nil,
+                            tag: Format.queueTag(project: showProject ? q.project : nil, account: q.account),
                             value: (loss ? "−" : "+") + Format.money(q.amount),
                             valueCaption: loss ? (q.basis == "result" ? (q.period == "today" ? "prejuízo hoje" : "prejuízo em 3 dias") : "receita abaixo da mídia") : "resultado em 3 dias",
                             action: { withAnimation(DS.Motion.quick) { notch.selected = q } })
