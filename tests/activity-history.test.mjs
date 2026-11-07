@@ -4,21 +4,21 @@ import {collectActivityHistory,activityHistoryProjects,historyActor} from '../li
 import {activityLog,activitySummary} from '../lib/campaign-activity.mjs';
 import {companionSummary} from '../lib/companion-summary.mjs';
 const now=Date.parse('2026-11-07T17:00:00Z'),project={id:'p',name:'Projeto',timezone:'America/Sao_Paulo'};
-const event=(id,objectId='c',name='Jorge',extra={})=>({id,at:'2026-11-07T13:06:33.546Z',source:'malva',category:'status',automatic:false,actor:name?{key:'malva:technical-id',name,profile:null}:null,object:{level:'campaign',externalId:objectId,name:'Campanha '+objectId},account:{id:'act',label:'Conta',provider:'meta',currency:'USD'},values:{kind:'status',from:'active',to:'paused'},...extra});
+const event=(id,objectId='c',name='Ana',extra={})=>({id,at:'2026-11-07T13:00:00.000Z',source:'malva',category:'status',automatic:false,actor:name?{key:'malva:technical-id',name,profile:null}:null,object:{level:'campaign',externalId:objectId,name:'Campanha '+objectId},account:{id:'act',label:'Conta',provider:'meta',currency:'USD'},values:{kind:'status',from:'active',to:'paused'},...extra});
 const page=(items,cursor=null)=>({timezone:project.timezone,period:{from:'2026-11-01T03:00:00.000Z',to:'2026-11-08T03:00:00.000Z',timezone:project.timezone},items,nextCursor:cursor});
 const source=pages=>{const calls=[];return {calls,async read(tool,args){calls.push({tool,args});if(!pages.length)throw Error('Unexpected source call');return pages.shift();}};};
 
 test('project history includes campaign edits missed between observations, with Malva snake_case budgets and lowercase status',async()=>{
- const read=source([page([event('pause'),event('budget','other','Leonardo',{category:'budget',values:{kind:'money',field:'daily_budget',from:588.42,to:470.74,currency:'USD'}})])]);
+ const read=source([page([event('pause'),event('budget','other','Bruno',{category:'budget',values:{kind:'money',field:'daily_budget',from:200,to:160,currency:'USD'}})])]);
  const r=await collectActivityHistory(read,project,null,{now:()=>now});
- assert.equal(r.complete,true);assert.equal(r.calls,1);assert.equal(r.events[0].actor,'Jorge');assert.equal(r.events[0].before,'ACTIVE');
- assert.equal(r.events[1].field,'dailyBudget');assert.equal(r.events[1].actor,'Leonardo');
+ assert.equal(r.complete,true);assert.equal(r.calls,1);assert.equal(r.events[0].actor,'Ana');assert.equal(r.events[0].before,'ACTIVE');
+ assert.equal(r.events[1].field,'dailyBudget');assert.equal(r.events[1].actor,'Bruno');
  assert.deepEqual(read.calls[0].args,{projectId:'p',provider:['meta'],who:'all',level:['campaign'],category:['budget','status'],limit:100,preset:'custom',from:'2026-11-01',to:'2026-11-07'});
  const state={config:{p:{projectName:'Projeto'}},snapshots:[],changeAttributions:r.events};
  const web=activityLog(state,{now}),notch=companionSummary(state,{project:'p',now});
- assert.deepEqual(web.map(e=>[e.objectId,e.actor,e.action]).sort(),[['c','Jorge','pause'],['other','Leonardo','reduce']]);
+ assert.deepEqual(web.map(e=>[e.objectId,e.actor,e.action]).sort(),[['c','Ana','pause'],['other','Bruno','reduce']]);
  assert.deepEqual(notch.activity.summary,activitySummary(web));
- assert.equal(notch.activity.recent.find(e=>e.campaignId==='c').actor,'Jorge');
+ assert.equal(notch.activity.recent.find(e=>e.campaignId==='c').actor,'Ana');
  assert.equal(notch.activity.recent.find(e=>e.campaignId==='other').percent,-20);
 });
 
