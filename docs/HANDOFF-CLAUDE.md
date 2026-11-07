@@ -441,3 +441,10 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Limiares** ficam no secret `AUTONOMY_SHADOW_POLICY` (fora do Git). Aumentos aparecem como bloqueados até o dono definir tetos.
 - **Validação:** 1019 testes, typecheck, build e self-test do app.
 - **Próximo:** revisar a sombra com o dono em 3 a 5 dias (acertos, vencedores que seriam cortados, aumentos que piorariam, antecedência sobre os gestores).
+
+## Painel de contas com limite diário da Meta (registro escrito às 2026-11-07 21:38:42 UTC por `date -u`)
+
+- **Pedido do dono:** parar de atualizar à mão o limite de gastos diário das contas no quadro "PLANEJAMENTO DE CONTAS 2026" (quadro branco do Malva, que não aceita escrita por integração). O Malva tem o campo `dailyLimit`, mas vazio em todas as contas conferidas. Caminho escolhido: painel no Bunker + token Meta próprio, somente leitura.
+- **Implementação:** `lib/account-limits.mjs` junta `tracking_ad_accounts` (por projeto configurado) com `/me/adaccounts` (`adtrust_dsl` e gasto de hoje na moeda da conta); dados pessoais do Malva ficam fora. O executor monta a cada 30 min e guarda no Durable Object. Aba web "Contas de anúncio" (`#accounts`, rota `/api/accounts` de dono), aba "Contas" no notch e leitura MCP `cloud-data` `{"action":"accounts"}`. Regra do token em `docs/connections.md` e no `CLAUDE.md`.
+- **Sombra:** já registrando (35 decisões às 21:34 UTC). A regra "sem entrega" agora ignora campanhas com data de hoje ou de ontem no nome.
+- **Pendente:** o dono criar o token (`ads_read`) e cadastrar `META_ACCOUNTS_TOKEN`; conferir a unidade de `adtrust_dsl` contra o Gerenciador numa conta conhecida.

@@ -41,3 +41,13 @@ Uma única rotina da interface confere a revisão da central a cada dez segundos
 Falha de rede, revisão inválida ou regressiva e sessão expirada não são tratadas como atualização concluída. O painel conserva a última base válida e os rascunhos, mostra a limitação e tenta conferir novamente. O horário dessa conferência fica nos detalhes da sincronização, separado dos horários da coleta e da atualização Malva.
 
 Em conflito de edição, a interface tenta reler a central e pede que o operador confira os novos valores. A gravação não é reenviada automaticamente. Uma escolha só sai da fila após sua confirmação exata no histórico; uma execução financeira continua exigindo a autorização e a verificação próprias.
+
+## Token de leitura da Meta para o painel de contas
+
+Decisão do proprietário em 07/11/2026: o painel "Contas de anúncio" mostra o limite de gastos diário que a Meta define para cada conta (`adtrust_dsl`), que o Malva não fornece. O executor lê `/me/adaccounts` com um token próprio, **somente leitura** (`ads_read`), no secret `META_ACCOUNTS_TOKEN` do Worker. O token é criado e cadastrado pelo proprietário; agentes não leem, imprimem nem copiam o valor.
+
+- Uso exclusivo: limite diário, status e gasto de hoje das contas que pertencem a projetos configurados. Contas que só a Meta enxerga são ignoradas.
+- O token vai só no cabeçalho `Authorization`; a paginação usa o cursor `after`; erros viram códigos fixos (`META_190`, `META_HTTP_400`…), sem URL ou token.
+- Leitura a cada 30 minutos; o painel fica no Durable Object do executor, fora da central e do Supabase.
+- Ações em campanhas continuam exclusivamente pelo Malva, com proposta exata aprovada e claim → prepare → submit único → confirmação. Este token não é usado para escrita.
+- Sem o token, o painel funciona com o restante dos dados e mostra o limite como N/D.

@@ -71,6 +71,15 @@ struct Summary: Decodable, Equatable {
         let wouldExecute: Bool?; let blockedBy: [String]?; let manager: ShadowManager?
     }
     struct Shadow: Decodable, Equatable { let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem] }
+    /// Ad-account panel (lib/account-limits.mjs). Limit and today's spend are in the account currency.
+    let accounts: Accounts?
+    struct AccountCounts: Decodable, Equatable { let total: Int; let active: Int; let running: Int; let disabled: Int; let nearLimit: Int; let withLimit: Int }
+    struct AccountRow: Decodable, Equatable, Identifiable {
+        var id: String { accountId }
+        let accountId: String; let name: String?; let group: String?; let status: String?; let statusLabel: String?; let runningLabel: String?
+        let currency: String?; let dailyLimit: Double?; let todaySpend: Double?; let usedPct: Double?; let balance: Double?; let alerts: [String]?
+    }
+    struct Accounts: Decodable, Equatable { let generatedAt: String?; let metaConnected: Bool; let metaError: String?; let counts: AccountCounts; let rows: [AccountRow] }
 }
 
 /// Budgets are numbers, statuses are strings: keep both without guessing.

@@ -81,6 +81,7 @@ test('No delivery after midday with verified empty closed windows is an organiza
  const r=row('n1','20/10 - [CBO] - [TESTE] OLD',m(0));
  const d=run(state({today:[r]})).decisions.find(x=>x.rule==='no-delivery');
  assert.equal(d.after.status,'PAUSED');assert.match(d.limitations.join(' '),/programada/);
+ for(const name of ['07/11 - [CBO] - [AVATAR] NOVA','06/11 - [CBO] - [PRE-ESCALA] ONTEM'])assert.equal(run(state({today:[row('n2',name,m(0))]})).decisions.some(x=>x.rule==='no-delivery'),false,name);
 });
 test('Warmup, paused objects and disabled accounts are never evaluated; the state is not mutated',()=>{
  const rows=[row('w1','07/11 [ENGAJAMENTO] [TESTE]',m(300)),row('w2','07/11 [TESTE] P',m(300),{status:'PAUSED',effectiveStatus:'PAUSED'}),row('w3','07/11 [TESTE] Q',m(300),{accountStatus:{active:false}})];

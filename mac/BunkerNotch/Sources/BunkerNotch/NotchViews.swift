@@ -164,6 +164,7 @@ struct ExpandedView: View {
                         switch notch.tab {
                         case .now: NowTab(s: s)
                         case .projects: ProjectsTab(s: s)
+                        case .accounts: AccountsTab(s: s)
                         case .managers: ManagersTab(s: s)
                         case .agents: AgentsTab(s: s)
                         case .system: SystemTab(s: s)
@@ -325,6 +326,9 @@ struct TabBar: View {
         case .managers:
             let n = s.activity.summary.values.reduce(0) { $0 + $1.count }
             return n > 0 ? ("\(n)", .neutral) : nil
+        case .accounts:
+            let n = s.accounts?.counts.nearLimit ?? 0
+            return n > 0 ? ("\(n)", .bad) : nil
         case .projects:
             let n = (s.board ?? []).reduce(0) { $0 + $1.approvals }
             return n > 0 ? ("\(n)", .warn) : nil
@@ -502,6 +506,32 @@ struct AgentsTab: View {
                     }
                     .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
                 }
+            }
+        }
+    }
+}
+
+/// Account planning without a manual board: status, project, today's spend vs the Meta daily limit. Read-only.
+struct AccountsTab: View {
+    let s: Summary
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            if let a = s.accounts {
+                SectionHeader(title: "Contas de anúncio", detail: "\(a.counts.active) ativas · \(a.counts.running) rodando · \(a.counts.nearLimit) perto do limite · atualiza a cada 30 min")
+                if !a.metaConnected { EmptyLine(text: Format.accountsMetaNotice(a.metaError)) }
+                if a.rows.isEmpty { EmptyLine(text: "Nenhuma conta ativa ou com alerta.") }
+                VStack(spacing: 2) {
+                    ForEach(a.rows) { r in
+                        let near = (r.usedPct ?? 0) >= 80, bad = r.status != "active"
+                        ListRow(id: "acc:" + r.accountId, symbol: bad ? "exclamationmark.triangle.fill" : (near ? "gauge.high" : "creditcard"), tone: bad || near ? .bad : .neutral,
+                                title: r.name ?? r.accountId,
+                                subtitle: ([r.runningLabel] + (r.alerts ?? [])).compactMap { $0 }.joined(separator: " · "),
+                                tag: r.group,
+                                value: Format.accountUse(r), valueCaption: Format.accountLimit(r))
+                    }
+                }
+            } else {
+                EmptyLine(text: "O painel de contas ainda está sendo montado.")
             }
         }
     }

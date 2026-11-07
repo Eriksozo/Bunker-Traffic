@@ -1,0 +1,13 @@
+.accounts-panel .ap-notice{margin:0 0 12px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--amber,#f59e0b) 12%,transparent);font-size:13px}
+.accounts-panel .ap-counts{display:flex;flex-wrap:wrap;gap:16px;margin:0 0 12px;font-size:13px;color:var(--muted,#8a8f98)}
+.accounts-panel .ap-counts strong{color:var(--ink,inherit);font-size:16px;margin-right:4px}
+.accounts-panel .ap-counts .is-bad strong{color:var(--red,#ef4444)}
+.accounts-panel .ap-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:0 0 12px;font-size:13px}
+.accounts-panel .ap-sub{display:block;color:var(--muted,#8a8f98);font-size:11px}
+.accounts-panel .ap-use{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.accounts-panel .ap-bar{display:inline-block;width:64px;height:6px;border-radius:999px;background:color-mix(in srgb,currentColor 15%,transparent);overflow:hidden}
+.accounts-panel .ap-bar>span{display:block;height:100%;background:var(--green,#22c55e)}
+.accounts-panel .ap-use.is-bad{color:var(--red,#ef4444)}
+.accounts-panel .ap-use.is-bad .ap-bar>span{background:var(--red,#ef4444)}
+.accounts-panel .ap-alert{display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:999px;font-size:11px;background:color-mix(in srgb,var(--red,#ef4444) 14%,transparent)}
+@media (max-width:640px){.accounts-panel .ap-counts{gap:10px}}

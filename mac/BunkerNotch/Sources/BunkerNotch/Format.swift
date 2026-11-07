@@ -75,6 +75,25 @@ enum Format {
     }
     static let actionLabels: [String: String] = ["increase": "Aumentos", "reduce": "Reduções", "pause": "Pausas", "activate": "Ativações"]
     static let verbs: [String: String] = ["increase": "aumentou", "reduce": "reduziu", "pause": "pausou", "activate": "ativou"]
+    static func accountMoney(_ n: Double?, _ currency: String?) -> String {
+        guard let n else { return "N/D" }
+        let symbol = currency == "BRL" ? "R$" : (currency == "USD" ? "$" : (currency ?? ""))
+        return "\(symbol) \(String(format: "%.2f", n).replacingOccurrences(of: ".", with: ","))".trimmingCharacters(in: .whitespaces)
+    }
+    static func accountUse(_ r: Summary.AccountRow) -> String {
+        guard let p = r.usedPct else { return accountMoney(r.todaySpend, r.currency) }
+        return "\(Int(p.rounded()))%"
+    }
+    static func accountLimit(_ r: Summary.AccountRow) -> String {
+        r.dailyLimit == nil ? "limite N/D" : "\(accountMoney(r.todaySpend, r.currency)) de \(accountMoney(r.dailyLimit, r.currency))"
+    }
+    static func accountsMetaNotice(_ code: String?) -> String {
+        switch code {
+        case "META_TOKEN_MISSING": return "Limite diário: token de leitura da Meta ainda não cadastrado."
+        case "META_190": return "Limite diário: token da Meta inválido ou expirado."
+        default: return "Limite diário: leitura da Meta indisponível agora."
+        }
+    }
     /// "Pausar" or "100 → 80 USD": the shadow's proposed change, never a command.
     static func shadowChange(_ item: Summary.ShadowItem) -> String {
         if item.action == "status" { return item.after?["status"]?.text == "PAUSED" ? "Pausar" : "Ativar" }

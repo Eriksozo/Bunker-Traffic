@@ -13,6 +13,7 @@ Leia primeiro `docs/HANDOFF-CLAUDE.md`, `AGENT-RUNBOOK.md`, `docs/connections.md
 - O executor Cloudflare é o único executor automático. Não crie outro daemon/cron, não ative a automação local e não dispute reservas vivas. Preserve cadência, fuso, pausa, metas e limites configurados.
 - Nunca leia/imprima/copie chaves em relatórios, chat, Git ou `.mcp.json`. Autentique cada cliente pelos fluxos próprios. Não copie tokens OAuth do Codex. Não publique dados operacionais no repositório público.
 - Não alterar lances, públicos, criativos ou criar campanhas com uma autorização genérica de manutenção do Bunker.
+- Token Meta `META_ACCOUNTS_TOKEN`: somente leitura do limite diário/status das contas para o painel (`docs/connections.md`). Nunca usar para escrita; ações seguem pelo Malva.
 - Autonomia em fase sombra (`docs/autonomy-policy.md`): o executor só registra o que faria. Ligar execução automática exige revisão da sombra, tetos definidos pelo dono e registro explícito dele aqui.
 
 ## Desenvolvimento e publicação

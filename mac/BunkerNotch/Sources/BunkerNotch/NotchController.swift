@@ -2,7 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 
-enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", managers = "Gestores", agents = "Agentes", system = "Sistema" }
+enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", accounts = "Contas", managers = "Gestores", agents = "Agentes", system = "Sistema" }
 
 /// Island geometry for a screen: the real notch when there is one, otherwise a slim bar under the menu bar centre.
 struct NotchGeometry: Equatable {

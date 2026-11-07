@@ -21,6 +21,7 @@ import {expiredAttribution,usableAttributions} from '../lib/change-attribution.m
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy} from '../lib/autonomy-shadow.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
+import {buildAccountPanel,readMetaAccounts,accountPanelPolicy} from '../lib/account-limits.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
@@ -67,6 +68,24 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped});
   return merged;
  }
+ /**
+  * Ad-account panel (docs/connections.md): Malva accounts per configured project plus the daily spending
+  * limit Meta reports, read with a dedicated read-only token. Every 30 minutes; stored here, not in the central.
+  */
+ private async syncAccounts(state:any){
+  if(!state||state.paused)return;
+  const prior=await this.ctx.storage.get<any>('accountsPanel');
+  if(prior&&Date.now()-Date.parse(prior.generatedAt)<accountPanelPolicy.refreshMs)return;
+  const source=cloudMalvaClient(this.db()),projects:any[]=[],projectErrors:Record<string,string>={};
+  for(const [id,c] of Object.entries<any>(state.config||{})){
+   try{const r:any=await source.read('tracking_ad_accounts',{projectId:id});projects.push({id,name:c?.projectName||id,items:Array.isArray(r?.items)?r.items:[]});}
+   catch(e:any){projectErrors[c?.projectName||id]=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'MALVA_ACCOUNTS_FAILED';}
+  }
+  let meta:any[]|null=null,metaError:string|null=null;
+  try{meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN||'',{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});}
+  catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';}
+  await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,meta,metaError}),projectErrors});
+ }
  /** Recent Malva campaign edits, including edits between reads and campaigns not in the analysis queue. */
  private async syncAttribution(state:any){
   if(!state||state.paused)return;
@@ -103,10 +122,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  /** Mac companion summaries built from the central state this pulse already read; served from this object, never re-reading the central. */
  private async storeCompanion(state:any,shadow:any[]=[]){
   if(!state)return;
-  const shadowDay=(await this.ctx.storage.get<any>('shadowStatus'))?.day||undefined;
+  const shadowDay=(await this.ctx.storage.get<any>('shadowStatus'))?.day||undefined,accountsPanel=await this.ctx.storage.get<any>('accountsPanel');
+  const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
+   rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
   const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},board=projectBoard(withAuthors,now);
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any}),shadow:shadowSummary(shadow,{project,day:shadowDay})};
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any}),shadow:shadowSummary(shadow,{project,day:shadowDay}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
  }
  private async assertEnabled(){if(!(await this.setting()).enabled){const error:any=new Error('CLOUD_EXECUTOR_PAUSED');error.code='CLOUD_EXECUTOR_PAUSED';throw error;}}
@@ -115,6 +136,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
   if(input.action==='companion'){const key='companion:'+(typeof input.project==='string'&&input.project?input.project:'all');const summary=await this.ctx.storage.get(key);return Response.json(summary?{summary}:{summary:null});}
+  if(input.action==='accounts'){const panel=await this.ctx.storage.get<any>('accountsPanel');return Response.json(panel?{panel}:{panel:null});}
   if(input.action==='shadow'){
    const status=await this.ctx.storage.get<any>('shadowStatus'),all=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
    const day=typeof input.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.day)?input.day:status?.day;
@@ -156,6 +178,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const liveState=(await this.setting()).enabled?await this.syncLive():null;
    // Optional attribution never turns into an executor failure.
    if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
+   // The account panel is optional: a failure keeps the last panel and never affects the executor.
+   if(liveState&&(await this.setting()).enabled)await this.syncAccounts(liveState).catch(()=>{});
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
    const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    if(liveState)await this.storeCompanion(liveState,shadow).catch(()=>{});

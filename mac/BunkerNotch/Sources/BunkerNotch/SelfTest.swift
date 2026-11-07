@@ -43,6 +43,13 @@ enum SelfTest {
         check(Format.queueTag(project: "John", account: nil) == "John", #line)
         check(Format.queueTag(project: nil, account: "  ") == nil, #line)
         check(s.shadow == nil, #line)
+        check(s.accounts == nil, #line)
+        let accRow = Summary.AccountRow(accountId: "1", name: "CA 1", group: "FB Flix", status: "active", statusLabel: "Ativa", runningLabel: "Rodando · John", currency: "USD", dailyLimit: 321.06, todaySpend: 290, usedPct: 90.3, balance: 10, alerts: ["Perto do limite diário"])
+        check(Format.accountUse(accRow) == "90%", #line)
+        check(Format.accountLimit(accRow) == "$ 290,00 de $ 321,06", #line)
+        let noLimit = Summary.AccountRow(accountId: "2", name: nil, group: nil, status: "active", statusLabel: nil, runningLabel: nil, currency: nil, dailyLimit: nil, todaySpend: nil, usedPct: nil, balance: nil, alerts: nil)
+        check(Format.accountLimit(noLimit) == "limite N/D" && Format.accountUse(noLimit) == "N/D", #line)
+        check(NotchTab.allCases[2] == .accounts, #line)
         let shadowJSON = #"{"day":"2026-11-07","total":2,"byRule":{"test-no-sale":{"total":1,"wouldExecute":1,"managerDid":1,"bunkerFirst":1}},"recent":[{"rule":"test-no-sale","ruleLabel":"Pausar teste","project":"P","account":"A","campaign":"C","action":"status","reason":"x","firstAt":"2026-11-07T17:00:00.000Z","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":{"actor":"Gestor","at":"2026-11-07T17:40:00.000Z","minutesAfter":40}},{"rule":"bad-day-reduce","action":"budget","before":{"dailyBudget":100,"currency":"USD"},"after":{"dailyBudget":80,"currency":"USD"},"wouldExecute":false,"blockedBy":["x"],"manager":null}]}"#
         if let sh = try? JSONDecoder().decode(Summary.Shadow.self, from: Data(shadowJSON.utf8)) {
             check(Format.shadowChange(sh.recent[0]) == "Pausar", #line)
