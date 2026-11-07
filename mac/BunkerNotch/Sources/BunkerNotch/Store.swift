@@ -39,6 +39,8 @@ final class Store: ObservableObject {
 
     func start() {
         requestNotifications()
+        // Creates the Touch ID approval key once and writes its public half for registration (no prompt here).
+        _ = try? OwnerKey.ensure()
         Task { await refresh() }
         timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
@@ -79,6 +81,52 @@ final class Store: ObservableObject {
             lastFetch = Date()
         } catch {
             self.error = "Sem conexão com o Bunker. A última leitura foi mantida."
+        }
+    }
+
+    // MARK: - Owner adjustments (Touch ID). Reads use the read-only credential; every write is signed on this Mac.
+
+    enum OwnerResult: Equatable { case done(String), refused(String), unregistered(String), cancelled }
+    enum CardsResult { case ok(OwnerCards), failed(String) }
+
+    /// Cards and proposals waiting for the owner, for one campaign or the whole project.
+    func fetchCards(_ target: AdjustTarget) async -> CardsResult {
+        guard let token = Credential.importIfNeeded() else { return .failed("Credencial do app não encontrada nas Chaves.") }
+        var components = URLComponents(url: Store.base.appendingPathComponent("api/companion/cards"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "project", value: target.project ?? project)]
+            + (target.adAccountId.map { [URLQueryItem(name: "account", value: $0)] } ?? [])
+            + (target.campaignId.map { [URLQueryItem(name: "campaign", value: $0)] } ?? [])
+        var request = URLRequest(url: components.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else { return .failed(status == 401 ? "Credencial recusada pelo Bunker." : "Cards indisponíveis agora (\(status)).") }
+            return .ok(try JSONDecoder().decode(OwnerCards.self, from: data))
+        } catch { return .failed("Sem conexão com o Bunker ou resposta inesperada.") }
+    }
+
+    /// Touch ID first (the prompt names the exact change), then one signed POST. A lost answer is not retried blindly.
+    func sendOwner(_ input: [String: Any], reason: String) async -> OwnerResult {
+        let body: Data
+        do { body = try await OwnerKey.sign(input: input, reason: reason) }
+        catch OwnerKey.Failure.cancelled { return .cancelled }
+        catch { return .refused("Não foi possível assinar neste Mac (Secure Enclave indisponível).") }
+        var request = URLRequest(url: Store.base.appendingPathComponent("api/companion/owner"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = json?["error"] as? String
+            if status == 200 { Task { await refresh() }; return .done(json?["status"] as? String ?? "Registrado") }
+            if ["OWNER_DEVICE_UNCONFIGURED", "OWNER_DEVICE_UNKNOWN_KEY"].contains(json?["code"] as? String ?? "") { return .unregistered(message ?? "Chave do Mac não registrada.") }
+            return .refused(message ?? "O Bunker recusou (\(status)).")
+        } catch {
+            return .refused("A resposta não chegou. Recarregue e confira se ficou registrado antes de repetir.")
         }
     }
 

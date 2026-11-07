@@ -1,3 +1,4 @@
+import CryptoKit
 import CoreGraphics
 import Foundation
 
@@ -11,7 +12,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink()
+        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
     }
@@ -171,5 +172,26 @@ enum SelfTest {
         check(origin == CGPoint(x: 406, y: 422), #line)
         let island = NotchGeometry.islandRect(panel: CGSize(width: 700, height: 560), island: CGSize(width: 340, height: 32))
         check(island == CGRect(x: 180, y: 528, width: 340, height: 32), #line)
+    }
+    /// Touch ID adjustments: same limits as the server, intent never approves, signed envelope verifies.
+    private static func testOwnerAdjust() {
+        check(OwnerAdjust.validPercent("increase", 1000) && !OwnerAdjust.validPercent("increase", 1001), #line)
+        check(OwnerAdjust.validPercent("reduce", 99.5) && !OwnerAdjust.validPercent("reduce", 100) && !OwnerAdjust.validPercent("reduce", 0), #line)
+        check(OwnerAdjust.validPercent("pause", nil), #line)
+        check(OwnerAdjust.newBudget(50, action: "increase", percent: 20) == 60, #line)
+        check(OwnerAdjust.newBudget(33.33, action: "reduce", percent: 10) == 30, #line)
+        check(OwnerAdjust.newBudget(nil, action: "increase", percent: 20) == nil, #line)
+        let json = #"{"revision":9,"paused":false,"cards":[{"id":"campaign:p:1:2","signature":"v1-s","project":"p","projectName":"John","campaign":"C","account":"CA 1","adAccountId":"1","objectId":"2","status":"ACTIVE","dailyBudget":50,"currency":"USD","windows":{"today":{"spend":10,"roas":null,"roi":null,"frontOrders":0},"7d":null},"suggestion":{"action":"pause","percent":null,"reason":"x","origin":"team"},"intentActions":{"increase":true,"reduce":true,"pause":true,"keep":true},"blockedReasons":[],"lastChoice":null,"proposal":null}],"approvals":[{"id":"x","version":2,"signature":"s","status":"Aguardando aprovação","project":"p","title":"t","reason":null,"action":"budget","level":"campaign","adAccountId":"1","objectId":"2","campaign":"C","account":"CA 1","currency":"USD","before":{"dailyBudget":50,"status":null},"after":{"dailyBudget":75,"status":null},"expiresAt":"2026-11-08T00:00:00.000Z","expired":false,"projectName":"John"}]}"#
+        guard let cards = try? JSONDecoder().decode(OwnerCards.self, from: Data(json.utf8)), let card = cards.cards.first, let p = cards.approvals.first else { check(false, #line); return }
+        let intent = OwnerAdjust.intent(card: card, revision: 9, action: "pause", percent: 30, reason: " ok ", clientId: "notch-owner-test1")
+        check(intent["approveExact"] as? Bool == false && intent["percent"] == nil && intent["reason"] as? String == "ok" && intent["revision"] as? Int == 9, #line)
+        let review = OwnerAdjust.review(p, revision: 9, decision: "approve", comment: nil, clientId: "notch-owner-test2")
+        check(review["op"] as? String == "proposalReview" && review["version"] as? Int == 2 && review["comment"] == nil, #line)
+        check(OwnerAdjust.change(p) == "orçamento diário " + Format.money(50, currency: "USD") + " → " + Format.money(75, currency: "USD"), #line)
+        let key = P256.Signing.PrivateKey()
+        guard let body = try? OwnerKey.envelope(input: review, payloadSigner: { try key.signature(for: $0).rawRepresentation }, key: key.publicKey),
+              let env = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let payload = Data(base64Encoded: env["payload"] as? String ?? ""),
+              let sig = Data(base64Encoded: env["sig"] as? String ?? ""), let signature = try? P256.Signing.ECDSASignature(rawRepresentation: sig) else { check(false, #line); return }
+        check(key.publicKey.isValidSignature(signature, for: payload) && env["key"] as? String == OwnerKey.keyId(key.publicKey) && OwnerKey.keyId(key.publicKey).count == 16, #line)
     }
 }

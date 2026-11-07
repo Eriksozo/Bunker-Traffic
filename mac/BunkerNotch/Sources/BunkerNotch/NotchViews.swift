@@ -154,6 +154,8 @@ struct ExpandedView: View {
             if store.preparing && store.summary == nil { Banner(text: "Resumo em preparação pelo executor. Aparece em 1 a 2 minutos.", tone: .neutral) }
             if notch.webTarget != nil {
                 AdjustView()
+            } else if let target = notch.adjust {
+                OwnerAdjustView(target: target, m: notch.ownerAdjust)
             } else if let s = store.summary, let item = notch.selected {
                 CampaignDetailView(s: s, item: item)
             } else if let s = store.summary {
@@ -391,12 +393,12 @@ struct NowTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             if s.approvals.count > 0 {
-                SectionHeader(title: "Aguardando você", detail: "\(s.approvals.count) proposta(s) exata(s) · aprovar no Bunker")
+                SectionHeader(title: "Aguardando você", detail: "\(s.approvals.count) proposta(s) exata(s) · aprovar com Touch ID")
                 VStack(spacing: 2) {
                     ForEach(s.approvals.items) { a in
                         ListRow(id: "ap:" + a.id, symbol: "checkmark.seal.fill", tone: .warn, title: a.title ?? "Proposta exata",
                                 subtitle: a.expiresAt.map { "vence " + Format.stamp($0) } ?? "conferir e aprovar", tag: showProject ? a.project : nil,
-                                value: "Conferir", action: { withAnimation(DS.Motion.quick) { notch.webTarget = URL(string: Store.base.absoluteString + "/#cards") } })
+                                value: "Conferir", action: { withAnimation(DS.Motion.quick) { notch.adjust = AdjustTarget(project: nil, adAccountId: nil, campaignId: nil, name: nil) } })
                     }
                 }
             }
@@ -641,10 +643,10 @@ struct CampaignDetailView: View {
                     }
                 }
                 Spacer()
-                Button { withAnimation(DS.Motion.quick) { notch.webTarget = URL(string: Store.base.absoluteString + "/" + deepLink) } } label: {
+                Button { withAnimation(DS.Motion.quick) { notch.adjust = AdjustTarget(project: item.detail?.projectId, adAccountId: item.adAccountId, campaignId: item.campaignId, name: item.campaign) } } label: {
                     HStack(spacing: 5) { Image(systemName: "slider.horizontal.3").font(.system(size: 10, weight: .bold)); Text("Ajustar aqui").font(DS.Font.bodyStrong) }
                         .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(DS.Color.accent, in: Capsule())
-                }.buttonStyle(.plain).help("Pausar, reduzir ou aumentar pelo card do Bunker, dentro do notch")
+                }.buttonStyle(.plain).help("Pausar, reduzir ou aumentar aqui, confirmando com Touch ID")
                 IconButton(symbol: "arrow.up.right.square", help: "Abrir o card no navegador") { store.open(deepLink) }
                 if Store.malvaCampaignsURL(projectId: item.detail?.projectId) != nil {
                     IconButton(symbol: "chart.bar.xaxis", help: "Abrir na Malva (lista do projeto) e copiar o nome da campanha para a busca") { store.openMalva(projectId: item.detail?.projectId, campaign: item.campaign) }
@@ -682,7 +684,7 @@ struct CampaignDetailView: View {
                                     value: Format.relative(e.at), valueCaption: Format.stamp(e.at))
                         }
                     }
-                    Text("Somente leitura: decidir e aprovar continua no card, com a confirmação exata.").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                    Text("Ajustar aqui: sua escolha vai para a equipe e a proposta exata volta para você aprovar com Touch ID.").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 }.padding(.bottom, DS.Space.l)
             }
         }

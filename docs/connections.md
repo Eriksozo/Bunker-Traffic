@@ -51,3 +51,15 @@ Decisão do proprietário em 07/11/2026: o painel "Contas de anúncio" mostra o 
 - Leitura a cada 30 minutos; o painel fica no Durable Object do executor, fora da central e do Supabase.
 - Ações em campanhas continuam exclusivamente pelo Malva, com proposta exata aprovada e claim → prepare → submit único → confirmação. Este token não é usado para escrita.
 - Sem o token, o painel funciona com o restante dos dados e mostra o limite como N/D.
+
+## Chave do Mac para decisões do dono (Touch ID)
+
+Decisão do proprietário em 07/11/2026: decidir pelo notch sem o login por link de e-mail, confirmando cada decisão com Touch ID, e com a revisão da equipe mantida.
+
+- O app do Mac cria uma chave P-256 no Secure Enclave (acesso `userPresence`: Touch ID ou senha do Mac em cada assinatura). Nas Chaves fica só o bloco cifrado, utilizável apenas por este chip. A parte pública é gravada em `~/.config/bunker-traffic/owner-device-public-key`.
+- O Worker guarda só a chave pública em `BUNKER_OWNER_DEVICE_KEY` (base64 X9.63, 65 bytes). Ela não assina nada; sem ela a rota responde 503.
+- `POST /api/companion/owner` aceita apenas o envelope assinado `{v:1,key,payload,sig}`; o payload exato é `{aud:'bunker-traffic/owner-device',iat,input}`, com validade de 2 minutos. A fronteira de autenticação repassa só o input verificado, com `x-bunker-owner-device: mac-touchid:<keyId>`; cabeçalhos forjados são apagados em todas as rotas.
+- Operações aceitas: `cardDecision` (intenção para a equipe, ou aprovação exata do card) e `proposalReview` (aprovar, recusar ou pedir revisão de proposta já revisada pelos agentes). Mesma revisão otimista, `assertCurrentDecisionContext`, contingência e `ownerAutonomy` da web. Nada além disso.
+- `GET /api/companion/cards` (sessão do dono ou credencial de leitura do app) devolve os cards e propostas com os selos que o pedido assinado precisa repetir.
+- A execução continua exclusiva do executor Cloudflare: claim → prepare → submit único → Malva MCP → conferência. A chave do Mac não aciona provedor nem pula pareceres.
+- Trocar de Mac ou perder a chave: o app cria outra; registre a nova parte pública no secret (stdin) e a anterior deixa de valer.

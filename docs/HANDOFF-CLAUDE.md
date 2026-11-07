@@ -460,3 +460,11 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Pedido do dono:** testes novos mostravam N/D em Ontem, 3 e 7 dias no detalhe do notch. Causa: as fontes fechadas guardam só linhas com gasto, e uma campanha que começou hoje não aparece nelas.
 - **Mudança (commit `da8d9f7`, versão Cloudflare `161b767a`):** `lib/companion-summary.mjs` usa o `noSpendPeriods` já verificado (`verifiedNoSpendPeriods`: fonte Malva completa, terminando onde hoje começa, lida e sincronizada depois). Nesses períodos o notch mostra "sem gasto" e gasto zero; pedidos, ROAS e ROI continuam N/D (fonte só de gasto não observa vendas). Qualquer outra ausência continua N/D. App do Mac reinstalado (`mac/build.sh`, self-test ok).
 - **Pendente:** conferir no notch após o próximo resumo do executor.
+
+## Notch: decisões do dono com Touch ID (registro escrito às 2026-11-07 22:10:52 UTC por `date -u`)
+
+- **Pedido do dono:** ajustar campanhas direto do notch sem o login por link de e-mail. Escolhas dele: confirmação por Touch ID; ajuste criado no notch **passa pela equipe** antes de executar.
+- **Servidor:** `lib/owner-device.mjs` (verificação ECDSA P-256 com a chave pública `BUNKER_OWNER_DEVICE_KEY`), ramo em `lib/cloudflare-auth.mjs`, rotas `app/api/companion/owner` (só `cardDecision` e `proposalReview`, mesmas regras da web) e `app/api/companion/cards` (leitura), `lib/companion-cards.mjs`. Testes em `tests/owner-device.test.mjs`. Detalhes em `docs/connections.md`.
+- **App:** `OwnerKey.swift` (Secure Enclave), `OwnerCards.swift`, `OwnerAdjustView.swift`. "Ajustar aqui" e "Conferir" das propostas abrem a tela nativa: escolha (aumentar/reduzir com %, pausar, manter) vira pedido para a equipe; propostas "Aguardando aprovação" mostram antes → depois e "Aprovar com Touch ID". O prompt do Touch ID mostra a mudança exata. O card web segue disponível pelo navegador.
+- **Interop conferida:** envelope assinado pelo Swift verificado pelo verificador Node; self-test nativo cobre limites de %, centavos, intenção sem aprovação e assinatura.
+- **Pendências:** primeiro uso real com a digital do dono (não testável por agente); nenhuma campanha alterada nesta entrega.

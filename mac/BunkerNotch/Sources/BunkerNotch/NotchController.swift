@@ -47,6 +47,11 @@ final class NotchState: ObservableObject {
     @Published var webReload = 0
     @Published var webCurrent: URL?
     @Published var pastedLink = ""
+    /// Native owner adjustment (Touch ID) for one campaign, or the approvals list when campaignId is nil.
+    @Published var adjust: AdjustTarget?
+    /// While Touch ID is asking, clicks on the system prompt or a pause must not fold the island.
+    @Published var holdOpen = false
+    let ownerAdjust = OwnerAdjustModel()
     /// Rotating line on the resting island.
     @Published var tick = 0
     @Published var geometry: NotchGeometry
@@ -80,7 +85,7 @@ final class NotchState: ObservableObject {
         case .compact: return CGSize(width: ears, height: top)
         case .peek: return CGSize(width: max(ears + 140, 420), height: top + 30)
         case .alert: return CGSize(width: 500, height: top + 86)
-        case .open: return webTarget != nil ? CGSize(width: 700, height: 560) : Self.openSize
+        case .open: return webTarget != nil || adjust != nil ? CGSize(width: 700, height: 560) : Self.openSize
         }
     }
 }
@@ -139,6 +144,11 @@ final class NotchController {
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // While the Bunker card is open, every key belongs to it (percent fields, its own Esc).
             guard let self, self.fsm.isOpen, self.state.webTarget == nil else { return event }
+            // Native adjustment: its text fields keep every key; Esc goes back to the summary.
+            if self.state.adjust != nil {
+                if event.keyCode == 53, !self.state.holdOpen { withAnimation(DS.Motion.quick) { self.state.adjust = nil }; return nil }
+                return event
+            }
             return self.handleKey(event) ? nil : event
         } as Any)
         monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -169,6 +179,7 @@ final class NotchController {
     // MARK: - State machine
 
     private func send(_ input: IslandFSM.Input) {
+        if state.holdOpen, [.clickOutside, .idle, .mouseLeft, .escape].contains(input) { return }
         let before = fsm.state
         let after = fsm.handle(input)
         guard after != before else { return }
@@ -186,6 +197,7 @@ final class NotchController {
         case .compact:
             state.selected = nil
             state.webTarget = nil
+            state.adjust = nil
             if panel.isKeyWindow { panel.resignKey() }
             if !queue.isEmpty { let next = queue.removeFirst(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.send(.alert(next)) } }
         case .peek: break
