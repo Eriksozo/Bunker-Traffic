@@ -273,3 +273,21 @@ Pedido do proprietário: Nina e Theo pareciam parados no painel "Aprender, confe
   - mudanças vistas só na leitura ficam "autor não informado".
 - **Validação:** 960 testes, typecheck e build. Conferido localmente com leituras fictícias que geraram aumento, redução e ativação.
 - **O Site `chatgpt.site` continua em versão antiga até ser republicado.** Os deploys pela `main` atualizam o Worker.
+
+## Sincronização das atualizações do Claude — 07/11/2026, 12:12 UTC
+
+Esta conferência substitui a pendência de republicação do Site registrada acima. Os ajustes funcionais já estavam commitados no GitHub até `91e96f57b0d4077f3fcfa39768b456eb001eef57`; o check Workers Builds confirmou a versão Cloudflare `549857f2-f59f-4aa8-ac0b-29cf2df0a54c`, com 100% do tráfego. Não havia código funcional pendente de commit. A configuração compartilhável de preview `.claude/launch.json` foi revisada, sem credenciais, e incluída no registro desta entrega; `.mcp.json` e configurações locais de autenticação continuam fora do Git.
+
+Inventário dos ajustes desde a correção de persistência:
+- Painel do executor com diagnóstico de armazenamento preservado e o nome real do modelo (`a36d8ef`).
+- Cards em lista por prioridade, decisão na própria linha, contexto recolhido e quadro como alternativa (`56b1b54`).
+- Crítica entre agentes sobre hipóteses ainda sem medição, separada da validação de resultados e sem aprovar execução (`eaf11ad`).
+- Resumo “Hoje em 1 minuto”, até cinco prioridades, tabela de campanhas com hoje/ontem e ordenação, além da seleção de projeto/período lembrada (`a92500e`).
+- Respostas entre agentes com o teto de saída das etapas, preservando as validações de evidência (`dc414c8`).
+- Atividade dos gestores e evolução das métricas nos cards, com autor quando fornecido pela fonte, percentuais, valores antes/depois e resumo por ação (`91e96f5`).
+
+O Site privado foi sincronizado a partir dessa fonte e publicado com sucesso na **versão 128**, commit do repositório Sites `82ca8773c8f65bc6a97fa9a88540d081041c56ca`, deployment `appgdep_6aef153458a08191a84bc48a4fc794d7`. URL: https://bunker-trafego-erik.eriksozo.chatgpt.site/ . Acesso exclusivo do proprietário e configuração de runtime preservados (revisão 1, gateway para a mesma base Supabase, MCP disponível). A automação antiga do Sites permaneceu desativada.
+
+A árvore de publicação preserva todos os arquivos funcionais do GitHub. Adaptação necessária apenas para hospedagem: o build privado mantém `sites()`/autenticação ChatGPT e não força `BUNKER_DEPLOY_TARGET=cloudflare`; isso está documentado em `docs/connections.md` do repositório Sites. O Worker principal conserva seu build externo e continua como único executor automático.
+
+Validação: 960 testes, typecheck e build aprovados tanto no checkout principal quanto na preparação do Site. Após recarregar a página privada, a leitura autenticada da interface confirmou “Hoje em 1 minuto”, “Mudanças de orçamento e status” e a lista de cards com decisão inline. O MCP `bunker_ler` respondeu sem erro, revisão 5873 nesta conferência. Não foram registradas decisões nem executados comandos de campanha nesta publicação. A atualização da interface não elimina fontes vencidas, falhas de evidência ou limites de atualização já registrados para investigação.
