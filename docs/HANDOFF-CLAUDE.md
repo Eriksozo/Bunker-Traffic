@@ -159,3 +159,33 @@ Publicação e conferência pós-deploy (registro escrito às 02:45:16 UTC por `
 Acompanhamento:
 - Na janela das 06:00 (America/Sao_Paulo), conferir os 500 de `bunker_store` e o p95 por tamanho de pedido. Se houver falha, ler o campo `storage` em `lastFailure`.
 - `daily` e `reports` ainda decodificam JSON; ficaram fora desta entrega porque nenhuma das falhas veio deles.
+
+## Rodada de melhorias pedida pelo proprietário (registro escrito às 2026-11-07 02:52:22 UTC por `date -u`)
+
+Escopo: quatro pontos derivados do que foi medido nesta sessão. Nenhuma coleta, campanha, agenda, pausa ou dado foi alterado.
+
+1. Latência das leituras: resolvida pela migração `20261107023158`, sem mudança adicional. Todos os pedidos de maior custo em 24 h eram `get`:
+   - 624 bytes: sinais com projeção `revision`.
+   - 302 e 326 bytes: `live` e `creative` dos 6 projetos.
+   - 82 e 86 bytes: um `live` e um `creative`.
+
+   Comparação de 00:30–02:31 UTC com o período depois de 02:31:58:
+
+   | Leitura | p50 | p95 |
+   | --- | --- | --- |
+   | `get central` | 313 → 139 ms | 4.626 → 519 ms |
+   | `get snapshots` | 167 → 114 ms | 558 → 182 ms |
+   | `live` dos 6 projetos | 225 → 97 ms | — |
+   | um `live` | 93 → 48 ms | — |
+
+   `resolutions`, `daily` e `reports` não estão entre os 15 maiores custos de 24 h; sem evidência para alterá-los.
+2. Painel do executor (aguarda publicação):
+   - Mostra o diagnóstico de armazenamento saneado no histórico e a última falha registrada, mesmo depois de um passo bem-sucedido. Rótulos em `lib/storage-diagnostic-label.mjs`, só com vocabulário fixo e sem identificadores.
+   - Corrige o modelo, que aparecia fixo como "Llama 3.3 70B" embora o executor use `@cf/openai/gpt-oss-120b`: o status do Worker passa a enviar `modelLabel` a partir de `cloud-model-policy`.
+3. Persistência das coletas: confirmada sem correção. Os seis projetos têm 12/12 fontes completas (7d, 3d, ontem e hoje × campanha, conjunto e anúncio) via Malva MCP. Coletas de 06/11 entre 22:28 e 22:57 UTC; John às 00:28 UTC de 07/11.
+4. Crescimento dos registros: banco com 78 MB. Dos 55 blobs `snapshots:` (06/11 16:20 a 07/11 00:30 UTC), só 1 é referenciado (pela central). Colaborações e sugestões não referenciam nenhum, e os 54 restantes somam 43,8 MB.
+   - Ritmo observado: ≈5,5 MB/h durante a janela de coleta, porque cada coleta regrava o pacote inteiro de fontes (≈830 KB, já em gzip e incompressível no Postgres).
+   - Nenhum código lê blobs antigos (só `lib/persistence.mjs` resolve a referência atual).
+   - Nada foi apagado. Retenção é decisão do proprietário; opções: manter os N mais recentes ou um prazo em dias, ou mudar o formato para gravar fontes por projeto, alteração maior que exige preservar a compatibilidade `bunker-snapshot-reference`.
+
+Validação: 940 testes, typecheck, build e `git diff --check` aprovados. O painel não foi conferido visualmente: a interface exige a autenticação privada do Site.

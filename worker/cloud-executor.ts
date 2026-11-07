@@ -14,7 +14,7 @@ import {syncCloudCreatives} from '../lib/cloud-creative-sync.mjs';
 import {readLiveData,liveDataAction} from '../lib/live-data.mjs';
 import {collectCloudProject,trackedCloudCampaigns} from '../lib/cloud-collector.mjs';
 import {CLOUD_MODEL} from '../lib/cloud-analysis.mjs';
-import {cloudProductionModelPolicy} from '../lib/cloud-model-policy.mjs';
+import {cloudModelPolicy,cloudProductionModelPolicy} from '../lib/cloud-model-policy.mjs';
 import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
@@ -37,7 +37,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  async fetch(request:Request){
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
-  if(input.action==='status'){return Response.json({...runtime,running:this.running,host:'cloudflare',model:CLOUD_MODEL,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
+  if(input.action==='status'){return Response.json({...runtime,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
   if(input.action==='check'){
    const started=Date.now();const results=await Promise.allSettled([this.engine().identity(),checkCloudModel(this.env.AI)]);
    const identity=results[0],model=results[1],malva=identity.status==='fulfilled',ai=model.status==='fulfilled'&&model.value===true;
