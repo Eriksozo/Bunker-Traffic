@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {describeChange,activityLog,activitySummary,cardActivity,metricEvolution} from '../lib/campaign-activity.mjs';
+import {describeChange,activityLog,activityForRange,activityTimezone,activitySummary,cardActivity,metricEvolution} from '../lib/campaign-activity.mjs';
 
 const now=Date.parse('2026-11-07T15:00:00Z'),iso=h=>new Date(now-h*3600000).toISOString();
 const history=(id,field,before,after,hoursAgo,actor,extra={})=>({id,project:'p',projects:['p'],adAccountId:'act',objectId:'c1',name:'Campanha 1',accountName:'Conta',field,before,after,occurredAt:iso(hoursAgo),actor,currency:'BRL',...extra});
@@ -50,4 +50,30 @@ test('metric evolution compares the same day window only and keeps missing value
  const m=metricEvolution(card);assert.equal(m.spend,150);assert.equal(m.frontOrders,2);assert.deepEqual(m.roas,{before:1.5,after:2});assert.deepEqual(m.roi,{before:1.4,after:null});
  assert.equal(metricEvolution({...card,liveToday:{...card.liveToday,from:'2026-11-08T03:00:00Z'}}),null);
  assert.equal(metricEvolution({...card,liveAt:iso(3)}),null);
+});
+
+
+test('Today uses project midnight, excludes yesterday and future events, preserves rolling ranges',()=>{
+ const at=Date.parse('2026-11-07T12:00:00Z');
+ const event=(id,occurredAt)=>history(id,'dailyBudget',100,120,0,'Gestor',{objectId:id,occurredAt});
+ const state={snapshots:[{projectId:'p',source:'Malva MCP',complete:true,timezone:'America/Sao_Paulo'}],decisionHistory:[
+  event('yesterday','2026-11-07T02:59:59Z'),event('midnight','2026-11-07T03:00:00Z'),event('now','2026-11-07T12:00:00Z'),event('future','2026-11-07T12:01:00Z'),event('old','2026-11-02T12:00:00Z')]};
+ assert.equal(activityTimezone(state,'p'),'America/Sao_Paulo');
+ assert.deepEqual(activityForRange(state,{project:'p',range:'today',now:at}).events.map(e=>e.objectId),['now','midnight']);
+ assert.equal(activityForRange(state,{project:'p',range:'day',now:at}).events.length,3);
+ assert.equal(activityForRange(state,{project:'p',range:'week',now:at}).events.length,4);
+ const all=activityForRange(state,{project:'all',range:'today',now:at});
+ assert.equal(all.timezone,'America/Boa_Vista');assert.deepEqual(all.events.map(e=>e.objectId),['now']);
+ assert.deepEqual(activityForRange(state,{project:'p',range:'today',now:Date.parse('2026-11-08T03:00:00Z')}).events,[]);
+});
+
+test('Today follows DST calendar boundaries and timezone fallback stays explicit',()=>{
+ const state={snapshots:[{projectId:'p',source:'Malva MCP',complete:true,timezone:'America/New_York'}],decisionHistory:[
+  history('before','status','ACTIVE','PAUSED',0,'Ana',{occurredAt:'2026-11-01T03:59:59Z'}),
+  history('start','status','PAUSED','ACTIVE',0,'Ana',{occurredAt:'2026-11-01T04:00:00Z'}),
+  history('end','dailyBudget',100,150,0,'Ana',{occurredAt:'2026-11-02T04:30:00Z'})]};
+ assert.equal(activityForRange(state,{project:'p',range:'today',now:Date.parse('2026-11-02T04:45:00Z')}).events.length,2);
+ assert.equal(activityTimezone({snapshots:[{projectId:'p',source:'Malva MCP',complete:true,timezone:'invalid'}]},'p'),'America/Boa_Vista');
+ assert.equal(activityTimezone({},'p'),'America/Boa_Vista');
+ assert.deepEqual(activityForRange(state,{range:'today',now:NaN}).events,[]);
 });

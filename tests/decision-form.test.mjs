@@ -52,3 +52,11 @@ test('Incident epoch timestamps and ISO source times display the same valid inst
  assert.equal(decisionTimestamp(now),now);assert.equal(decisionTimestamp(new Date(now).toISOString()),now);assert.equal(decisionTimestamp(0),0);
  for(const value of [null,undefined,'',' ','broken',Infinity,NaN,8640000000000001])assert.ok(Number.isNaN(decisionTimestamp(value)));
 });
+
+
+test('embedded decision target requires project, account and exact campaign ID',async()=>{
+ const {matchesDecisionTarget}=await import('../lib/decision-form.mjs');
+ const card={project:'p',row:{adAccountId:'a',externalId:'123'}};
+ assert.equal(matchesDecisionTarget(card,{project:'p',adAccountId:'a',objectId:'123'}),true);
+ for(const target of [null,{}, {project:'q',adAccountId:'a',objectId:'123'},{project:'p',adAccountId:'b',objectId:'123'},{project:'p',adAccountId:'a',objectId:'12'}])assert.equal(matchesDecisionTarget(card,target),false);
+});

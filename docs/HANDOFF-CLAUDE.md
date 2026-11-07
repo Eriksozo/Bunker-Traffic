@@ -291,3 +291,14 @@ O Site privado foi sincronizado a partir dessa fonte e publicado com sucesso na 
 A árvore de publicação preserva todos os arquivos funcionais do GitHub. Adaptação necessária apenas para hospedagem: o build privado mantém `sites()`/autenticação ChatGPT e não força `BUNKER_DEPLOY_TARGET=cloudflare`; isso está documentado em `docs/connections.md` do repositório Sites. O Worker principal conserva seu build externo e continua como único executor automático.
 
 Validação: 960 testes, typecheck e build aprovados tanto no checkout principal quanto na preparação do Site. Após recarregar a página privada, a leitura autenticada da interface confirmou “Hoje em 1 minuto”, “Mudanças de orçamento e status” e a lista de cards com decisão inline. O MCP `bunker_ler` respondeu sem erro, revisão 5873 nesta conferência. Não foram registradas decisões nem executados comandos de campanha nesta publicação. A atualização da interface não elimina fontes vencidas, falhas de evidência ou limites de atualização já registrados para investigação.
+
+
+## Hoje na atividade e decisão inline no resumo — 07/11/2026
+
+Escopo pedido pelo dono: filtro Hoje em Mudanças de orçamento e status, preservando 24 horas/7 dias; e manter/aumentar/reduzir/pausar diretamente ao expandir uma campanha em O que fazer agora.
+
+- Hoje filtra pela data civil no fuso confirmado por fontes Malva completas do projeto. No consolidado ou sem fuso único válido, usa America/Boa_Vista, explicitado na tela. Horários do log seguem o mesmo fuso. Virada do dia e DST testados; janela móvel de 24h continua como seleção inicial.
+- O resumo expande no próprio local e reutiliza o controlador, ActionBox, checagens, IDs idempotentes e diálogo de aprovação exata dos cards. O alvo é a identidade exata projeto + conta + campanha, nunca busca textual. Análise completa é opcional; decidir não navega para outra seção.
+- Intenção continua distinta de aprovação. Mudança de cenário invalida a aprovação anterior e avisa no editor. Decisão confirmada sai da fila compartilhada; falha de resposta mantém a conciliação já existente no histórico.
+- Claude via Cursor foi tentado como escritor principal, mas a sessão OAuth expirou e não renovou. Codex concluiu esta alteração delimitada sem mudar credenciais, políticas financeiras, agenda ou campanhas.
+- Validação: suíte de 963 testes, typecheck e build aprovados. Controle de navegador indisponível em duas tentativas; nenhuma captura ou decisão real usada como teste. Publicação da mesma fonte prevista para Cloudflare e Site privado.

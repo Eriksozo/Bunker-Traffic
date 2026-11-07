@@ -1,9 +1,10 @@
 'use client';
-import {useMemo} from 'react';
-import {ArrowDownRight,ArrowUpRight,ChevronRight,Minus} from 'lucide-react';
+import {useEffect,useMemo,useState} from 'react';
+import {ArrowDownRight,ArrowUpRight,ChevronDown,ChevronRight,Minus} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {dailyComparison,actionQueue} from '../lib/daily-brief.mjs';
 import './daily-brief.css';
+import DecisionCards from './decision-cards';
 
 const money=(n:any)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}):'N/D';
 const ratio=(n:any)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'x':'N/D';
@@ -28,7 +29,9 @@ function stakeText(item:any){
 }
 
 /** "Hoje em 1 minuto": how today compares and which few campaigns to open first. Never a proposal or approval. */
-export default function DailyBrief({state,project,candidates,showProject,onOpen}:{state:any;project:string;candidates:any[];showProject:boolean;onOpen:(candidate:any)=>void}){
+export default function DailyBrief({state,project,candidates,showProject,onOpen,write,saving,liveItems=[]}:{state:any;project:string;candidates:any[];showProject:boolean;onOpen:(candidate:any)=>void;write:(input:any)=>Promise<boolean>;saving:boolean;liveItems?:any[]}){
+ const [expanded,setExpanded]=useState<string|null>(null);
+ useEffect(()=>setExpanded(null),[project]);
  const comparison=useMemo(()=>dailyComparison(state,project),[state,project]);
  const queue=useMemo(()=>actionQueue(candidates),[candidates]);
  return <section className="panel daily-brief" aria-label="Resumo do dia">
@@ -39,12 +42,15 @@ export default function DailyBrief({state,project,candidates,showProject,onOpen}
    <span className="brief-deltas"><Delta value={d.yesterday} higherIsBetter={m.higherIsBetter} label="vs ontem"/><Delta value={d.week} higherIsBetter={m.higherIsBetter} label="vs 7 dias"/></span>
   </div>;})}</div>
   <div className="section-divider"/>
-  <div className="panel-title"><div><h3>O que fazer agora</h3><p className="hint">{queue.items.length?`Até ${queue.items.length} de ${queue.considered} campanhas ativas, ordenadas pelo dinheiro em jogo. Abrir não altera nada; a decisão segue pelo card e pela sua aprovação.`:'Nenhuma campanha ativa com perda lida ou oportunidade clara agora.'}{queue.protectedTests>0&&` ${queue.protectedTests===1?'1 teste com menos de 24h de entrega ficou fora e segue preservado.':`${queue.protectedTests} testes com menos de 24h de entrega ficaram fora e seguem preservados.`}`}</p></div></div>
-  {queue.items.map((item:any)=>{const c=item.candidate,loss=item.kind==='loss';return <Button className="priority-row brief-item" key={c.id} onClick={()=>onOpen(c)} aria-label={`Abrir análise de ${c.row.name}`}>
+  <div className="panel-title"><div><h3>O que fazer agora</h3><p className="hint">{queue.items.length?`Até ${queue.items.length} de ${queue.considered} campanhas ativas, ordenadas pelo dinheiro em jogo. Expanda para manter, aumentar, reduzir ou pausar aqui mesmo.`:'Nenhuma campanha ativa com perda lida ou oportunidade clara agora.'}{queue.protectedTests>0&&` ${queue.protectedTests===1?'1 teste com menos de 24h de entrega ficou fora e segue preservado.':`${queue.protectedTests} testes com menos de 24h de entrega ficaram fora e seguem preservados.`}`}</p></div></div>
+  {queue.items.map((item:any)=>{const c=item.candidate,loss=item.kind==='loss',target={project:c.row.projectId,adAccountId:c.row.adAccountId,objectId:c.row.externalId},key=JSON.stringify(target),open=expanded===key;return <div className={'brief-action-item'+(open?' is-open':'')} key={key}><Button type="button" className="priority-row brief-item" onClick={()=>setExpanded(open?null:key)} aria-expanded={open} aria-controls={open?`brief-decision-${encodeURIComponent(key)}`:undefined} aria-label={`${open?'Recolher':'Expandir'} decisão de ${c.row.name}`}>
    <span className={'priority-icon '+(loss?'red':'green')}>{loss?<ArrowDownRight size={17}/>:<ArrowUpRight size={17}/>}</span>
    <span className="priority-copy"><strong>{c.row.name}</strong><small>{showProject&&`${c.row.projectName} · `}{c.row.accountName} · {c.decision}</small><small className="brief-why">{loss?(item.period==='today'?'Hoje':'Últimos 3 dias'):'Últimos 3 dias'}: gasto {money(item.spend)} · ROAS {ratio(item.roas)} · 7 dias {ratio(item.comparison)}</small></span>
    <span className={'priority-metric brief-stake '+(loss?'is-bad':'is-good')}>{loss?'Revisar':'Oportunidade'}<small>{stakeText(item)}</small></span>
-   <ChevronRight size={16}/>
-  </Button>;})}
+   {open?<ChevronDown size={16}/>:<ChevronRight size={16}/>}
+  </Button>{open&&<div className="brief-inline-decision" id={`brief-decision-${encodeURIComponent(key)}`}>
+   <DecisionCards state={state} project={target.project} write={write} saving={saving} liveItems={liveItems} inlineTarget={target}/>
+   <Button type="button" variant="ghost" className="brief-analysis-link" onClick={()=>onOpen(c)}>Ver análise completa <ChevronRight size={14}/></Button>
+  </div>}</div>;})}
  </section>;
 }

@@ -1,14 +1,14 @@
 'use client';
 import {useMemo,useState} from 'react';
 import {ArrowDownRight,ArrowUpRight,ChevronDown,History,Pause,Play,UserRound} from 'lucide-react';
-import {activityActions,activityLog,activitySummary,cardActivity,metricEvolution} from '../lib/campaign-activity.mjs';
+import {activityActions,activityRanges,activityForRange,activitySummary,cardActivity,metricEvolution} from '../lib/campaign-activity.mjs';
 import './campaign-activity.css';
 
 const finite=(n:any):n is number=>typeof n==='number'&&Number.isFinite(n);
 function money(n:any,currency?:string|null){if(!finite(n))return 'N/D';const code=typeof currency==='string'&&/^[A-Z]{3}$/.test(currency)?currency:'BRL';try{return n.toLocaleString('pt-BR',{style:'currency',currency:code,maximumFractionDigits:2});}catch{return n.toLocaleString('pt-BR');}}
 const ratio=(n:any)=>finite(n)?n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'x':'N/D';
 const signed=(n:number,format:(n:number)=>string)=>(n>0?'+':n<0?'−':'')+format(Math.abs(n));
-const stamp=(value:string)=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('pt-BR',{timeZone:'America/Boa_Vista',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'N/D';};
+const stamp=(value:string,timezone='America/Boa_Vista')=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('pt-BR',{timeZone:timezone,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'N/D';};
 const statusNames:Record<string,string>={ACTIVE:'ativa',PAUSED:'pausada',CAMPAIGN_PAUSED:'pausada',ARCHIVED:'arquivada',DELETED:'excluída'};
 const statusName=(value:any)=>statusNames[String(value)]||String(value||'N/D').toLowerCase();
 const icons:Record<string,any>={increase:ArrowUpRight,reduce:ArrowDownRight,pause:Pause,activate:Play,status:History,currency:History};
@@ -42,7 +42,7 @@ export function MetricEvolution({card}:{card:any}){
  return <p className="ca-evolution"><span>Desde a análise ({stamp(m.since)} → {stamp(m.at)}):</span> {parts.join(' · ')}</p>;
 }
 
-function EventRow({e,showCampaign}:{e:any;showCampaign:boolean}){
+function EventRow({e,showCampaign,timezone}:{e:any;showCampaign:boolean;timezone?:string}){
  const Icon=icons[e.action]||History;
  return <li className={'ca-event ca-event-'+e.action}>
   <span className="ca-event-icon"><Icon size={14} aria-hidden="true"/></span>
@@ -50,7 +50,7 @@ function EventRow({e,showCampaign}:{e:any;showCampaign:boolean}){
    <strong>{changeSentence(e)}</strong>
    <span>{changeDetail(e)}</span>
    {showCampaign&&<small>{e.name||'Campanha '+e.objectId}{e.accountName?' · '+e.accountName:''}</small>}
-   <small><UserRound size={11} aria-hidden="true"/> {e.origin==='bunker'?'Bunker · aprovado por você':e.actor||'Autor não informado'} · {e.origin==='observed'&&e.from?`entre ${stamp(e.from)} e ${stamp(e.at)}`:stamp(e.at)} · {e.source}{e.confirmedBy?.length?' · confirmado também por: '+e.confirmedBy.join(', '):''}</small>
+   <small><UserRound size={11} aria-hidden="true"/> {e.origin==='bunker'?'Bunker · aprovado por você':e.actor||'Autor não informado'} · {e.origin==='observed'&&e.from?`entre ${stamp(e.from,timezone)} e ${stamp(e.at,timezone)}`:stamp(e.at,timezone)} · {e.source}{e.confirmedBy?.length?' · confirmado também por: '+e.confirmedBy.join(', '):''}</small>
   </span>
  </li>;
 }
@@ -64,21 +64,22 @@ export function CampaignActivityLog({card,state,now}:{card:any;state:any;now:num
  </details>;
 }
 
-const ranges={24:'24 horas',168:'7 dias'} as const;
+const ranges=activityRanges;
 /** Overview: totals per action with who did them; clicking a box opens the log for that action. */
 export function ActivityOverview({state,project,now}:{state:any;project:string;now:number}){
- const [hours,setHours]=useState<24|168>(24),[open,setOpen]=useState<string|null>(null);
- const events=useMemo(()=>activityLog(state,{project,since:now-hours*3600000,now}),[state,project,now,hours]);
+ const [range,setRange]=useState<keyof typeof ranges>('day'),[open,setOpen]=useState<string|null>(null);
+ const {events,timezone}=useMemo(()=>activityForRange(state,{project,range,now}),[state,project,now,range]);
  const summary=useMemo(()=>activitySummary(events),[events]),shown=open?events.filter((e:any)=>e.action===open):[];
  return <section className="panel ca-overview" aria-label="Atividade recente dos gestores">
   <div className="panel-title"><div><span className="eyebrow">ATIVIDADE DOS GESTORES</span><h2>Mudanças de orçamento e status</h2><p className="hint">Inclui gestores, regras automáticas e o Bunker. Clique numa caixa para ver quem fez, quando e de quanto para quanto.</p></div>
-   <div className="ca-range" role="group" aria-label="Período da atividade">{(Object.keys(ranges) as unknown as (keyof typeof ranges)[]).map(h=><button type="button" key={h} className={Number(h)===hours?'is-selected':''} aria-pressed={Number(h)===hours} onClick={()=>setHours(Number(h) as 24|168)}>{ranges[h]}</button>)}</div></div>
+   <div className="ca-range" role="group" aria-label="Período da atividade">{(Object.keys(ranges) as unknown as (keyof typeof ranges)[]).map(h=><button type="button" key={h} className={h===range?'is-selected':''} aria-pressed={h===range} onClick={()=>setRange(h)}>{ranges[h]}</button>)}</div></div>
+  <p className="ca-note">{range==='today'?'De 00h até agora':'Janela móvel até agora'} · {timezone}</p>
   <div className="ca-boxes">{Object.entries(activityActions).map(([action,label])=>{const s=(summary as any)[action],Icon=icons[action],names=Object.entries(s.actors as Record<string,number>).sort((a,b)=>b[1]-a[1]);return <button type="button" key={action} className={'ca-box ca-box-'+action+(open===action?' is-open':'')} aria-expanded={open===action} disabled={!s.count} onClick={()=>setOpen(open===action?null:action)}>
    <span className="ca-box-head"><Icon size={14} aria-hidden="true"/>{label}</span><strong>{s.count}</strong>
    <small>{s.count?[...names.slice(0,3).map(([n,c])=>`${n} (${c})`),...(names.length>3?[`+${names.length-3}`]:[]),...(s.unknown?[`${s.unknown} sem autor informado`]:[])].join(' · '):'Nenhuma no período'}</small>
   </button>;})}</div>
-  {open&&<div className="ca-overview-log"><h3>{(activityActions as any)[open]} · {ranges[hours]}</h3><ul>{shown.slice(0,50).map((e:any)=><EventRow key={e.id} e={e} showCampaign/>)}</ul>{shown.length>50&&<p className="ca-note">Mostrando as 50 mais recentes de {shown.length}.</p>}</div>}
-  {!events.length&&<p className="ca-empty">Nenhuma mudança de orçamento ou status registrada em {ranges[hours]}.</p>}
+  {open&&<div className="ca-overview-log"><h3>{(activityActions as any)[open]} · {ranges[range]}</h3><ul>{shown.slice(0,50).map((e:any)=><EventRow key={e.id} e={e} showCampaign timezone={timezone}/>)}</ul>{shown.length>50&&<p className="ca-note">Mostrando as 50 mais recentes de {shown.length}.</p>}</div>}
+  {!events.length&&<p className="ca-empty">Nenhuma mudança de orçamento ou status registrada em {ranges[range]}.</p>}
  </section>;
 }
 
