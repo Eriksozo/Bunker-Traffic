@@ -214,3 +214,20 @@ Pedido do proprietário: a aba não estava prática. Ele marcou os quatro proble
 - **Conferência visual:** página temporária local com dados de exemplo, em 800 e 1440 px; a página não foi commitada.
 - **Validação:** só estes arquivos, numa worktree limpa a partir de `d112cee`: 944 testes, typecheck e build aprovados.
 - **Pendência alheia:** no checkout principal há edições não commitadas de outro escritor (`lib/learning-cycle.mjs`, `lib/learning-peer-review.mjs`, `lib/automatic-agent-hypotheses.mjs` e `tests/learning-peer-review.test.mjs`). Com elas, 8 testes de `cloud-executor` e `cloud-model-policy` falham com `CLOUD_LEARNING_REVIEW_REQUIRED`. Essas edições não foram commitadas nem alteradas.
+
+## Crítica entre agentes antes da medição (registro escrito às 2026-11-07 03:28:07 UTC por `date -u`)
+
+Pedido do proprietário: Nina e Theo pareciam parados no painel "Aprender, conferir e melhorar"; eles precisam interagir.
+
+- **Diagnóstico (leitura via `bunker_ler`/`learningRead`):** Nina e Theo concluíam as etapas de todas as rodadas e registravam hipóteses próprias, mas o painel só mostrava rótulos fixos. A revisão entre agentes só começava com resultado medido, e os 56 padrões estavam "Em estudo" sem nenhum resultado medido. Por isso não havia o que revisar.
+- **Mudança (commit `eaf11ad`, versão Cloudflare `460eb608`, deploy automático às 03:26:51 UTC):**
+  - Sem resultado medido, a etapa normal de Lia, Nina ou Theo recebe uma hipótese "Em estudo" de outro papel (ou sem autor) para confrontar com os dados atuais. Não há chamada extra ao modelo.
+  - Só `challenge` ou `inconclusive`; o autor nunca critica a própria hipótese.
+  - A crítica fica registrada à parte (`phase: hypothesis`): não muda o estágio, não conta para apoio, não trava a revisão automática do autor e é recusada quando já existe resultado medido.
+  - Limites: uma por papel e fingerprint, no máximo 15 por projeto (≈90 registros e ≈70 KB na central).
+  - Crítica ausente na resposta do modelo não falha a análise da campanha; a revisão de evidência medida continua obrigatória.
+  - O painel mostra, por agente, hipóteses próprias, críticas feitas e o que aguarda a próxima etapa, além das críticas recebidas em cada padrão.
+- **Pendência alheia acima resolvida:** os 8 testes de `cloud-executor` e `cloud-model-policy` que falhavam com `CLOUD_LEARNING_REVIEW_REQUIRED` passaram depois que a crítica prévia virou opcional. Validação antes do push: 949 testes, typecheck, build e `git diff --check`.
+- **Conferência pós-deploy:** `/health` 200; MCP `initialize`, `tools/list` (9) e `bunker_ler` com 200; secrets preservados (somente nomes conferidos); 156 críticas elegíveis, nenhuma feita ainda; executor ativo, sem falhas desde 03:00 UTC.
+- **A conferir:** a primeira crítica real só ocorre na próxima janela (06:00 America/Sao_Paulo). O painel não foi conferido visualmente.
+- **Fora desta etapa:** execução autônoma via Malva sem aprovação exata do dono não foi implementada; exige mudança de política escrita, com limites, e revisão.
