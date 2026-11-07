@@ -25,7 +25,7 @@ Leitura web, sem clonar nem executar. Licenças lidas no arquivo LICENSE quando 
 ## Próximos candidatos
 
 1. ~~Bunk caindo e andando sobre a borda das janelas~~ — aplicado em 07/11 (`WindowPerch`, `BunkDesktop.perch`).
-2. Rodízio do notch fechado por urgência (CodeIsland `CompactBarRotation.swift`, adaptar sem @Observable).
+2. ~~Rodízio do notch fechado por urgência~~ — aplicado em 07/11 (`UrgencyTicker`).
 3. Estado de espiada com háptico limitado e debounce de fechamento (NotchDrop `NotchViewModel+Events.swift`).
 4. Alerta que não fecha com o mouse em cima e painel flutuante em telas sem notch (DynamicNotchKit `DynamicNotchHoverBehavior.swift`, `NotchlessView.swift`).
 5. Molas de abrir/fechar e brilho ao aproximar o mouse (boring.notch — ideia; Notchmeister — BSD).

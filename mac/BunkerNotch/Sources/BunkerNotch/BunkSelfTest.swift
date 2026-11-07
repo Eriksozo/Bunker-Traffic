@@ -71,6 +71,12 @@ extension SelfTest {
         expect(WindowPerch.surface(x: 300, feetY: 700, windows: [PerchWindow(id: 4, frame: CGRect(x: 100, y: 100, width: 800, height: 760))], floor: floorS, ceiling: 900).windowID == nil, #line) // no room above
         let f1 = WindowPerch.fall(y: 500, speed: 0, floorY: 6, dt: 1.0 / 60.0)
         expect(f1.y < 500 && !f1.landed && WindowPerch.fall(y: 10, speed: 800, floorY: 6, dt: 1.0 / 60.0).landed, #line)
+        // Urgency rotation: short names, urgent first and twice, a new urgent item gets the focus.
+        expect(UrgencyTicker.shortName("07/11 - [CBO] - [JOHN] - [TESTE] - [1-3-1] - JHON_A_357_H1") == "A_357_H1", #line)
+        expect(UrgencyTicker.shortName(nil) == "campanha", #line)
+        let calm = [UrgencyTicker.Item(key: "roas", text: "ROAS", tone: .neutral, urgent: false)]
+        let hot = [UrgencyTicker.Item(key: "loss:x", text: "↓", tone: .bad, urgent: true)] + calm
+        expect(UrgencyTicker.focus(previousKeys: ["roas"], items: hot) == 0 && UrgencyTicker.focus(previousKeys: ["roas", "loss:x"], items: hot) == nil, #line)
         let s1 = BunkDesk.step(from: .zero, to: CGPoint(x: 10, y: 0), distance: 4)
         expect(s1.point == CGPoint(x: 4, y: 0) && !s1.arrived && BunkDesk.step(from: s1.point, to: CGPoint(x: 10, y: 0), distance: 8).arrived, #line)
     }

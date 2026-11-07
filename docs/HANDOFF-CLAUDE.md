@@ -483,3 +483,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Aplicado (ideias reescritas, créditos em `mac/NOTICE.md`): Bunk só anima quando há algo para ver (notch fechado parado em tranquilo, vigiando, feliz e dormindo; 10 fps dormindo); avisos em rajada viram um passeio; não passeia em tela com app em tela cheia (limites de janela, sem permissão de Gravação de Tela); realoca ao desconectar monitor; pausa com tela bloqueada; opção "Esconder notch e Bunk em gravações e calls" (desligada por padrão porque também some dos prints).
 - Medição em repouso após instalar: 0,0–0,4% de CPU, ~60 MB.
 - Próximos candidatos listados no documento (andar sobre janelas, rodízio por urgência, espiada com háptico, molas).
+
+## Bunk sobre janelas e rodízio por urgência (registro escrito às 2026-11-07 22:28:25 UTC por `date -u`)
+
+- **Bunk sobre janelas** (morando no desktop): fica na borda de cima da janela abaixo dele (larga o bastante, com espaço acima, não encoberta), cai com gravidade quando a janela fecha/move/minimiza, pousa com achatamento e passeia pela borda de vez em quando. Leitura de janelas só por limites/camada/dono (sem nomes, sem Gravação de Tela): rápida em movimento e após troca de app, lenta parado. `WindowPerch` testado no self-test.
+- **Rodízio por urgência** no notch fechado (`UrgencyTicker`): propostas para aprovar, maior perda e contas no limite primeiro, em cor e com dobro de tempo; item urgente novo aparece na hora; dia calmo mantém ROAS, gasto e última mudança.
+- Ideias do puck-mac e do CodeIsland (MIT), reescritas; créditos em `mac/NOTICE.md`.

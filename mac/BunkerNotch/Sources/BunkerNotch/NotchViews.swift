@@ -60,9 +60,15 @@ struct CollapsedView: View {
                 if store.muted { Image(systemName: "moon.fill").font(.system(size: 9)).foregroundStyle(DS.Color.inkMuted).help("Avisos silenciados") }
             }.frame(width: NotchState.earWidth)
             Spacer(minLength: notch.geometry.width)
-            Text(ticker).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(DS.Color.inkSoft)
+            let current = ticker
+            Text(current?.text ?? (store.preparing ? "preparando" : "…")).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit()
+                .foregroundStyle(current.map { $0.tone == .neutral ? DS.Color.inkSoft : $0.tone.color } ?? DS.Color.inkSoft)
                 .lineLimit(1).minimumScaleFactor(0.75).frame(width: NotchState.earWidth - 8)
                 .id(notch.tick).transition(.push(from: .bottom))
+        }
+        // A newly urgent item (approval, loss, account at its limit) is shown at once.
+        .onChange(of: tickerItems.map(\.key)) { old, new in
+            if let i = UrgencyTicker.focus(previousKeys: Set(old), items: tickerItems) { withAnimation(DS.Motion.quick) { notch.tick = i } }
         }
         .frame(height: notch.geometry.height)
         .contentShape(Rectangle())
@@ -71,16 +77,18 @@ struct CollapsedView: View {
         .accessibilityLabel("Bunk: \(store.attention) itens pedem atenção")
         .accessibilityAddTraits(.isButton)
     }
-    /// Rotates every 5 s: ROAS today, spend today, latest manager change.
-    var ticker: String {
-        guard let s = store.summary else { return store.preparing ? "preparando" : "…" }
-        var items = ["ROAS " + Format.ratio(s.today.today?.roas), "Gasto " + Format.compactMoney(s.today.today?.spend)]
-        if let e = s.activity.recent.first {
+    /// Rotates every 5 s, most urgent first (UrgencyTicker): approvals, top loss, accounts at the limit; then ROAS, spend, latest change.
+    var tickerItems: [UrgencyTicker.Item] {
+        let change = store.summary?.activity.recent.first.map { e -> String in
             let who = e.actor.map { String($0.split(separator: " ").first ?? "") } ?? "Gestor"
             let icon = ["increase": "↑", "reduce": "↓", "pause": "⏸", "activate": "▶︎"][e.action] ?? "•"
-            items.append("\(who) \(icon) \(Format.relative(e.at).replacingOccurrences(of: "há ", with: ""))")
+            return "\(who) \(icon) \(Format.relative(e.at).replacingOccurrences(of: "há ", with: ""))"
         }
-        return items[notch.tick % items.count]
+        return UrgencyTicker.items(store.summary, recentChange: change)
+    }
+    var ticker: UrgencyTicker.Item? {
+        let items = tickerItems
+        return items.isEmpty ? nil : items[notch.tick % items.count]
     }
 }
 
