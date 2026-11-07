@@ -50,6 +50,22 @@ final class NotchState: ObservableObject {
     /// Rotating line on the resting island.
     @Published var tick = 0
     @Published var geometry: NotchGeometry
+    /// What Bunk is saying now (nil hides the bubble) and which topic comes next.
+    @Published var bunkSays: String?
+    @Published var bunkLook: CGFloat = 0
+    @Published var bunkHovering = false
+    private var bunkTopic = 0
+    private var bunkHide: DispatchWorkItem?
+    /// Each call says the next topic; the bubble hides by itself after 8 s.
+    func bunkSpeak(_ lines: [String]) {
+        guard !lines.isEmpty else { return }
+        let text = lines[bunkTopic % lines.count]; bunkTopic += 1
+        withAnimation(DS.Motion.quick) { bunkSays = text }
+        bunkHide?.cancel()
+        let hide = DispatchWorkItem { [weak self] in withAnimation(DS.Motion.quick) { if self?.bunkSays == text { self?.bunkSays = nil } } }
+        bunkHide = hide
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: hide)
+    }
     /// Set by the controller: views call it for clicks on the resting/peek/alert island.
     var onClick: () -> Void = {}
     var onClose: () -> Void = {}

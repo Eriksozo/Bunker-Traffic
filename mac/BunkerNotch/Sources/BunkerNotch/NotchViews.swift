@@ -55,8 +55,7 @@ struct CollapsedView: View {
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: 6) {
-                StatusDot(tone: healthTone(store), size: 6)
-                Image(systemName: "square.stack.3d.up.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(DS.Color.accent)
+                BunkAvatar(size: 20, interactive: false)
                 if store.attention > 0 { Pill(text: "\(store.attention)", tone: .warn) }
                 if store.muted { Image(systemName: "moon.fill").font(.system(size: 9)).foregroundStyle(DS.Color.inkMuted).help("Avisos silenciados") }
             }.frame(width: NotchState.earWidth)
@@ -127,7 +126,7 @@ struct AlertView: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: notch.geometry.height)
             HStack(alignment: .center, spacing: DS.Space.m) {
-                IconBadge(symbol: symbol, tone: tone)
+                BunkView(mood: alert.kind == .manager ? .watching : .alert, size: 32)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(alert.title).font(DS.Font.bodyStrong).foregroundStyle(DS.Color.ink).lineLimit(1)
                     Text(alert.detail).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(2).truncationMode(.middle)
@@ -150,6 +149,7 @@ struct ExpandedView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             Header()
+            if let says = notch.bunkSays { BunkBubble(text: says) }
             if let error = store.error { Banner(text: error, tone: .bad) }
             if store.preparing && store.summary == nil { Banner(text: "Resumo em preparação pelo executor. Aparece em 1 a 2 minutos.", tone: .neutral) }
             if notch.webTarget != nil {
@@ -188,7 +188,7 @@ struct Header: View {
     var body: some View {
         HStack(spacing: DS.Space.s) {
             HStack(spacing: 6) {
-                Image(systemName: "square.stack.3d.up.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(DS.Color.accent)
+                BunkAvatar(size: 26)
                 Text("BUNKER").font(DS.Font.mark).tracking(1.6).foregroundStyle(DS.Color.accent)
             }
             ProjectMenu()

@@ -44,6 +44,17 @@ enum SelfTest {
         check(Format.queueTag(project: nil, account: "  ") == nil, #line)
         check(s.shadow == nil, #line)
         check(s.accounts == nil, #line)
+        // Bunk mirrors the operation: errors worry it, a loss alerts it (silenced → sleeps), night puts it to sleep.
+        let afternoon = BunkBrain.date("2026-11-07T17:00:00.000Z")!, night = BunkBrain.date("2026-11-07T06:00:00.000Z")!
+        check(BunkBrain.awake(afternoon) && !BunkBrain.awake(night), #line)
+        check(BunkBrain.mood(nil, error: "x", preparing: false, muted: false) == .worried, #line)
+        check(BunkBrain.mood(nil, error: nil, preparing: true, muted: false) == .thinking, #line)
+        check(BunkBrain.mood(s, error: nil, preparing: false, muted: false, now: afternoon) == .alert, #line)
+        check(BunkBrain.mood(s, error: nil, preparing: false, muted: true, now: afternoon) == .sleeping, #line)
+        let said = BunkBrain.lines(s, error: nil, preparing: false)
+        check(said.first?.hasPrefix("De olho: C em A") == true, #line)
+        check(said.contains { $0.hasPrefix("ROAS hoje") }, #line)
+        check(BunkBrain.lines(nil, error: nil, preparing: true) == ["Estou montando o resumo. Volto em 1 a 2 minutos."], #line)
         let accRow = Summary.AccountRow(accountId: "1", name: "CA 1", group: "FB Flix", status: "active", statusLabel: "Ativa", runningLabel: "Rodando · John", currency: "USD", dailyLimit: 321.06, todaySpend: 290, usedPct: 90.3, balance: 10, alerts: ["Perto do limite diário"])
         check(Format.accountUse(accRow) == "90%", #line)
         check(Format.accountLimit(accRow) == "$ 290,00 de $ 321,06", #line)
