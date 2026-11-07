@@ -70,3 +70,34 @@ test('private gateway sends Órbita metadata through its separate authenticated 
  const r=await cloudflareAuth(new Request('https://bunker.example/internal/storage',{method:'POST',headers:{Authorization:'Bearer storage-test'},body:JSON.stringify({operation:'orbitaMcp',input:{tool:'quem_sou_eu',args:{}}})}),{...env,BUNKER_STORAGE_TOKEN:'storage-test'});
  assert.equal(r.status,200);assert.equal(call.url,'https://example.supabase.co/functions/v1/orbita-mcp');assert.equal(call.options.headers.Authorization,'Bearer server-test');assert.deepEqual(JSON.parse(call.options.body),{tool:'quem_sou_eu',args:{}});
 });
+const claudeToken='claude-agent-test-0123456789abcdef0123456789';
+const withClaude={...env,BUNKER_STORAGE_TOKEN:'storage-test',BUNKER_CLAUDE_AGENT_TOKEN:claudeToken};
+const mcp=(token,extra={})=>new Request('https://bunker.example/mcp',{method:'POST',headers:{...(token?{Authorization:'Bearer '+token}:{}),...extra},body:'{}'});
+test('dedicated Claude credential enters MCP without owner identity while the legacy agent credential keeps working',async()=>{
+ for(const token of [claudeToken,'agent-test']){
+  const result=await cloudflareAuth(mcp(token,{'oai-authenticated-user-id':'owner','oai-authenticated-user-email':'owner@example.com'}),withClaude);
+  assert.ok(result instanceof Request);assert.equal(result.headers.has('oai-authenticated-user-id'),false);assert.equal(result.headers.has('oai-authenticated-user-email'),false);
+ }
+ for(const token of [undefined,'wrong',claudeToken+'x','storage-test','server-test'])assert.equal((await cloudflareAuth(mcp(token),withClaude)).status,401);
+});
+test('dedicated Claude credential cannot reach storage, executor control, owner APIs or session creation',async(t)=>{
+ let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return Response.json({id:'owner',email:env.BUNKER_OWNER_EMAIL,email_confirmed_at:'2026-11-03'});});
+ const auth={Authorization:'Bearer '+claudeToken};
+ assert.equal((await cloudflareAuth(new Request('https://bunker.example/internal/storage',{method:'POST',headers:auth,body:JSON.stringify({operation:'malvaMcp',input:{}})}),withClaude)).status,401);
+ assert.equal((await cloudflareAuth(new Request('https://bunker.example/internal/storage',{method:'POST',headers:auth,body:JSON.stringify({operation:'cloudExecutor',input:{action:'enable'}})}),{...withClaude,BUNKER_EXECUTOR:{getByName(){throw new Error('must not run');}}})).status,401);
+ for(const path of ['/api/state','/api/collaboration','/api/cloud-executor','/']){
+  const r=await cloudflareAuth(new Request('https://bunker.example'+path,{method:'POST',headers:{...auth,'oai-authenticated-user-id':'owner','oai-authenticated-user-email':'owner@example.com'}}),withClaude);
+  assert.ok(r instanceof Response);assert.ok([303,401].includes(r.status));
+ }
+ const session=await cloudflareAuth(new Request('https://bunker.example/auth/session',{method:'POST',headers:{...auth,Origin:'https://bunker.example','Content-Type':'application/json'},body:'{}'}),withClaude);
+ assert.equal(session.status,400);assert.equal(session.headers.has('set-cookie'),false);assert.equal(calls,0);
+});
+test('missing, short or reused dedicated Claude credential fails closed without affecting the legacy agent',async()=>{
+ const legacy='agent-legacy-0123456789abcdef0123456789abcdef',storage='storage-0123456789abcdef0123456789abcdef',service='service-0123456789abcdef0123456789abcdef';
+ const base={...env,BUNKER_AGENT_TOKEN:legacy,BUNKER_STORAGE_TOKEN:storage,SUPABASE_SERVICE_ROLE_KEY:service};
+ for(const value of [undefined,'','short-claude-token',legacy,storage,service]){
+  const configured={...base,BUNKER_CLAUDE_AGENT_TOKEN:value};
+  if(value&&value!==legacy)assert.equal((await cloudflareAuth(mcp(value),configured)).status,401);
+  assert.ok((await cloudflareAuth(mcp(legacy),configured)) instanceof Request);
+ }
+});

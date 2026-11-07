@@ -16,6 +16,8 @@ O destino principal é Cloudflare Workers + Supabase Postgres. GitHub versiona o
 
 Configure em produção: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (publishable), `SUPABASE_SERVICE_ROLE_KEY` (secret de backend), `BUNKER_OWNER_EMAIL`, `BUNKER_AGENT_TOKEN` e `BUNKER_STORAGE_TOKEN`. Os dois últimos são distintos: o token de agente acessa apenas `/mcp`; o de armazenamento é reservado ao backend de compatibilidade. Nunca publique esses valores.
 
+Opcional: `BUNKER_CLAUDE_AGENT_TOKEN`, credencial dedicada ao Claude Code. É aceita somente em `/mcp`, com o mesmo alcance do token de agente legado (que continua válido); não entra em `/internal/storage`, não cria sessão nem identidade de dono e não aprova propostas. Valor ausente, com menos de 32 caracteres ou igual ao token legado, ao de armazenamento ou à chave de serviço é recusado. O cliente lê o valor de um arquivo privado fora do repositório (`~/.config/bunker-traffic/claude-agent-token`, modo 600) por `scripts/claude-mcp-headers.sh`, configurado como `headersHelper` no `.mcp.json` local; o helper só responde à URL `/mcp` do Worker. Envie ao Cloudflare apenas por stdin.
+
 O backend do Sites usa `BUNKER_STORAGE_GATEWAY` e `BUNKER_STORAGE_TOKEN`. Sem essas variáveis, a compatibilidade antiga continua usando o D1; isso é uma alternativa de recuperação, não replicação automática. Após o corte, restaurar D1 sem conciliar novas gravações perderia atualizações.
 
 ## Deploy
