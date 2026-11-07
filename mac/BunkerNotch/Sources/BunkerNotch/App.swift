@@ -83,6 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         bunkMenu.submenu = b
         menu.addItem(bunkMenu)
+        let privacy = item("Esconder notch e Bunk em gravações e calls", #selector(toggleCapturePrivacy), ""); privacy.state = UserDefaults.standard.bool(forKey: CapturePrivacy.key) ? .on : .off
+        menu.addItem(privacy)
         if store.muted { menu.addItem(item("Reativar avisos", #selector(unmute), "")) }
         else { menu.addItem(item("Silenciar avisos por 1 hora", #selector(muteHour), "")); menu.addItem(item("Silenciar até amanhã às 8h", #selector(muteTomorrow), "")) }
         let login = item("Abrir ao iniciar o Mac", #selector(toggleLogin), "")
@@ -107,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleBunkRoam() { bunk?.setRoam(!(bunk?.roamEnabled ?? true)) }
     @objc private func toggleBunkResident() { bunk?.setResident(!(bunk?.resident ?? false)) }
     @objc private func callBunk() { bunk?.callNow() }
+    @objc private func toggleCapturePrivacy() {
+        let hidden = !UserDefaults.standard.bool(forKey: CapturePrivacy.key)
+        UserDefaults.standard.set(hidden, forKey: CapturePrivacy.key)
+        notch?.applyCapturePrivacy(hidden); bunk?.applyCapturePrivacy(hidden)
+    }
     @objc private func bunkAllScreens() { bunk?.allowAllScreens() }
     @objc private func toggleBunkScreen(_ sender: NSMenuItem) {
         if let i = sender.representedObject as? Int, i < NSScreen.screens.count { bunk?.toggleScreen(NSScreen.screens[i]) }

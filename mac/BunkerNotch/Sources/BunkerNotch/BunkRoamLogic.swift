@@ -30,6 +30,10 @@ enum RoamPolicy {
         case .demo: return true
         }
     }
+    /// Adds a new item to what Bunk is saying (no repeats, at most 4 topics in one walk).
+    static func merge(_ lines: [String], _ text: String) -> [String] {
+        lines.contains(text) ? lines : Array((lines + [text]).suffix(4))
+    }
     static func remember(_ reason: RoamReason, _ m: Memory, now: Date) -> Memory {
         var m = m; m.lastAny = now
         if case .attention = reason { m.lastAttention = now }
@@ -91,6 +95,10 @@ enum BunkDesk {
         CGPoint(x: min(max(p.x, v.minX + margin + bunkSize / 2), v.maxX - margin - bunkSize / 2),
                 y: min(max(p.y, v.minY + RoamPlanner.floorInset), v.maxY - panel.height))
     }
+    /// A window covering a whole screen (2 pt tolerance) means a full-screen app there.
+    static func coversScreen(_ window: CGRect, _ screen: CGRect) -> Bool {
+        abs(window.minX - screen.minX) <= 2 && abs(window.minY - screen.minY) <= 2 && abs(window.width - screen.width) <= 2 && abs(window.height - screen.height) <= 2
+    }
     static func shouldSleep(idle: TimeInterval, mouseDistance: CGFloat) -> Bool { idle > sleepAfter && mouseDistance >= sleepMouseDistance }
     /// Gaze toward the pointer: x right positive, y down positive (pointer above → looks up).
     static func gaze(dx: CGFloat, dy: CGFloat) -> (x: CGFloat, y: CGFloat) { (CGFloat(tanh(Double(dx / 260))), CGFloat(-tanh(Double(dy / 200)))) }
@@ -116,3 +124,7 @@ enum BunkScreens {
         return current.isEmpty || Set(current) == Set(ids) ? [] : current.sorted()
     }
 }
+
+/// Optional: keep the notch and Bunk out of screen recordings, screenshots and shared screens (off by default,
+/// since it also hides them from the owner's own screenshots).
+enum CapturePrivacy { static let key = "hideFromCapture" }

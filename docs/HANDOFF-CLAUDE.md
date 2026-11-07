@@ -476,3 +476,10 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Menu da barra → Bunk:** Bunk solto pelas telas, morando no desktop, chamar agora, Todas as telas / cada tela.
 - **Código:** `BunkRoamLogic.swift` (regras e rotas puras, testadas em `BunkSelfTest.swift`), `BunkDesktop.swift` (janela e interação), reações próprias em `Bunk.swift`; mecânicas do Coucou (MIT) creditadas em `mac/NOTICE.md`, sem ativos dele.
 - **Validação:** self-test do app; folha renderizada de humores e reações. O comportamento ao vivo nas telas fica para o dono conferir.
+
+## Melhorias do notch a partir de projetos abertos (registro escrito às 2026-11-07 22:21:39 UTC por `date -u`)
+
+- Pesquisa de projetos parecidos com o Coucou, com licenças, em `docs/notch-research.md`.
+- Aplicado (ideias reescritas, créditos em `mac/NOTICE.md`): Bunk só anima quando há algo para ver (notch fechado parado em tranquilo, vigiando, feliz e dormindo; 10 fps dormindo); avisos em rajada viram um passeio; não passeia em tela com app em tela cheia (limites de janela, sem permissão de Gravação de Tela); realoca ao desconectar monitor; pausa com tela bloqueada; opção "Esconder notch e Bunk em gravações e calls" (desligada por padrão porque também some dos prints).
+- Medição em repouso após instalar: 0,0–0,4% de CPU, ~60 MB.
+- Próximos candidatos listados no documento (andar sobre janelas, rodízio por urgência, espiada com háptico, molas).

@@ -75,6 +75,12 @@ struct BunkStageView: View {
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = true; self?.stopTimer() } }
         ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = false; self?.retime() } }
+        // Locked screen: same pause as a sleeping display (public distributed notifications).
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = true; self?.stopTimer() } }
+        dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = false; self?.retime() } }
+        // A disconnected monitor never strands him off-screen.
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.relocateIfStranded() } }
         if resident { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.flyOut() } }
     }
 
@@ -89,6 +95,8 @@ struct BunkStageView: View {
     private func handle(_ alert: IslandAlert) {
         lastActivity = Date()
         let text = alert.detail.isEmpty ? alert.title : alert.title + " · " + alert.detail
+        // A burst becomes one walk: while touring, new attention items join what he is saying.
+        if roaming, alert.kind != .manager { lines = RoamPolicy.merge(lines, text); return }
         consider(alert.kind == .manager ? .manager : .attention(alert.kind), lines: [text])
         if alert.kind == .approval { react(.surprised, for: 1.4) }
     }
@@ -123,17 +131,36 @@ struct BunkStageView: View {
         UserDefaults.standard.set(next.map { Int($0) }, forKey: BunkScreens.key)
         if resident, let p = panel, !allowedScreens.contains(where: { $0.frame.contains(feet) }) { _ = p; run([RoamStop(point: savedSpot(), pause: 0, speak: false)], speed: 600) { [weak self] in self?.land() } }
     }
+    func applyCapturePrivacy(_ hidden: Bool) { panel?.sharingType = hidden ? .none : .readOnly }
     func allowAllScreens() { UserDefaults.standard.removeObject(forKey: BunkScreens.key) }
     private func nearestAllowed(to p: CGPoint) -> NSScreen? {
         allowedScreens.first { $0.frame.contains(p) } ?? allowedScreens.min { hypot($0.frame.midX - p.x, $0.frame.midY - p.y) < hypot($1.frame.midX - p.x, $1.frame.midY - p.y) }
     }
-    private func screensInfo() -> [(frame: CGRect, visible: CGRect)] { allowedScreens.map { ($0.frame, $0.visibleFrame) } }
+    /// Allowed screens without a full-screen app (presentations, video). Window bounds/layer only: no Screen Recording permission.
+    private func screensInfo() -> [(frame: CGRect, visible: CGRect)] {
+        let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        let bounds: [CGRect] = windows.compactMap { w in
+            guard (w[kCGWindowLayer as String] as? Int) == 0, let b = w[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = b["X"], let y = b["Y"], let width = b["Width"], let height = b["Height"] else { return nil }
+            return CGRect(x: x, y: top - y - height, width: width, height: height) // CG top-left → AppKit bottom-left
+        }
+        let free = allowedScreens.filter { s in !bounds.contains { BunkDesk.coversScreen($0, s.frame) } }
+        return (free.isEmpty ? [] : free).map { ($0.frame, $0.visibleFrame) }
+    }
+    private func relocateIfStranded() {
+        guard panel != nil, !NSScreen.screens.contains(where: { $0.frame.contains(feet) }) || !allowedScreens.contains(where: { $0.frame.contains(feet) }) else { return }
+        if resident { feet = savedSpot(); panel?.setFrameOrigin(BunkDesk.origin(feet: feet)); land() } else { hide() }
+    }
     private var notchScreen: NSScreen { notch?.bunkHomeScreen ?? NSScreen.main ?? NSScreen.screens[0] }
     private var homePoint: CGPoint { CGPoint(x: notchScreen.frame.midX, y: notchScreen.visibleFrame.maxY - 70) }
 
     private func startRoam(_ reason: RoamReason) {
         let pointer = allowedScreens.first { $0.frame.contains(NSEvent.mouseLocation) }?.frame
-        var route = RoamPlanner.route(reason: reason, notchScreen: notchScreen.frame, notchVisible: notchScreen.visibleFrame, screens: screensInfo(), pointerScreen: pointer, width: BunkDesk.panel.width)
+        let free = screensInfo()
+        // Every allowed screen is showing a full-screen app: stay home, the notch alert is enough.
+        if free.isEmpty && !(resident && panel != nil) && reason != .demo { return }
+        var route = RoamPlanner.route(reason: reason, notchScreen: notchScreen.frame, notchVisible: notchScreen.visibleFrame, screens: free.isEmpty ? allowedScreens.map { ($0.frame, $0.visibleFrame) } : free, pointerScreen: pointer, width: BunkDesk.panel.width)
         if resident && panel != nil {
             // Living on the desktop: start and end at his spot; a visit is a word in place.
             if reason.tour { route[0] = RoamStop(point: feet, pause: 0, speak: false); route[route.count - 1] = RoamStop(point: feet, pause: 0, speak: false) }
@@ -197,6 +224,7 @@ struct BunkStageView: View {
             p.level = .statusBar
             p.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
             p.ignoresMouseEvents = true; p.hidesOnDeactivate = false; p.isMovable = false
+            p.sharingType = UserDefaults.standard.bool(forKey: CapturePrivacy.key) ? .none : .readOnly
             let host = NSHostingView(rootView: BunkStageView(stage: stage))
             host.frame = NSRect(origin: .zero, size: BunkDesk.panel)
             p.contentView = host

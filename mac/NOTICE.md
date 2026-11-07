@@ -14,6 +14,8 @@ As técnicas de janela e comportamento do notch — painel transparente fixo aci
 
 O Bunk fora do notch (`BunkDesktop.swift`, `BunkRoamLogic.swift`) usa mecânicas estudadas no mesmo código MIT: painel transparente por cima de tudo que só aceita clique sobre o corpo (verificação periódica do cursor), olhar que acompanha o ponteiro com resposta suave, crescer ao passar o mouse, arrastar com limite de borda, soltar sobre o notch para voltar, clique simples diferido para distinguir do clique duplo, sono por inatividade com taxa de quadros menor e pausa quando a tela dorme. O personagem, o nome "Bunk", o visual, as expressões, as reações e as animações são próprios do Bunker.
 
+Ideias reescritas do zero, sem cópia de código, a partir de outros projetos abertos (ver `docs/notch-research.md`): animação só quando há algo para ver e agrupamento de avisos em rajada (CodeIsland, MIT, github.com/wxtsky/CodeIsland); detecção de app em tela cheia só por limites de janela, sem permissão de Gravação de Tela (CodeIsland); realocação ao desconectar um monitor (puck-mac, MIT); pausa com a tela bloqueada (MewNotch, GPL-3.0 — só a ideia); esconder de gravações e compartilhamento de tela (Atoll, GPL-3.0 — só a ideia).
+
 Nenhum ativo de marca do Coucou é usado aqui: o nome "Coucou", o personagem e o nome "Mochi", ícones, sons e mídias pertencem ao autor e não fazem parte deste app.
 
 ## Segurança

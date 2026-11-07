@@ -16,6 +16,8 @@ enum BunkBrain {
         guard let s else { return nil }
         return iso.date(from: s) ?? ISO8601DateFormatter().date(from: s)
     }
+    /// On the resting island only these moods move (CPU stays near zero on a calm day).
+    static func animatesAtRest(_ mood: BunkMood) -> Bool { [.alert, .thinking, .worried].contains(mood) }
     /// Awake inside the operation window (06h–20h, São Paulo).
     static func awake(_ now: Date) -> Bool {
         var cal = Calendar(identifier: .gregorian); cal.timeZone = zone
@@ -70,10 +72,13 @@ struct BunkView: View {
     var walking = false
     /// Short reaction on top of the mood (Bunk's own expressions).
     var reaction: BunkReaction? = nil
+    /// False freezes the drawing (no frames): used while nothing needs attention.
+    var active = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+        // Animation gate: frames only when there is something to watch; asleep at 10 fps.
+        TimelineView(.animation(minimumInterval: mood == .sleeping ? 0.1 : 1.0 / 30.0, paused: reduceMotion || !active)) { timeline in
             let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
             Canvas { ctx, canvas in draw(ctx, canvas, t) }
         }
@@ -212,7 +217,9 @@ struct BunkAvatar: View {
     var mood: BunkMood { BunkBrain.mood(store.summary, error: store.error, preparing: store.preparing, muted: store.muted) }
     var body: some View {
         let hovering = interactive && notch.bunkHovering
-        BunkView(mood: hovering && mood == .idle ? .happy : mood, size: size, look: interactive ? notch.bunkLook : 0)
+        // Resting island: frozen unless there is something to watch; the open header always animates.
+        BunkView(mood: hovering && mood == .idle ? .happy : mood, size: size, look: interactive ? notch.bunkLook : 0,
+                 active: interactive || BunkBrain.animatesAtRest(mood))
             .contentShape(Rectangle())
             .onContinuousHover { phase in
                 guard interactive else { return }

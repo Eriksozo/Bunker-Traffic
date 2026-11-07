@@ -53,6 +53,10 @@ extension SelfTest {
         expect(BunkDesk.shouldSleep(idle: 121, mouseDistance: 200) && !BunkDesk.shouldSleep(idle: 121, mouseDistance: 80) && !BunkDesk.shouldSleep(idle: 60, mouseDistance: 999), #line)
         let g = BunkDesk.gaze(dx: 1000, dy: 1000)
         expect(g.x > 0.9 && g.y < -0.9, #line)
+        // Bursts join one walk (no repeats, at most 4 topics); full-screen detection; animation gate at rest.
+        expect(RoamPolicy.merge(["a"], "a") == ["a"] && RoamPolicy.merge(["a", "b", "c", "d"], "e") == ["b", "c", "d", "e"], #line)
+        expect(BunkDesk.coversScreen(CGRect(x: -480, y: 1, width: 1919, height: 1080), ext) && !BunkDesk.coversScreen(CGRect(x: 0, y: 0, width: 800, height: 600), ext), #line)
+        expect(BunkBrain.animatesAtRest(.alert) && !BunkBrain.animatesAtRest(.idle) && !BunkBrain.animatesAtRest(.watching) && !BunkBrain.animatesAtRest(.sleeping), #line)
         let s1 = BunkDesk.step(from: .zero, to: CGPoint(x: 10, y: 0), distance: 4)
         expect(s1.point == CGPoint(x: 4, y: 0) && !s1.arrived && BunkDesk.step(from: s1.point, to: CGPoint(x: 10, y: 0), distance: 8).arrived, #line)
     }

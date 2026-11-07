@@ -125,6 +125,7 @@ final class NotchController {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
+        panel.sharingType = UserDefaults.standard.bool(forKey: CapturePrivacy.key) ? .none : .readOnly
         panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 3)
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.ignoresMouseEvents = true
@@ -164,6 +165,7 @@ final class NotchController {
     var bunkHomeScreen: NSScreen { Self.screen(for: display) }
     var bunkHomeZone: NSRect { let s = Self.screen(for: display).frame; return NSRect(x: s.midX - 180, y: s.maxY - 90, width: 360, height: 90) }
     func openIsland() { if !fsm.isOpen { send(.toggle) } }
+    func applyCapturePrivacy(_ hidden: Bool) { panel.sharingType = hidden ? .none : .readOnly }
 
     static func screen(for choice: DisplayChoice) -> NSScreen {
         let screens = NSScreen.screens, mouse = NSEvent.mouseLocation
