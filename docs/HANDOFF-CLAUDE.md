@@ -448,3 +448,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Implementação:** `lib/account-limits.mjs` junta `tracking_ad_accounts` (por projeto configurado) com `/me/adaccounts` (`adtrust_dsl` e gasto de hoje na moeda da conta); dados pessoais do Malva ficam fora. O executor monta a cada 30 min e guarda no Durable Object. Aba web "Contas de anúncio" (`#accounts`, rota `/api/accounts` de dono), aba "Contas" no notch e leitura MCP `cloud-data` `{"action":"accounts"}`. Regra do token em `docs/connections.md` e no `CLAUDE.md`.
 - **Sombra:** já registrando (35 decisões às 21:34 UTC). A regra "sem entrega" agora ignora campanhas com data de hoje ou de ontem no nome.
 - **Pendente:** o dono criar o token (`ads_read`) e cadastrar `META_ACCOUNTS_TOKEN`; conferir a unidade de `adtrust_dsl` contra o Gerenciador numa conta conhecida.
+
+## Bunk, mascote do notch (registro escrito às 2026-11-07 21:55:19 UTC por `date -u`)
+
+- **Pedido do dono:** um avatar interagindo, chamado Bunk. Personagem original (cúpula de bunker, visor, antena); o Coucou foi consultado só pela licença: código MIT, mas nome, personagem, expressões, animações e sons do Mochi são protegidos e não foram usados.
+- **Comportamento:** humor espelha a operação (vigiando com pulso recente do executor; alerta com perda, proposta aguardando ou conta perto do limite; feliz com ROAS acima de ontem; dormindo fora das 06h–20h, pausado ou silenciado; pensando com resumo em preparação; preocupado em erro). Hover olha para o ponteiro; clique fala o próximo assunto mais importante num balão. Respeita "reduzir movimento". `Bunker --render-bunk arquivo.png` gera a folha de humores.
+- **Validação:** self-test do app (humor, falas, horário). Conferência visual da folha renderizada; o comportamento ao vivo no notch fica com o dono.
