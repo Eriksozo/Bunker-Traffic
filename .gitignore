@@ -44,3 +44,5 @@ yarn-error.log*
 
 # OS metadata
 .DS_Store
+/mac/dist/
+/mac/BunkerNotch/.build/

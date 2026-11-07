@@ -101,3 +101,24 @@ test('missing, short or reused dedicated Claude credential fails closed without 
   assert.ok((await cloudflareAuth(mcp(legacy),configured)) instanceof Request);
  }
 });
+const companionToken='companion-test-0123456789abcdef0123456789';
+const withCompanion={...withClaude,BUNKER_COMPANION_TOKEN:companionToken};
+test('Mac companion credential reads only GET /api/companion, without owner identity or its bearer downstream',async(t)=>{
+ let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return Response.json({});});
+ const ok=await cloudflareAuth(new Request('https://bunker.example/api/companion?project=p',{headers:{Authorization:'Bearer '+companionToken,'oai-authenticated-user-id':'owner','x-bunker-companion':'write'}}),withCompanion);
+ assert.ok(ok instanceof Request);assert.equal(ok.headers.get('x-bunker-companion'),'read');assert.equal(ok.headers.has('authorization'),false);assert.equal(ok.headers.has('oai-authenticated-user-id'),false);
+ const auth={Authorization:'Bearer '+companionToken};
+ for(const [path,method] of [['/mcp','POST'],['/internal/storage','POST'],['/api/state','GET'],['/api/state','POST'],['/api/companion','POST'],['/api/executor','POST']]){
+  const r=await cloudflareAuth(new Request('https://bunker.example'+path,{method,headers:auth,...(method==='POST'?{body:'{}'}:{})}),withCompanion);
+  assert.ok(r instanceof Response,path+' '+method);assert.ok([401,303].includes(r.status),path+' '+method);
+ }
+ assert.equal((await cloudflareAuth(new Request('https://bunker.example/api/companion',{headers:{Authorization:'Bearer wrong'}}),withCompanion)).status,401);
+ assert.equal(calls,0);
+});
+test('a forged companion header never authorizes and every reused or short companion credential fails closed',async()=>{
+ const forged=await cloudflareAuth(new Request('https://bunker.example/api/companion',{headers:{'x-bunker-companion':'read'}}),withCompanion);assert.equal(forged.status,401);
+ for(const value of [undefined,'','short-companion','agent-test','storage-test','server-test',claudeToken]){
+  const r=await cloudflareAuth(new Request('https://bunker.example/api/companion',{headers:{Authorization:'Bearer '+(value||'x')}}),{...withClaude,BUNKER_COMPANION_TOKEN:value});
+  assert.ok(r instanceof Response);assert.equal(r.status,401);
+ }
+});
