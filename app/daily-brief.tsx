@@ -2,7 +2,9 @@
 import {useEffect,useMemo,useState} from 'react';
 import {ArrowDownRight,ArrowUpRight,ChevronDown,ChevronRight,Minus} from 'lucide-react';
 import {Button} from '@/components/ui/button';
-import {dailyComparison,actionQueue} from '../lib/daily-brief.mjs';
+import {dailyComparison,actionQueue,pausedAfterAnalysis} from '../lib/daily-brief.mjs';
+import {activityLog} from '../lib/campaign-activity.mjs';
+import {currentLiveSnapshot} from '../lib/live-display.mjs';
 import './daily-brief.css';
 import DecisionCards from './decision-cards';
 
@@ -33,7 +35,12 @@ export default function DailyBrief({state,project,candidates,showProject,onOpen,
  const [expanded,setExpanded]=useState<string|null>(null);
  useEffect(()=>setExpanded(null),[project]);
  const comparison=useMemo(()=>dailyComparison(state,project),[state,project]);
- const queue=useMemo(()=>actionQueue(candidates),[candidates]);
+ const queue=useMemo(()=>{
+  // A pause after the last analysis (manager log or live reading) removes the campaign from the queue.
+  const now=Date.now(),events=activityLog(state,{project,now});
+  const liveRows=(liveItems||[]).flatMap((item:any)=>{const s=currentLiveSnapshot(item,item?.projectId,undefined,now);return s?s.rows.map((r:any)=>({...r,projectId:item.projectId,fetchedAt:s.fetchedAt})):[];});
+  return actionQueue(candidates,{now,pausedKeys:pausedAfterAnalysis(candidates,{events,liveRows})});
+ },[candidates,state,project,liveItems]);
  return <section className="panel daily-brief" aria-label="Resumo do dia">
   <div className="panel-title"><div><span className="eyebrow">RESUMO DO DIA</span><h2>Hoje em 1 minuto</h2><p className="hint">Hoje parcial comparado com ontem e com 7 dias. Só índices: gasto e faturamento de um dia parcial não se comparam com um dia fechado.</p></div></div>
   <div className="brief-compare">{metrics.map(m=>{const today=comparison.today?.[m.key],d=comparison.deltas[m.key];return <div className="brief-metric" key={m.key}>
@@ -42,7 +49,7 @@ export default function DailyBrief({state,project,candidates,showProject,onOpen,
    <span className="brief-deltas"><Delta value={d.yesterday} higherIsBetter={m.higherIsBetter} label="vs ontem"/><Delta value={d.week} higherIsBetter={m.higherIsBetter} label="vs 7 dias"/></span>
   </div>;})}</div>
   <div className="section-divider"/>
-  <div className="panel-title"><div><h3>O que fazer agora</h3><p className="hint">{queue.items.length?`Até ${queue.items.length} de ${queue.considered} campanhas ativas, ordenadas pelo dinheiro em jogo. Expanda para manter, aumentar, reduzir ou pausar aqui mesmo.`:'Nenhuma campanha ativa com perda lida ou oportunidade clara agora.'}{queue.priorityTests>0&&` ${queue.priorityTests} testes novos sem vendas têm revisão prioritária, sem esperar 24h.`}{queue.protectedTests>0&&` ${queue.protectedTests} testes jovens seguem em observação; maturação não suspende o acompanhamento.`}</p></div></div>
+  <div className="panel-title"><div><h3>O que fazer agora</h3><p className="hint">{queue.items.length?`Até ${queue.items.length} de ${queue.considered} campanhas ativas, ordenadas pelo dinheiro em jogo. Expanda para manter, aumentar, reduzir ou pausar aqui mesmo.`:'Nenhuma campanha ativa com perda lida ou oportunidade clara agora.'}{queue.priorityTests>0&&` ${queue.priorityTests} testes novos sem vendas têm revisão prioritária, sem esperar 24h.`}{queue.pausedSinceAnalysis>0&&` ${queue.pausedSinceAnalysis} pausadas depois da análise saíram da lista.`}{queue.protectedTests>0&&` ${queue.protectedTests} testes jovens seguem em observação; maturação não suspende o acompanhamento.`}</p></div></div>
   {queue.items.map((item:any)=>{const c=item.candidate,loss=item.kind==='loss',target={project:c.row.projectId,adAccountId:c.row.adAccountId,objectId:c.row.externalId},key=JSON.stringify(target),open=expanded===key;return <div className={'brief-action-item'+(open?' is-open':'')} key={key}><Button type="button" className="priority-row brief-item" onClick={()=>setExpanded(open?null:key)} aria-expanded={open} aria-controls={open?`brief-decision-${encodeURIComponent(key)}`:undefined} aria-label={`${open?'Recolher':'Expandir'} decisão de ${c.row.name}`}>
    <span className={'priority-icon '+(loss?'red':'green')}>{loss?<ArrowDownRight size={17}/>:<ArrowUpRight size={17}/>}</span>
    <span className="priority-copy"><strong>{c.row.name}</strong><small>{showProject&&`${c.row.projectName} · `}{c.row.accountName} · {item.testLaunch?.priority?'Teste novo sem vendas · prioridade':c.decision}</small><small className="brief-why">{loss?(item.period==='today'?'Hoje':'Últimos 3 dias'):'Últimos 3 dias'}: gasto {money(item.spend)} · ROAS {ratio(item.roas)} · 7 dias {ratio(item.comparison)}</small></span>

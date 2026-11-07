@@ -60,3 +60,15 @@ test('missing author remains unknown; a technical ID or profile is never a manag
  const s={config:{p:{projectName:'Projeto'}},snapshots:[],changeAttributions:r.events};
  assert.equal(companionSummary(s,{project:'p',now}).activity.summary.pause.unknown,1);
 });
+
+test('The notch queue drops a campaign the manager paused after the analysis',async()=>{
+ const {companionSummary:summary}=await import('../lib/companion-summary.mjs');
+ const now=Date.parse('2026-11-07T19:30:00Z'),base={projectId:'p',projectName:'P',level:'campaign',source:'Malva MCP',timezone:'America/Sao_Paulo',complete:true,fetchedAt:'2026-11-07T18:27:00Z',lastSyncAt:'2026-11-07T18:22:00Z'};
+ const r={externalId:'c1',adAccountId:'act',accountName:'CA 1',name:'07/11 - [TESTE] X',level:'campaign',provider:'meta',status:'ACTIVE',effectiveStatus:'ACTIVE',accountStatus:{active:true},dailyBudget:50,budgetCurrency:'USD',spend:200,revenue:0,revenueNet:0,adCosts:0,productCost:0,saleTax:0,frontOrders:0,orders:0,checkouts:2,impressions:1000,linkClicks:20};
+ const state={config:{p:{projectName:'P'}},snapshots:[{...base,period:'today',from:'2026-11-07T03:00:00Z',to:'2026-11-08T03:00:00Z',rows:[r]}]};
+ const before=summary(state,{project:'p',now});
+ const pausedState={...state,changeAttributions:[{key:'k1',project:'p',adAccountId:'act',objectId:'c1',name:r.name,accountName:'CA 1',field:'status',before:'ACTIVE',after:'PAUSED',at:'2026-11-07T19:07:32Z',actor:'Gestor',eventId:'e1'}]};
+ const after=summary(pausedState,{project:'p',now});
+ assert.equal(after.queue.some(q=>q.campaignId==='c1'),false);
+ assert.equal(before.queue.some(q=>q.campaignId==='c1'),true,'it was queued before the pause');
+});

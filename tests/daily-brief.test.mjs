@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dailyComparison,actionQueue,sortCampaigns,matchesStatus,campaignColumns,rememberedChoice} from '../lib/daily-brief.mjs';
+import {dailyComparison,actionQueue,sortCampaigns,matchesStatus,campaignColumns,rememberedChoice,pausedAfterAnalysis} from '../lib/daily-brief.mjs';
 import {sum} from '../lib/analysis.mjs';
 
 const metrics=(spend,revenueNet,front=1)=>({spend,revenue:revenueNet,revenueNet,adCosts:0,productCost:0,saleTax:0,frontOrders:front,orders:front,checkouts:front*2,impressions:1000,linkClicks:20,refundedRevenue:0});
@@ -60,4 +60,23 @@ test('table columns, sorting keeps missing values last, and status filter',()=>{
  assert.equal(sortCampaigns(list,'',''),list);
  assert.equal(matchesStatus('ACTIVE','active'),true);assert.equal(matchesStatus('PAUSED','active'),false);assert.equal(matchesStatus('PAUSED','paused'),true);assert.equal(matchesStatus(undefined,'all'),true);
  assert.equal(rememberedChoice('3d',['7d','3d'],'today'),'3d');assert.equal(rememberedChoice('x',['7d'],'today'),'today');assert.equal(rememberedChoice(null,['7d'],'today'),'today');
+});
+
+// The queue reads status from the last analysis; a newer pause must remove the campaign (seen live on 07/11).
+test('A campaign paused after the analysis leaves the queue; older, foreign or reverted records do not hide it',()=>{
+ const loss=id=>({...candidate(id,{today:metrics(300,0,0)}),row:{...row(id,{deliveryStartedAt:'2026-10-01T00:00:00Z'}),projectId:'p',sourceAt:'2026-11-07T18:22:00Z'}});
+ const a=loss('a'),b=loss('b'),list=[a,b];
+ const ev=(objectId,at,after,extra={})=>({project:'p',adAccountId:'act',objectId,action:after==='PAUSED'?'pause':'activate',field:'status',before:after==='PAUSED'?'ACTIVE':'PAUSED',after,at,...extra});
+ assert.deepEqual(actionQueue(list).items.map(i=>i.candidate.id).sort(),['a','b']);
+ const paused=pausedAfterAnalysis(list,{events:[ev('a','2026-11-07T19:07:32Z','PAUSED')]});
+ const q=actionQueue(list,{pausedKeys:paused});assert.deepEqual(q.items.map(i=>i.candidate.id),['b']);assert.equal(q.pausedSinceAnalysis,1);
+ assert.equal(pausedAfterAnalysis(list,{events:[ev('a','2026-11-07T18:00:00Z','PAUSED')]}).size,0,'a pause before the analysis is already in the row');
+ assert.equal(pausedAfterAnalysis(list,{events:[ev('a','2026-11-07T19:07:32Z','PAUSED'),ev('a','2026-11-07T19:20:00Z','ACTIVE')]}).size,0,'a later reactivation brings it back');
+ assert.equal(pausedAfterAnalysis(list,{events:[ev('a','2026-11-07T19:07:32Z','PAUSED',{adAccountId:'other'})]}).size,0,'same ID in another account');
+ assert.equal(pausedAfterAnalysis(list,{events:[ev('a','2026-11-07T19:07:32Z','PAUSED',{project:'q'})]}).size,0,'another project');
+ assert.equal(pausedAfterAnalysis(list,{events:[{...ev('a','2026-11-07T19:07:32Z','PAUSED'),field:'dailyBudget'}]}).size,0,'budget fields never change status');
+ assert.equal(pausedAfterAnalysis(list,{events:[ev('a','não é data','PAUSED')]}).size,0);
+ const live=pausedAfterAnalysis(list,{liveRows:[{projectId:'p',adAccountId:'act',externalId:'b',status:'PAUSED',effectiveStatus:'PAUSED',fetchedAt:'2026-11-07T19:10:00Z'}]});
+ assert.deepEqual([...live],[JSON.stringify(['p','act','b'])]);
+ assert.equal(pausedAfterAnalysis(list,{liveRows:[{projectId:'p',adAccountId:'act',externalId:'b',effectiveStatus:'PAUSED',fetchedAt:'2026-11-07T18:00:00Z'}]}).size,0,'an older live reading does not override');
 });
