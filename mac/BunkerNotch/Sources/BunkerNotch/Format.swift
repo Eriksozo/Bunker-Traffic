@@ -11,6 +11,15 @@ enum Format {
         f.maximumFractionDigits = abs(value) >= 1000 ? 0 : 2
         return f.string(from: NSNumber(value: value)) ?? "N/D"
     }
+    /// Short money for the resting island: "R$ 870", "R$ 3,2 mil", "R$ 1,4 mi".
+    static func compactMoney(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "N/D" }
+        let a = abs(value), sign = value < 0 ? "−" : ""
+        func one(_ v: Double) -> String { String(format: v >= 10 ? "%.0f" : "%.1f", v).replacingOccurrences(of: ".", with: ",") }
+        if a >= 1_000_000 { return sign + "R$ " + one(a / 1_000_000) + " mi" }
+        if a >= 1_000 { return sign + "R$ " + one(a / 1_000) + " mil" }
+        return sign + "R$ " + String(format: "%.0f", a)
+    }
     static func ratio(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "N/D" }
         return String(format: "%.2fx", value).replacingOccurrences(of: ".", with: ",")

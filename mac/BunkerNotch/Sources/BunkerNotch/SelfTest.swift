@@ -11,7 +11,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey()
+        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
     }
@@ -53,6 +53,19 @@ enum SelfTest {
         check(Credential.valid(String(repeating: "a", count: 43)), #line)
         check(!Credential.valid("short"), #line)
         check(!Credential.valid(String(repeating: "a", count: 42) + "\""), #line)
+    }
+
+    private static func testCompactMoneyAndDetailDecode() {
+        check(Format.compactMoney(870) == "R$ 870", #line)
+        check(Format.compactMoney(3271.94) == "R$ 3,3 mil", #line)
+        check(Format.compactMoney(63301.23) == "R$ 63 mil", #line)
+        check(Format.compactMoney(1_400_000) == "R$ 1,4 mi", #line)
+        check(Format.compactMoney(nil) == "N/D", #line)
+        let json = #"{"kind":"loss","campaign":"C","account":null,"project":"John","adAccountId":"a","campaignId":"1","decision":"Revisar perda","period":"today","basis":"result","amount":10,"spend":20,"roas":0.5,"roas7d":1.2,"detail":{"projectId":"p","malvaObjectId":"m1","status":"ACTIVE","dailyBudget":100,"budgetCurrency":"USD","reason":"x","windows":{"today":{"spend":20,"roas":0.5,"roi":0.4,"frontOrders":1,"cpaFront":20},"yesterday":null,"3d":null,"7d":null},"changes":[]}}"#
+        let q = try? JSONDecoder().decode(Summary.QueueItem.self, from: Data(json.utf8))
+        check(q?.detail?.windows["today"]??.roas == 0.5, #line)
+        check(q?.detail?.windows["yesterday"] ?? nil == nil, #line)
+        check(q?.detail?.malvaObjectId == "m1", #line)
     }
 
     private static func testIslandStateMachine() {

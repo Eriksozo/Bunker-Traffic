@@ -17,7 +17,7 @@ import {CLOUD_MODEL} from '../lib/cloud-analysis.mjs';
 import {cloudModelPolicy,cloudProductionModelPolicy} from '../lib/cloud-model-policy.mjs';
 import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {historyPageOf} from '../lib/cloud-history-learning.mjs';
-import {companionSummary} from '../lib/companion-summary.mjs';
+import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {pendingAttributions,attributionRequest,matchAttributions,expiredAttribution,usableAttributions,attributionPolicy} from '../lib/change-attribution.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
@@ -68,8 +68,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async storeCompanion(state:any){
   if(!state)return;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
-  const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={};
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]=companionSummary(withAuthors,{project,now,executor:executor as any});
+  const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},board=projectBoard(withAuthors,now);
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]=companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any});
   await this.ctx.storage.put(out);
  }
  private async assertEnabled(){if(!(await this.setting()).enabled){const error:any=new Error('CLOUD_EXECUTOR_PAUSED');error.code='CLOUD_EXECUTOR_PAUSED';throw error;}}

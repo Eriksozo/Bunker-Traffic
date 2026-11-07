@@ -2,7 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 
-enum NotchTab: String, CaseIterable { case now = "Agora", managers = "Gestores", agents = "Agentes", system = "Sistema" }
+enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", managers = "Gestores", agents = "Agentes", system = "Sistema" }
 
 /// Island geometry for a screen: the real notch when there is one, otherwise a slim bar under the menu bar centre.
 struct NotchGeometry: Equatable {
@@ -40,6 +40,10 @@ final class NotchState: ObservableObject {
     @Published var activityFilter: String?
     @Published var tab: NotchTab = .now
     @Published var hovered: String?
+    /// Campaign opened inside the island (drill-down); nil shows the tabs.
+    @Published var selected: Summary.QueueItem?
+    /// Rotating line on the resting island.
+    @Published var tick = 0
     @Published var geometry: NotchGeometry
     /// Set by the controller: views call it for clicks on the resting/peek/alert island.
     var onClick: () -> Void = {}
@@ -48,8 +52,9 @@ final class NotchState: ObservableObject {
 
     var expanded: Bool { mode == .open }
     static let openSize = CGSize(width: 660, height: 540)
+    static let earWidth: CGFloat = 96
     var islandSize: CGSize {
-        let ears = geometry.width + 150, top = geometry.height + (geometry.hasNotch ? 0 : 2)
+        let ears = geometry.width + 2 * NotchState.earWidth, top = geometry.height + (geometry.hasNotch ? 0 : 2)
         switch mode {
         case .compact: return CGSize(width: ears, height: top)
         case .peek: return CGSize(width: max(ears + 140, 420), height: top + 30)
@@ -105,6 +110,7 @@ final class NotchController {
         panel.orderFrontRegardless()
         state.onClick = { [weak self] in self?.send(.click) }
         state.onClose = { [weak self] in self?.send(.escape) }
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in guard let self, self.fsm.state == .compact else { return }; withAnimation(DS.Motion.quick) { self.state.tick &+= 1 } } }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.relocate(force: true) }
         }
@@ -156,6 +162,7 @@ final class NotchController {
             alertWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.alertSeconds, execute: work)
         case .compact:
+            state.selected = nil
             if panel.isKeyWindow { panel.resignKey() }
             if !queue.isEmpty { let next = queue.removeFirst(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.send(.alert(next)) } }
         case .peek: break
@@ -179,7 +186,10 @@ final class NotchController {
     }
 
     private func handleKey(_ event: NSEvent) -> Bool {
-        if event.keyCode == 53 { send(.escape); return true } // Escape
+        if event.keyCode == 53 { // Escape: leave the drill-down first, then fold
+            if state.selected != nil { withAnimation(DS.Motion.quick) { state.selected = nil } } else { send(.escape) }
+            return true
+        }
         if let chars = event.charactersIgnoringModifiers, let n = Int(chars), (1...NotchTab.allCases.count).contains(n) {
             withAnimation(DS.Motion.quick) { state.tab = NotchTab.allCases[n - 1] }
             return true

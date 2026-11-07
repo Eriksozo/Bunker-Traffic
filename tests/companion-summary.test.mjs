@@ -28,3 +28,10 @@ test('all projects scope and unknown project',()=>{
  const out=companionSummary(state(),{now});assert.equal(out.project,'all');assert.equal(out.approvals.count,1);assert.equal(out.executor,null);
  assert.throws(()=>companionSummary(state(),{project:'zzz',now}),/Projeto não configurado/);
 });
+test('project board lists every project and queue items carry the campaign drill-down',()=>{
+ const s=state(),out=companionSummary(s,{project:'p',now});
+ assert.deepEqual(out.board.map(b=>b.name),['Projeto P','Projeto Q']);
+ const p=out.board[0];assert.equal(p.spend,500);assert.equal(p.roas,0.4);assert.equal(p.roasYesterday,1.25);assert.equal(p.approvals,1);assert.equal(p.changes,1);
+ const d=out.queue[0].detail;assert.equal(d.projectId,'p');assert.equal(d.status,'ACTIVE');assert.equal(d.windows.today.spend,500);assert.equal(d.windows['7d'].roas,4000/3000);assert.equal(d.changes[0].actor,'Ana');
+ assert.deepEqual(companionSummary(s,{project:'p',now,board:[{id:'x'}]}).board,[{id:'x'}]);
+});

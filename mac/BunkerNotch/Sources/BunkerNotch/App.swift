@@ -65,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         screens.submenu = sub
         menu.addItem(screens)
         menu.addItem(item("Atualizar agora", #selector(refresh), "r"))
+        if store.muted { menu.addItem(item("Reativar avisos", #selector(unmute), "")) }
+        else { menu.addItem(item("Silenciar avisos por 1 hora", #selector(muteHour), "")); menu.addItem(item("Silenciar até amanhã às 8h", #selector(muteTomorrow), "")) }
         let login = item("Abrir ao iniciar o Mac", #selector(toggleLogin), "")
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
@@ -80,6 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func chooseDisplay(_ sender: NSMenuItem) {
         if let raw = sender.representedObject as? String, let choice = DisplayChoice(rawValue: raw) { notch?.display = choice }
     }
+    @objc private func muteHour() { store.mute(hours: 1); updateTitle() }
+    @objc private func muteTomorrow() { store.muteUntilTomorrow(); updateTitle() }
+    @objc private func unmute() { store.unmute(); updateTitle() }
     @objc private func refresh() { Task { await store.refresh() } }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func toggleLogin() {

@@ -57,12 +57,13 @@ struct CollapsedView: View {
             HStack(spacing: 6) {
                 StatusDot(tone: healthTone(store), size: 6)
                 Image(systemName: "square.stack.3d.up.fill").font(.system(size: 11, weight: .semibold)).foregroundStyle(DS.Color.accent)
-            }.frame(width: 75)
-            Spacer(minLength: notch.geometry.width)
-            Group {
                 if store.attention > 0 { Pill(text: "\(store.attention)", tone: .warn) }
-                else { Text(Format.ratio(store.summary?.today.today?.roas)).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(DS.Color.inkSoft) }
-            }.frame(width: 75)
+                if store.muted { Image(systemName: "moon.fill").font(.system(size: 9)).foregroundStyle(DS.Color.inkMuted).help("Avisos silenciados") }
+            }.frame(width: NotchState.earWidth)
+            Spacer(minLength: notch.geometry.width)
+            Text(ticker).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(DS.Color.inkSoft)
+                .lineLimit(1).minimumScaleFactor(0.75).frame(width: NotchState.earWidth - 8)
+                .id(notch.tick).transition(.push(from: .bottom))
         }
         .frame(height: notch.geometry.height)
         .contentShape(Rectangle())
@@ -70,6 +71,17 @@ struct CollapsedView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Bunker: \(store.attention) itens pedem atenção")
         .accessibilityAddTraits(.isButton)
+    }
+    /// Rotates every 5 s: ROAS today, spend today, latest manager change.
+    var ticker: String {
+        guard let s = store.summary else { return store.preparing ? "preparando" : "…" }
+        var items = ["ROAS " + Format.ratio(s.today.today?.roas), "Gasto " + Format.compactMoney(s.today.today?.spend)]
+        if let e = s.activity.recent.first {
+            let who = e.actor.map { String($0.split(separator: " ").first ?? "") } ?? "Gestor"
+            let icon = ["increase": "↑", "reduce": "↓", "pause": "⏸", "activate": "▶︎"][e.action] ?? "•"
+            items.append("\(who) \(icon) \(Format.relative(e.at).replacingOccurrences(of: "há ", with: ""))")
+        }
+        return items[notch.tick % items.count]
     }
 }
 
@@ -140,13 +152,16 @@ struct ExpandedView: View {
             Header()
             if let error = store.error { Banner(text: error, tone: .bad) }
             if store.preparing && store.summary == nil { Banner(text: "Resumo em preparação pelo executor. Aparece em 1 a 2 minutos.", tone: .neutral) }
-            if let s = store.summary {
+            if let s = store.summary, let item = notch.selected {
+                CampaignDetailView(s: s, item: item)
+            } else if let s = store.summary {
                 KPIStrip(s: s)
                 TabBar(s: s)
                 ScrollView(.vertical, showsIndicators: false) {
                     Group {
                         switch notch.tab {
                         case .now: NowTab(s: s)
+                        case .projects: ProjectsTab(s: s)
                         case .managers: ManagersTab(s: s)
                         case .agents: AgentsTab(s: s)
                         case .system: SystemTab(s: s)
@@ -308,6 +323,9 @@ struct TabBar: View {
         case .managers:
             let n = s.activity.summary.values.reduce(0) { $0 + $1.count }
             return n > 0 ? ("\(n)", .neutral) : nil
+        case .projects:
+            let n = (s.board ?? []).reduce(0) { $0 + $1.approvals }
+            return n > 0 ? ("\(n)", .warn) : nil
         case .agents: return s.agents.recent.isEmpty ? nil : ("\(s.agents.recent.count)", .neutral)
         case .system:
             guard let e = s.executor else { return nil }
@@ -361,6 +379,7 @@ struct EmptyLine: View {
 
 struct NowTab: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var notch: NotchState
     let s: Summary
     var showProject: Bool { s.project == "all" }
     var body: some View {
@@ -386,7 +405,7 @@ struct NowTab: View {
                             tag: showProject ? q.project : nil,
                             value: (loss ? "−" : "+") + Format.money(q.amount),
                             valueCaption: loss ? (q.basis == "result" ? (q.period == "today" ? "prejuízo hoje" : "prejuízo em 3 dias") : "receita abaixo da mídia") : "resultado em 3 dias",
-                            action: { store.open("#cards") })
+                            action: { withAnimation(DS.Motion.quick) { notch.selected = q } })
                 }
             }
         }
@@ -474,6 +493,7 @@ struct AgentsTab: View {
 }
 
 struct SystemTab: View {
+    @EnvironmentObject var store: Store
     let s: Summary
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -493,7 +513,128 @@ struct SystemTab: View {
                 Text("Resumo gerado " + Format.relative(s.generatedAt) + " · atualiza a cada 2 minutos").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 if s.paused { Pill(text: "Escritório pausado", tone: .warn) }
             }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+            SectionHeader(title: "Avisos", detail: store.muted ? "silenciados até " + Format.stamp(Format.isoFull.string(from: store.mutedUntil!)) : "ativos no notch e no macOS")
+            HStack(spacing: DS.Space.s) {
+                if store.muted { Button("Reativar avisos") { store.unmute() } }
+                else {
+                    Button("Silenciar 1 hora") { store.mute(hours: 1) }
+                    Button("Até amanhã às 8h") { store.muteUntilTomorrow() }
+                }
+            }.buttonStyle(.bordered).controlSize(.small)
             Text(s.notice).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
         }
+    }
+}
+
+/// Every project at a glance; clicking one scopes the island to it.
+struct ProjectsTab: View {
+    @EnvironmentObject var store: Store
+    @EnvironmentObject var notch: NotchState
+    let s: Summary
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            SectionHeader(title: "Projetos hoje", detail: "ordenados por gasto · clique para focar")
+            if (s.board ?? []).isEmpty { EmptyLine(text: "Placar disponível na próxima atualização do executor.") }
+            VStack(spacing: 2) {
+                ForEach(s.board ?? []) { p in
+                    let selected = store.project == p.id
+                    let trend: Tone = {
+                        guard let t = p.roas, let y = p.roasYesterday, y > 0 else { return .neutral }
+                        return t >= y ? .good : .bad
+                    }()
+                    Button {
+                        store.project = selected ? "all" : p.id
+                        withAnimation(DS.Motion.quick) { notch.tab = .now }
+                    } label: {
+                        HStack(spacing: DS.Space.m) {
+                            Text(String(p.name.prefix(1))).font(.system(size: 11, weight: .bold)).frame(width: 26, height: 26)
+                                .foregroundStyle(DS.Color.accent).background(DS.Color.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: DS.Radius.s))
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: DS.Space.xs) {
+                                    Text(p.name).font(DS.Font.bodyStrong)
+                                    if selected { Pill(text: "em foco", tone: .accent) }
+                                    if p.approvals > 0 { Pill(text: "\(p.approvals) para aprovar", tone: .warn) }
+                                    if p.losses > 0 { Pill(text: "\(p.losses) perda(s)", tone: .bad) }
+                                }
+                                Text("gasto \(Format.money(p.spend)) · ROI \(Format.ratio(p.roi)) · \(p.changes) mudança(s) em 24h").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                            }
+                            Spacer(minLength: DS.Space.s)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(Format.ratio(p.roas)).font(DS.Font.number).foregroundStyle(trend.color)
+                                Text("ontem " + Format.ratio(p.roasYesterday)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
+                            }
+                        }
+                        .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
+                        .background(notch.hovered == "p:" + p.id || selected ? DS.Color.surfaceHover : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { inside in if inside { notch.hovered = "p:" + p.id } else if notch.hovered == "p:" + p.id { notch.hovered = nil } }
+                }
+            }
+        }
+    }
+}
+
+/// Drill-down of one campaign inside the island: windows, budget, status, latest changes with author.
+struct CampaignDetailView: View {
+    @EnvironmentObject var store: Store
+    @EnvironmentObject var notch: NotchState
+    let s: Summary
+    let item: Summary.QueueItem
+    let periods: [(String, String)] = [("today", "Hoje"), ("yesterday", "Ontem"), ("3d", "3 dias"), ("7d", "7 dias")]
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            HStack(spacing: DS.Space.s) {
+                IconButton(symbol: "chevron.left", help: "Voltar (Esc)") { withAnimation(DS.Motion.quick) { notch.selected = nil } }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.campaign ?? "Campanha").font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
+                    HStack(spacing: DS.Space.xs) {
+                        if let p = item.project { Pill(text: p, tone: .accent) }
+                        Pill(text: Format.statusName(item.detail?.status), tone: item.detail?.status == "ACTIVE" ? .good : .neutral)
+                        Text("diário " + Format.money(item.detail?.dailyBudget, currency: item.detail?.budgetCurrency)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                    }
+                }
+                Spacer()
+                Button { store.open(deepLink) } label: {
+                    HStack(spacing: 5) { Text("Abrir card").font(DS.Font.bodyStrong); Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)) }
+                        .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(DS.Color.accent, in: Capsule())
+                }.buttonStyle(.plain).help("Abrir o card desta campanha no Bunker para decidir")
+            }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: DS.Space.m) {
+                    HStack(spacing: DS.Space.s) {
+                        ForEach(periods, id: \.0) { key, label in
+                            let w = item.detail?.windows[key] ?? nil
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                                Text(Format.ratio(w?.roas)).font(DS.Font.stat).foregroundStyle((w?.roi ?? 1) >= 1 ? DS.Color.ink : DS.Color.bad)
+                                Text("ROI " + Format.ratio(w?.roi)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
+                                Text("gasto " + Format.compactMoney(w?.spend)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
+                                Text("front \(w?.frontOrders.map { String(Int($0)) } ?? "N/D")").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
+                            }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+                        }
+                    }
+                    if let reason = item.detail?.reason {
+                        SectionHeader(title: "Sinal", detail: item.decision)
+                        Text(reason).font(DS.Font.body).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true)
+                    }
+                    SectionHeader(title: "Últimas mudanças", detail: "quem, quando e quanto · 24h")
+                    if (item.detail?.changes ?? []).isEmpty { EmptyLine(text: "Nenhuma mudança de orçamento ou status nas últimas 24h.") }
+                    VStack(spacing: 2) {
+                        ForEach(item.detail?.changes ?? []) { e in
+                            ListRow(id: "d:" + e.id, symbol: ["increase": "arrow.up.right", "reduce": "arrow.down.right", "pause": "pause.fill", "activate": "play.fill"][e.action] ?? "clock",
+                                    tone: ["increase", "activate"].contains(e.action) ? .good : .bad, title: Format.who(e), subtitle: Format.change(e),
+                                    value: Format.relative(e.at), valueCaption: Format.stamp(e.at))
+                        }
+                    }
+                    Text("Somente leitura: decidir e aprovar continua no card, com a confirmação exata.").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                }.padding(.bottom, DS.Space.l)
+            }
+        }
+    }
+    var deepLink: String {
+        var c = URLComponents(); c.queryItems = [URLQueryItem(name: "project", value: item.detail?.projectId ?? ""), URLQueryItem(name: "q", value: item.campaignId ?? "")]
+        return "#cards?" + (c.percentEncodedQuery ?? "")
     }
 }

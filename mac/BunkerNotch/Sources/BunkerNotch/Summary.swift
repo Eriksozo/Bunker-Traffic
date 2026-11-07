@@ -14,6 +14,17 @@ struct Summary: Decodable, Equatable {
         let kind: String; let campaign: String?; let account: String?; let project: String?
         let adAccountId: String?; let campaignId: String?; let decision: String?
         let period: String?; let basis: String?; let amount: Double?; let spend: Double?; let roas: Double?; let roas7d: Double?
+        let detail: Detail?
+    }
+    struct Window: Decodable, Equatable { let spend: Double?; let roas: Double?; let roi: Double?; let frontOrders: Double?; let cpaFront: Double? }
+    struct Detail: Decodable, Equatable {
+        let projectId: String?; let malvaObjectId: String?; let status: String?; let dailyBudget: Double?; let budgetCurrency: String?; let reason: String?
+        let windows: [String: Window?]
+        let changes: [Activity]
+    }
+    struct BoardRow: Decodable, Equatable, Identifiable {
+        let id: String; let name: String; let spend: Double?; let roas: Double?; let roi: Double?; let roasYesterday: Double?
+        let approvals: Int; let losses: Int; let changes: Int
     }
     struct Approval: Decodable, Equatable, Identifiable { let id: String; let title: String?; let project: String?; let expiresAt: String? }
     struct Approvals: Decodable, Equatable { let count: Int; let items: [Approval] }
@@ -41,6 +52,7 @@ struct Summary: Decodable, Equatable {
     let today: Today
     let queue: [QueueItem]
     let queueSize: Int
+    let board: [BoardRow]?
     let approvals: Approvals
     let activity: ActivityBlock
     let agents: Agents

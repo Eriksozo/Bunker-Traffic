@@ -14,6 +14,18 @@ final class Store: ObservableObject {
     @Published private(set) var preparing = false
     /// Latest in-island alert; the notch controller queues and shows it briefly.
     @Published private(set) var alert: IslandAlert?
+    /// Do not disturb: no island alert and no system notification until this time.
+    @Published var mutedUntil: Date? = UserDefaults.standard.object(forKey: "mutedUntil") as? Date {
+        didSet { UserDefaults.standard.set(mutedUntil, forKey: "mutedUntil") }
+    }
+    var muted: Bool { (mutedUntil ?? .distantPast) > Date() }
+    func mute(hours: Double) { mutedUntil = Date().addingTimeInterval(hours * 3600) }
+    /// Until 08:00 tomorrow, local time.
+    func muteUntilTomorrow() {
+        let cal = Calendar.current
+        mutedUntil = cal.date(bySettingHour: 8, minute: 0, second: 0, of: cal.date(byAdding: .day, value: 1, to: Date())!)
+    }
+    func unmute() { mutedUntil = nil }
     @Published var project: String {
         didSet { UserDefaults.standard.set(project, forKey: "project"); primed = false; Task { await refresh() } }
     }
@@ -97,7 +109,7 @@ final class Store: ObservableObject {
             seen.insert("lo:" + q.id); fresh.append(("lo:" + q.id, "Perda para revisar", (q.campaign ?? "Campanha") + " · " + Format.money(q.amount), .loss))
         }
         defer { primed = true }
-        guard primed else { return }
+        guard primed, !muted else { return }
         // Approvals first, then losses, then manager changes; at most three alerts per refresh.
         let order: [IslandAlert.Kind: Int] = [.approval: 0, .loss: 1, .manager: 2]
         for item in fresh.sorted(by: { order[$0.3]! < order[$1.3]! }).prefix(3) { alert = IslandAlert(id: item.0, kind: item.3, title: item.1, detail: item.2) }
