@@ -160,6 +160,10 @@ final class NotchController {
     }
 
     func toggle() { send(.toggle) }
+    /// For Bunk on the desktop: where home is, the drop zone that sends him back, and opening the island.
+    var bunkHomeScreen: NSScreen { Self.screen(for: display) }
+    var bunkHomeZone: NSRect { let s = Self.screen(for: display).frame; return NSRect(x: s.midX - 180, y: s.maxY - 90, width: 360, height: 90) }
+    func openIsland() { if !fsm.isOpen { send(.toggle) } }
 
     static func screen(for choice: DisplayChoice) -> NSScreen {
         let screens = NSScreen.screens, mouse = NSEvent.mouseLocation

@@ -5,6 +5,9 @@ import SwiftUI
 /// Original character (name, design, expressions and animations made for the Bunker).
 /// Its mood mirrors the real operation; it never decides or executes anything.
 enum BunkMood: String, Equatable { case idle, watching, alert, happy, sleeping, thinking, worried }
+/// Brief reactions: surprised (something needs you), happy (good news, landing), wink (click),
+/// yawn (about to doze off), love (an approval went through).
+enum BunkReaction: String, Equatable, CaseIterable { case surprised, happy, wink, yawn, love }
 
 enum BunkBrain {
     static let zone = TimeZone(identifier: "America/Sao_Paulo") ?? .current
@@ -60,6 +63,13 @@ struct BunkView: View {
     let mood: BunkMood
     var size: CGFloat = 22
     var look: CGFloat = 0
+    /// −1 (looking up) … 1 (looking down).
+    var lookY: CGFloat = 0
+    /// Out of the notch: shows the feet; `walking` steps them.
+    var feet = false
+    var walking = false
+    /// Short reaction on top of the mood (Bunk's own expressions).
+    var reaction: BunkReaction? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -81,8 +91,17 @@ struct BunkView: View {
 
     private func draw(_ ctx: GraphicsContext, _ canvas: CGSize, _ t: Double) {
         let u = canvas.width / 24
-        let hop: CGFloat = mood == .alert ? -abs(CGFloat(sin(t * 5))) * 1.4 * u : mood == .happy ? -abs(CGFloat(sin(t * 3))) * 0.9 * u : 0
+        let jumpy = mood == .alert || reaction == .surprised, cheerful = mood == .happy || reaction == .happy || reaction == .love
+        let hop: CGFloat = jumpy ? -abs(CGFloat(sin(t * 5))) * 1.4 * u : cheerful ? -abs(CGFloat(sin(t * 3))) * 0.9 * u : walking ? -abs(CGFloat(sin(t * 7))) * 0.5 * u : 0
         let breath = 1 + (mood == .sleeping ? 0.04 : 0.022) * CGFloat(sin(t * (mood == .sleeping ? 1.2 : 2.0)))
+        // Little feet: only out of the notch, stepping while walking.
+        if feet || walking {
+            var f = ctx; f.translateBy(x: 0, y: hop)
+            for (i, x) in [6.6, 14.4].enumerated() {
+                let step: CGFloat = walking ? CGFloat(sin(t * 14 + Double(i) * .pi)) * 0.8 * u : 0
+                f.fill(Path(roundedRect: CGRect(x: x * u, y: 21.2 * u - max(0, step), width: 3 * u, height: 2.4 * u), cornerRadius: 1.1 * u), with: .color(DS.Color.accent.opacity(0.55)))
+            }
+        }
         var c = ctx
         // Breathe from the ground, hop as a whole.
         c.translateBy(x: 0, y: hop + 22 * u * (1 - breath))
@@ -102,7 +121,18 @@ struct BunkView: View {
             default: return Color.white.opacity(0.85)
             }
         }()
-        c.fill(Path(ellipseIn: CGRect(x: tip.x - 1.5 * u, y: tip.y - 1.5 * u, width: 3 * u, height: 3 * u)), with: .color(light))
+        if reaction == .love {
+            // A heart on the antenna.
+            var heart = Path(), s = 1.7 * u
+            heart.move(to: CGPoint(x: tip.x, y: tip.y + s))
+            heart.addCurve(to: CGPoint(x: tip.x - s, y: tip.y - 0.2 * s), control1: CGPoint(x: tip.x - 0.4 * s, y: tip.y + 0.6 * s), control2: CGPoint(x: tip.x - s, y: tip.y + 0.3 * s))
+            heart.addArc(center: CGPoint(x: tip.x - 0.5 * s, y: tip.y - 0.3 * s), radius: 0.5 * s, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+            heart.addArc(center: CGPoint(x: tip.x + 0.5 * s, y: tip.y - 0.3 * s), radius: 0.5 * s, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+            heart.addCurve(to: CGPoint(x: tip.x, y: tip.y + s), control1: CGPoint(x: tip.x + s, y: tip.y + 0.3 * s), control2: CGPoint(x: tip.x + 0.4 * s, y: tip.y + 0.6 * s))
+            c.fill(heart, with: .color(Color(red: 1, green: 0.45, blue: 0.62)))
+        } else {
+            c.fill(Path(ellipseIn: CGRect(x: tip.x - 1.5 * u, y: tip.y - 1.5 * u, width: 3 * u, height: 3 * u)), with: .color(reaction == .surprised ? DS.Color.warn : light))
+        }
 
         // Dome body with a flat base: the bunker.
         let body = Path(roundedRect: CGRect(x: 2.5 * u, y: 6 * u, width: 19 * u, height: 16 * u), cornerRadii: RectangleCornerRadii(topLeading: 9 * u, bottomLeading: 2.2 * u, bottomTrailing: 2.2 * u, topTrailing: 9 * u))
@@ -117,7 +147,13 @@ struct BunkView: View {
         drawEyes(c, visor, u, t)
 
         // Floating extras.
-        if mood == .sleeping {
+        if reaction == .surprised {
+            c.draw(Text("!").font(.system(size: 6 * u, weight: .heavy, design: .rounded)).foregroundColor(DS.Color.warn), at: CGPoint(x: 20.5 * u, y: 4 * u))
+        }
+        if reaction == .yawn {
+            c.stroke(Path(ellipseIn: CGRect(x: visor.midX - 0.9 * u, y: visor.maxY - 2.1 * u, width: 1.8 * u, height: 1.5 * u)), with: .color(.white.opacity(0.8)), lineWidth: 0.6 * u)
+        }
+        if mood == .sleeping && reaction == nil {
             let rise = CGFloat((t * 0.6).truncatingRemainder(dividingBy: 1))
             c.opacity = Double(1 - rise)
             c.draw(Text("z").font(.system(size: 5 * u, weight: .bold, design: .rounded)).foregroundColor(.white.opacity(0.8)), at: CGPoint(x: 20 * u + rise * 2 * u, y: 6 * u - rise * 5 * u))
@@ -133,12 +169,26 @@ struct BunkView: View {
     private func drawEyes(_ c: GraphicsContext, _ visor: CGRect, _ u: CGFloat, _ t: Double) {
         let color: Color = mood == .alert ? DS.Color.bad : mood == .watching ? DS.Color.good : mood == .worried ? DS.Color.warn : .white.opacity(0.95)
         let sweep: CGFloat = mood == .watching ? CGFloat(sin(t * 1.4)) * 2.2 * u : look * 1.8 * u
-        let lift: CGFloat = mood == .thinking ? -0.9 * u : mood == .worried ? 0.5 * u : 0
-        let blinking = (t.truncatingRemainder(dividingBy: 4.3)) < 0.13 && mood != .sleeping && mood != .happy
+        let lift: CGFloat = (mood == .thinking ? -0.9 * u : mood == .worried ? 0.5 * u : 0) + lookY * 0.8 * u
+        let blinking = (t.truncatingRemainder(dividingBy: 4.3)) < 0.13 && mood != .sleeping && mood != .happy && reaction == nil
         let cy = visor.midY + lift
         for dx in [-3.0, 3.0] {
             let cx = visor.midX + CGFloat(dx) * u + sweep
-            switch mood {
+            // Reactions (Bunk's own expressions) override the mood's eyes.
+            let style: BunkMood = {
+                switch reaction {
+                case .happy?, .love?: return .happy
+                case .yawn?: return .sleeping
+                case .wink?: return dx < 0 ? .happy : .idle
+                default: return mood
+                }
+            }()
+            if reaction == .surprised {
+                let d = 2.8 * u
+                c.fill(Path(ellipseIn: CGRect(x: cx - d / 2, y: cy - d / 2, width: d, height: d)), with: .color(.white))
+                continue
+            }
+            switch style {
             case .happy:
                 var arc = Path(); arc.move(to: CGPoint(x: cx - 1.3 * u, y: cy + 0.7 * u)); arc.addQuadCurve(to: CGPoint(x: cx + 1.3 * u, y: cy + 0.7 * u), control: CGPoint(x: cx, y: cy - 1.5 * u))
                 c.stroke(arc, with: .color(color), style: StrokeStyle(lineWidth: 0.9 * u, lineCap: .round))
@@ -146,7 +196,7 @@ struct BunkView: View {
                 var line = Path(); line.move(to: CGPoint(x: cx - 1.2 * u, y: cy)); line.addLine(to: CGPoint(x: cx + 1.2 * u, y: cy))
                 c.stroke(line, with: .color(color.opacity(0.7)), style: StrokeStyle(lineWidth: 0.8 * u, lineCap: .round))
             default:
-                let w = (mood == .worried ? 1.4 : 1.8) * u, h = blinking ? 0.35 * u : (mood == .alert ? 3.0 : 2.6) * u
+                let w = (style == .worried ? 1.4 : 1.8) * u, h = blinking ? 0.35 * u : (style == .alert ? 3.0 : 2.6) * u
                 c.fill(Path(roundedRect: CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h), cornerRadius: w / 2), with: .color(color))
             }
         }
@@ -198,11 +248,22 @@ struct BunkBubble: View {
 @MainActor enum BunkSheet {
     static let moods: [(BunkMood, String)] = [(.idle, "tranquilo"), (.watching, "vigiando"), (.alert, "alerta"), (.happy, "feliz"), (.sleeping, "dormindo"), (.thinking, "pensando"), (.worried, "preocupado")]
     static func render(to path: String) -> Int32 {
-        let sheet = HStack(spacing: 28) {
-            ForEach(moods, id: \.1) { m in
-                VStack(spacing: 10) {
-                    BunkView(mood: m.0, size: 120)
-                    Text(m.1).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(.white.opacity(0.8))
+        let reactions: [(BunkReaction?, String, Bool)] = [(.surprised, "surpreso", false), (.happy, "comemora", false), (.wink, "piscadela", false), (.yawn, "bocejo", false), (.love, "carinho", false), (nil, "andando", true)]
+        let sheet = VStack(alignment: .leading, spacing: 30) {
+            HStack(spacing: 28) {
+                ForEach(moods, id: \.1) { m in
+                    VStack(spacing: 10) {
+                        BunkView(mood: m.0, size: 120)
+                        Text(m.1).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(.white.opacity(0.8))
+                    }
+                }
+            }
+            HStack(spacing: 28) {
+                ForEach(reactions, id: \.1) { r in
+                    VStack(spacing: 10) {
+                        BunkView(mood: .idle, size: 120, look: r.2 ? 1 : 0, feet: true, walking: r.2, reaction: r.0)
+                        Text(r.1).font(.system(size: 15, weight: .semibold, design: .rounded)).foregroundColor(.white.opacity(0.8))
+                    }
                 }
             }
         }

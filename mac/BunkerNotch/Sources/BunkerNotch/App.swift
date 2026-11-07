@@ -20,17 +20,19 @@ enum BunkerNotchMain {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = Store()
     private var notch: NotchController?
+    private var bunk: BunkDesktopController?
     private var statusItem: NSStatusItem!
     private var bag = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: "Bunker")
+        statusItem.button?.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: "Bunk")
         statusItem.button?.imagePosition = .imageLeading
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
         notch = NotchController(store: store)
+        if let notch { bunk = BunkDesktopController(store: store, notch: notch) }
         store.$summary.combineLatest(store.$error).receive(on: RunLoop.main).sink { [weak self] _ in self?.updateTitle() }.store(in: &bag)
         store.start()
     }
@@ -38,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateTitle() {
         let n = store.attention
         statusItem.button?.title = store.error != nil ? " !" : n > 0 ? " \(n)" : ""
-        statusItem.button?.toolTip = store.error ?? "Bunker · \(n) item(ns) pedem atenção"
+        statusItem.button?.toolTip = store.error ?? "Bunk · \(n) item(ns) pedem atenção"
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -66,6 +68,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         screens.submenu = sub
         menu.addItem(screens)
         menu.addItem(item("Atualizar agora", #selector(refresh), "r"))
+        // Bunk out of the notch: each switch is the owner's.
+        let bunkMenu = NSMenuItem(title: "Bunk", action: nil, keyEquivalent: "")
+        let b = NSMenu()
+        let roam = item("Bunk solto pelas telas (chama sua atenção)", #selector(toggleBunkRoam), ""); roam.state = bunk?.roamEnabled == true ? .on : .off; b.addItem(roam)
+        let home = item("Bunk morando no desktop", #selector(toggleBunkResident), ""); home.state = bunk?.resident == true ? .on : .off; b.addItem(home)
+        b.addItem(item("Chamar o Bunk agora", #selector(callBunk), ""))
+        b.addItem(.separator())
+        let all = item("Todas as telas", #selector(bunkAllScreens), ""); all.state = (UserDefaults.standard.array(forKey: BunkScreens.key) ?? []).isEmpty ? .on : .off; b.addItem(all)
+        for (i, screen) in NSScreen.screens.enumerated() {
+            let s = item("Tela: " + screen.localizedName, #selector(toggleBunkScreen(_:)), ""); s.representedObject = i
+            s.state = (UserDefaults.standard.array(forKey: BunkScreens.key) ?? []).isEmpty ? .off : (bunk?.isAllowed(screen) == true ? .on : .off)
+            b.addItem(s)
+        }
+        bunkMenu.submenu = b
+        menu.addItem(bunkMenu)
         if store.muted { menu.addItem(item("Reativar avisos", #selector(unmute), "")) }
         else { menu.addItem(item("Silenciar avisos por 1 hora", #selector(muteHour), "")); menu.addItem(item("Silenciar até amanhã às 8h", #selector(muteTomorrow), "")) }
         let login = item("Abrir ao iniciar o Mac", #selector(toggleLogin), "")
@@ -87,6 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func muteTomorrow() { store.muteUntilTomorrow(); updateTitle() }
     @objc private func unmute() { store.unmute(); updateTitle() }
     @objc private func refresh() { Task { await store.refresh() } }
+    @objc private func toggleBunkRoam() { bunk?.setRoam(!(bunk?.roamEnabled ?? true)) }
+    @objc private func toggleBunkResident() { bunk?.setResident(!(bunk?.resident ?? false)) }
+    @objc private func callBunk() { bunk?.callNow() }
+    @objc private func bunkAllScreens() { bunk?.allowAllScreens() }
+    @objc private func toggleBunkScreen(_ sender: NSMenuItem) {
+        if let i = sender.representedObject as? Int, i < NSScreen.screens.count { bunk?.toggleScreen(NSScreen.screens[i]) }
+    }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func toggleLogin() {
         do {

@@ -68,7 +68,7 @@ struct CollapsedView: View {
         .contentShape(Rectangle())
         .onTapGesture { notch.onClick() }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Bunker: \(store.attention) itens pedem atenção")
+        .accessibilityLabel("Bunk: \(store.attention) itens pedem atenção")
         .accessibilityAddTraits(.isButton)
     }
     /// Rotates every 5 s: ROAS today, spend today, latest manager change.
@@ -191,7 +191,7 @@ struct Header: View {
         HStack(spacing: DS.Space.s) {
             HStack(spacing: 6) {
                 BunkAvatar(size: 26)
-                Text("BUNKER").font(DS.Font.mark).tracking(1.6).foregroundStyle(DS.Color.accent)
+                Text("BUNK").font(DS.Font.mark).tracking(1.6).foregroundStyle(DS.Color.accent)
             }
             ProjectMenu()
             Spacer(minLength: DS.Space.s)
@@ -418,7 +418,7 @@ struct NowTab: View {
             }
             if let sh = s.shadow, sh.total > 0 {
                 let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
-                SectionHeader(title: "Sombra do Bunker · hoje", detail: "\(would) executaria · \(first) antes do gestor · não executa nada")
+                SectionHeader(title: "Sombra do Bunk · hoje", detail: "\(would) executaria · \(first) antes do gestor · não executa nada")
                 VStack(spacing: 2) {
                     ForEach(sh.recent.prefix(5)) { item in
                         ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),

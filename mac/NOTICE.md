@@ -12,6 +12,8 @@ As técnicas de janela e comportamento do notch — painel transparente fixo aci
 >
 > THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+O Bunk fora do notch (`BunkDesktop.swift`, `BunkRoamLogic.swift`) usa mecânicas estudadas no mesmo código MIT: painel transparente por cima de tudo que só aceita clique sobre o corpo (verificação periódica do cursor), olhar que acompanha o ponteiro com resposta suave, crescer ao passar o mouse, arrastar com limite de borda, soltar sobre o notch para voltar, clique simples diferido para distinguir do clique duplo, sono por inatividade com taxa de quadros menor e pausa quando a tela dorme. O personagem, o nome "Bunk", o visual, as expressões, as reações e as animações são próprios do Bunker.
+
 Nenhum ativo de marca do Coucou é usado aqui: o nome "Coucou", o personagem e o nome "Mochi", ícones, sons e mídias pertencem ao autor e não fazem parte deste app.
 
 ## Segurança

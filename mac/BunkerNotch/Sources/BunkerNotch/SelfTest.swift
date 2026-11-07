@@ -12,7 +12,8 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust()
+        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam()
+        failures += bunkFailures
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
     }

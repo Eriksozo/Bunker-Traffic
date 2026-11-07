@@ -468,3 +468,11 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **App:** `OwnerKey.swift` (Secure Enclave), `OwnerCards.swift`, `OwnerAdjustView.swift`. "Ajustar aqui" e "Conferir" das propostas abrem a tela nativa: escolha (aumentar/reduzir com %, pausar, manter) vira pedido para a equipe; propostas "Aguardando aprovação" mostram antes → depois e "Aprovar com Touch ID". O prompt do Touch ID mostra a mudança exata. O card web segue disponível pelo navegador.
 - **Interop conferida:** envelope assinado pelo Swift verificado pelo verificador Node; self-test nativo cobre limites de %, centavos, intenção sem aprovação e assinatura.
 - **Pendências:** primeiro uso real com a digital do dono (não testável por agente); nenhuma campanha alterada nesta entrega.
+
+## Bunk fora do notch: passeio, desktop e telas escolhidas (registro escrito às 2026-11-07 22:16:38 UTC por `date -u`)
+
+- **Pedido do dono:** o Bunk deve invadir a tela e chamar a atenção quando algo pedir, percorrer as telas, ser mais participativo, com liga/desliga e escolha de telas; no notch o nome é Bunk (a web continua Bunker).
+- **Comportamento:** proposta nova ou perda nova → passeio por todas as telas permitidas falando o aviso (perda no máximo a cada 5 min; proposta não espera); mudança de outro gestor → visita na tela do ponteiro (máx. a cada 15 min); dia calmo → passeio com resumo a cada ~40 min, só 06h–20h. Respeita "silenciar avisos". Pode morar no desktop (arrastar, posição lembrada, clique duplo ou soltar no notch volta). Clique fala o próximo assunto (durante o passeio abre o notch); botão direito: abrir no notch, o que está acontecendo, já vi, ficar/voltar, silenciar 1 h, guardar o Bunk. Dorme sem atividade (2 min, mouse longe), 10 fps dormindo, pausa com a tela dormindo.
+- **Menu da barra → Bunk:** Bunk solto pelas telas, morando no desktop, chamar agora, Todas as telas / cada tela.
+- **Código:** `BunkRoamLogic.swift` (regras e rotas puras, testadas em `BunkSelfTest.swift`), `BunkDesktop.swift` (janela e interação), reações próprias em `Bunk.swift`; mecânicas do Coucou (MIT) creditadas em `mac/NOTICE.md`, sem ativos dele.
+- **Validação:** self-test do app; folha renderizada de humores e reações. O comportamento ao vivo nas telas fica para o dono conferir.
