@@ -77,3 +77,11 @@ test('Today follows DST calendar boundaries and timezone fallback stays explicit
  assert.equal(activityTimezone({},'p'),'America/Boa_Vista');
  assert.deepEqual(activityForRange(state,{range:'today',now:NaN}).events,[]);
 });
+
+test('an executor attribution names the author of an observed change and keeps its exact time',()=>{
+ const state={campaignChanges:[{id:'o1',project:'p',adAccountId:'act',objectId:'c9',name:'Campanha 9',observedAt:iso(1),previousObservedAt:iso(1.25),changes:[{field:'status',before:'ACTIVE',after:'PAUSED'}]}],
+  changeAttributions:[{key:'o1:status',project:'p',adAccountId:'act',objectId:'c9',field:'status',before:'ACTIVE',after:'PAUSED',at:iso(1.1),actor:'Jorge Raimundo',matched:true}]};
+ const log=activityLog(state,{project:'p',now});
+ assert.equal(log.length,1);assert.equal(log[0].actor,'Jorge Raimundo');assert.equal(log[0].at,iso(1.1));assert.equal(log[0].name,'Campanha 9');
+ assert.equal(activitySummary(log).pause.unknown,0);
+});

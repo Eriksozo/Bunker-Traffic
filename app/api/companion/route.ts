@@ -11,8 +11,9 @@ export async function GET(req:Request){
  if(!allowed(req))return response({error:'Acesso não autorizado.'},401);
  const project=new URL(req.url).searchParams.get('project')||ALL_PROJECTS;
  try{
-  const cur=await readState(),executor=await executorControl({action:'status'}).catch(()=>null);
-  return response({revision:cur.revision,...companionSummary(cur.state,{project,executor})});
+  const [cur,executor,attribution]=await Promise.all([readState(),executorControl({action:'status'}).catch(()=>null),executorControl({action:'attribution'}).catch(()=>null)]);
+  const items=Array.isArray((attribution as any)?.items)?(attribution as any).items:[];
+  return response({revision:cur.revision,...companionSummary({...cur.state,changeAttributions:items},{project,executor})});
  }catch(error:any){return response({error:/Projeto não configurado/.test(error?.message||'')?'Projeto não configurado.':'Resumo indisponível agora.'},/Projeto não configurado/.test(error?.message||'')?404:503);}
 }
 export async function POST(){return response({error:'Somente leitura.'},405);}
