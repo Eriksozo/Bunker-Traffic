@@ -11,7 +11,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode()
+        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
     }
@@ -53,6 +53,21 @@ enum SelfTest {
         check(Credential.valid(String(repeating: "a", count: 43)), #line)
         check(!Credential.valid("short"), #line)
         check(!Credential.valid(String(repeating: "a", count: 42) + "\""), #line)
+    }
+
+    private static func testWebScope() {
+        let u = { (s: String) in URL(string: s) }
+        check(WebScope.decide(u("https://bunker-traffic.erik-iplou.workers.dev/#cards?project=p&q=1")) == .allow, #line)
+        check(WebScope.decide(u("https://enehgnotumknjlmwfcta.supabase.co/auth/v1/verify?token=x")) == .allow, #line)
+        check(WebScope.decide(u("https://bunker-trafego-erik.eriksozo.chatgpt.site/")) == .emailLogin, #line)
+        check(WebScope.decide(u("https://evil.example/phish")) == .external, #line)
+        check(WebScope.decide(u("http://bunker-traffic.erik-iplou.workers.dev/")) == .external, #line)        // never plain http
+        check(WebScope.decide(u("https://bunker-traffic.erik-iplou.workers.dev.evil.example/")) == .external, #line)
+        check(WebScope.signInLink(" https://bunker-traffic.erik-iplou.workers.dev/auth/callback#access_token=x \n") != nil, #line)
+        check(WebScope.signInLink("https://enehgnotumknjlmwfcta.supabase.co/auth/v1/verify?token=x&type=magiclink") != nil, #line)
+        check(WebScope.signInLink("https://bunker-traffic.erik-iplou.workers.dev/api/state") == nil, #line)
+        check(WebScope.signInLink("https://evil.example/auth/callback#access_token=x") == nil, #line)
+        check(WebScope.signInLink("texto qualquer") == nil, #line)
     }
 
     private static func testCompactMoneyAndDetailDecode() {

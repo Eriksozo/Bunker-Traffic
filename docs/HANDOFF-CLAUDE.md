@@ -364,3 +364,22 @@ Escopo pedido pelo dono: filtro Hoje em Mudanças de orçamento e status, preser
   - `Bunker --self-test` cobre a máquina de estados, a cadência, a escolha de tela e a identidade estável.
   - Consumo em repouso: 0,0% de CPU, ~51 MB.
   - A conferência visual do comportamento fica com o dono.
+
+## Notch: projetos, detalhe da campanha e ajustes pelo card (registro escrito às 2026-11-07 15:00:57 UTC por `date -u`)
+
+- **Commit `d06678b`, versão `292e1d46`:**
+  - Aba Projetos (placar do dia por projeto, calculado uma vez por pulso pelo executor).
+  - Detalhe da campanha no notch: janelas, orçamento, status, sinal e últimas mudanças com autor.
+  - Letreiro no notch fechado.
+  - Não perturbe (1 h ou até 8 h do dia seguinte).
+  - Web aceita `#cards?project=<id>&q=<campanha>`.
+  - O resumo leva o ID interno Malva da campanha (`malvaObjectId`).
+- **Ajustes pelo notch, escolha do dono** ("Card do Bunker no notch"):
+  - O botão "Ajustar aqui" abre o próprio card do Bunker (Worker) dentro do notch, com a sessão de dono do app: mesmos botões, travas, confirmação exata e despacho único. Nenhuma credencial nova com poder financeiro.
+  - Só carregam o Worker e o verify do Supabase; o Site `chatgpt.site` é trocado pelo login por e-mail; o resto abre no navegador.
+  - O login é feito colando o link do e-mail (só o callback do Bunker ou o verify do Supabase são aceitos).
+  - Com o card aberto, o notch não intercepta teclas.
+  - Regras cobertas no `--self-test`.
+- **Pendências:**
+  - Link direto da campanha na Malva: a API pública não expõe a URL de tela, e falta um exemplo real do dono para montar o formato.
+  - Conferir o primeiro login e um ajuste real com o dono.

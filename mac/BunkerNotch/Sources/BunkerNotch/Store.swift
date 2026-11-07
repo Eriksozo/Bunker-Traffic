@@ -5,7 +5,7 @@ import UserNotifications
 /// Polls the read-only summary once a minute (and on demand). Never sends a write.
 @MainActor
 final class Store: ObservableObject {
-    static let base = URL(string: "https://bunker-traffic.erik-iplou.workers.dev")!
+    nonisolated static let base = URL(string: "https://bunker-traffic.erik-iplou.workers.dev")!
     @Published private(set) var summary: Summary?
     @Published private(set) var error: String?
     @Published private(set) var loading = false

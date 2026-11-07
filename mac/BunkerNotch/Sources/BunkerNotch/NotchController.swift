@@ -42,6 +42,11 @@ final class NotchState: ObservableObject {
     @Published var hovered: String?
     /// Campaign opened inside the island (drill-down); nil shows the tabs.
     @Published var selected: Summary.QueueItem?
+    /// The Bunker card opened inside the island to adjust a campaign (owner session); nil shows native views.
+    @Published var webTarget: URL?
+    @Published var webReload = 0
+    @Published var webCurrent: URL?
+    @Published var pastedLink = ""
     /// Rotating line on the resting island.
     @Published var tick = 0
     @Published var geometry: NotchGeometry
@@ -59,7 +64,7 @@ final class NotchState: ObservableObject {
         case .compact: return CGSize(width: ears, height: top)
         case .peek: return CGSize(width: max(ears + 140, 420), height: top + 30)
         case .alert: return CGSize(width: 500, height: top + 86)
-        case .open: return Self.openSize
+        case .open: return webTarget != nil ? CGSize(width: 700, height: 560) : Self.openSize
         }
     }
 }
@@ -116,7 +121,8 @@ final class NotchController {
         }
         // Escape and 1–4 while open; a click anywhere else folds a click-opened island.
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.fsm.isOpen else { return event }
+            // While the Bunker card is open, every key belongs to it (percent fields, its own Esc).
+            guard let self, self.fsm.isOpen, self.state.webTarget == nil else { return event }
             return self.handleKey(event) ? nil : event
         } as Any)
         monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -163,6 +169,7 @@ final class NotchController {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.alertSeconds, execute: work)
         case .compact:
             state.selected = nil
+            state.webTarget = nil
             if panel.isKeyWindow { panel.resignKey() }
             if !queue.isEmpty { let next = queue.removeFirst(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.send(.alert(next)) } }
         case .peek: break

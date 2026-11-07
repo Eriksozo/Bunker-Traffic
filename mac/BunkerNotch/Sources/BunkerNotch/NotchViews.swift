@@ -152,7 +152,9 @@ struct ExpandedView: View {
             Header()
             if let error = store.error { Banner(text: error, tone: .bad) }
             if store.preparing && store.summary == nil { Banner(text: "Resumo em preparação pelo executor. Aparece em 1 a 2 minutos.", tone: .neutral) }
-            if let s = store.summary, let item = notch.selected {
+            if notch.webTarget != nil {
+                AdjustView()
+            } else if let s = store.summary, let item = notch.selected {
                 CampaignDetailView(s: s, item: item)
             } else if let s = store.summary {
                 KPIStrip(s: s)
@@ -390,7 +392,7 @@ struct NowTab: View {
                     ForEach(s.approvals.items) { a in
                         ListRow(id: "ap:" + a.id, symbol: "checkmark.seal.fill", tone: .warn, title: a.title ?? "Proposta exata",
                                 subtitle: a.expiresAt.map { "vence " + Format.stamp($0) } ?? "conferir e aprovar", tag: showProject ? a.project : nil,
-                                value: "Conferir", action: { store.open("#cards") })
+                                value: "Conferir", action: { withAnimation(DS.Motion.quick) { notch.webTarget = URL(string: Store.base.absoluteString + "/#cards") } })
                     }
                 }
             }
@@ -596,10 +598,11 @@ struct CampaignDetailView: View {
                     }
                 }
                 Spacer()
-                Button { store.open(deepLink) } label: {
-                    HStack(spacing: 5) { Text("Abrir card").font(DS.Font.bodyStrong); Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)) }
+                Button { withAnimation(DS.Motion.quick) { notch.webTarget = URL(string: Store.base.absoluteString + "/" + deepLink) } } label: {
+                    HStack(spacing: 5) { Image(systemName: "slider.horizontal.3").font(.system(size: 10, weight: .bold)); Text("Ajustar aqui").font(DS.Font.bodyStrong) }
                         .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(DS.Color.accent, in: Capsule())
-                }.buttonStyle(.plain).help("Abrir o card desta campanha no Bunker para decidir")
+                }.buttonStyle(.plain).help("Pausar, reduzir ou aumentar pelo card do Bunker, dentro do notch")
+                IconButton(symbol: "arrow.up.right.square", help: "Abrir o card no navegador") { store.open(deepLink) }
             }
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -636,5 +639,45 @@ struct CampaignDetailView: View {
     var deepLink: String {
         var c = URLComponents(); c.queryItems = [URLQueryItem(name: "project", value: item.detail?.projectId ?? ""), URLQueryItem(name: "q", value: item.campaignId ?? "")]
         return "#cards?" + (c.percentEncodedQuery ?? "")
+    }
+}
+
+/// The real Bunker card inside the island: same buttons, locks and exact confirmation as the web.
+/// Signing in is the owner e-mail link, pasted here once; the session stays in this app's web store.
+struct AdjustView: View {
+    @EnvironmentObject var store: Store
+    @EnvironmentObject var notch: NotchState
+    var onLogin: Bool { notch.webCurrent?.path.hasPrefix("/auth/") ?? false }
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            HStack(spacing: DS.Space.s) {
+                IconButton(symbol: "chevron.left", help: "Voltar ao resumo") { withAnimation(DS.Motion.quick) { notch.webTarget = nil } }
+                Text("Ajustar no Bunker").font(DS.Font.bodyStrong)
+                Pill(text: "confirmação exata", tone: .accent)
+                Spacer()
+                IconButton(symbol: "arrow.clockwise", help: "Recarregar o card") { notch.webReload &+= 1 }
+                IconButton(symbol: "safari", help: "Abrir no navegador") { if let url = notch.webCurrent ?? notch.webTarget { NSWorkspace.shared.open(url) } }
+            }
+            if onLogin {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    Text("Entre uma vez: peça o link de acesso abaixo, depois copie o link do e-mail (clique com o botão direito › Copiar link) e cole aqui.")
+                        .font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: DS.Space.s) {
+                        TextField("Cole aqui o link do e-mail do Bunker", text: $notch.pastedLink).textFieldStyle(.roundedBorder).controlSize(.small)
+                        Button("Entrar") {
+                            if let url = WebScope.signInLink(notch.pastedLink) { notch.webTarget = url; notch.pastedLink = "" }
+                        }.controlSize(.small).disabled(WebScope.signInLink(notch.pastedLink) == nil)
+                    }
+                }
+                .padding(DS.Space.s).card()
+            }
+            if let url = notch.webTarget {
+                BunkerWebView(url: url, reloadToken: $notch.webReload, currentURL: $notch.webCurrent)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).stroke(DS.Color.stroke))
+            }
+            Text("Executa só a proposta exata que você aprovar no card, com despacho único. Sem proposta exata, a escolha fica como intenção.")
+                .font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted).padding(.bottom, DS.Space.s)
+        }
     }
 }
