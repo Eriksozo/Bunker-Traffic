@@ -302,3 +302,24 @@ Escopo pedido pelo dono: filtro Hoje em Mudanças de orçamento e status, preser
 - Intenção continua distinta de aprovação. Mudança de cenário invalida a aprovação anterior e avisa no editor. Decisão confirmada sai da fila compartilhada; falha de resposta mantém a conciliação já existente no histórico.
 - Claude via Cursor foi tentado como escritor principal, mas a sessão OAuth expirou e não renovou. Codex concluiu esta alteração delimitada sem mudar credenciais, políticas financeiras, agenda ou campanhas.
 - Validação: suíte de 963 testes, typecheck e build aprovados. Controle de navegador indisponível em duas tentativas; nenhuma captura ou decisão real usada como teste. Publicação da mesma fonte prevista para Cloudflare e Site privado.
+
+## Bunker para Mac — notch e barra de menus (registro escrito às 2026-11-07 14:02:22 UTC por `date -u`)
+
+- **Pedido do dono:** o Bunker no Mac "como o coucou", com tudo visível. Conexão escolhida: credencial própria só de leitura.
+- **Servidor** (commit `8906e9b`, versão Cloudflare `cf1f6704`):
+  - `GET /api/companion` devolve um resumo compacto: hoje vs ontem/7d, o que fazer agora, propostas aguardando o dono, atividade dos gestores com quem/quando/de → para, últimas conclusões dos agentes e status do executor.
+  - Aceita a sessão do dono ou `BUNKER_COMPANION_TOKEN`, este só nessa rota GET. O bearer é removido no repasse e o cabeçalho `x-bunker-companion` forjado é apagado em todas as rotas.
+  - Em produção, a credencial do app recebe 401 em `/mcp`, `/api/state`, `/internal/storage` e POST.
+- **App** (`mac/BunkerNotch`, SwiftUI/AppKit, montado com as Command Line Tools por `mac/build.sh`):
+  - Ilha sobre o notch que abre ao passar o mouse, item na barra de menus e avisos de novas aprovações, mudanças de gestores e perdas.
+  - Instalado em `~/Applications/Bunker.app`, assinado localmente.
+  - A credencial foi importada uma vez para as Chaves (`com.eriksozo.bunker.notch`) e o arquivo foi apagado.
+  - Sem XCTest/macros nas CLT: as verificações rodam em `Bunker --self-test` e o build recusa instalar se falharem.
+- **Coucou:**
+  - Estudada a técnica de janela do notch no código MIT (crédito em `mac/NOTICE.md`).
+  - Nenhum ativo de marca usado: nome, Mochi, ícones e sons.
+- **Validação:** 967 testes, typecheck e build; self-test do app. Rota conferida com dados reais: 6 projetos; em 24h, 96 aumentos, 9 reduções, 79 pausas e 33 ativações, com nomes vindos do histórico Malva.
+- **Pendências:**
+  - Conferência visual do notch pelo dono (a captura de tela não está liberada para o Claude).
+  - Aprovar no notch exige login de dono (segunda etapa).
+  - Executor com 8 falhas na última hora no momento da leitura.
