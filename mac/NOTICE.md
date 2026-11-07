@@ -2,7 +2,7 @@
 
 O app do notch e da barra de menus (`mac/BunkerNotch`) é do Bunker: nome, ícone, cores e interface próprios.
 
-A técnica de janela do notch — painel transparente fixo acima da barra de menus, medição do notch por `safeAreaInsets`/áreas auxiliares e verificação periódica do cursor para alternar a passagem de cliques — foi estudada no projeto de código aberto Coucou (`github.com/Louis-CFM/coucou`), cujo **código** é distribuído sob a licença MIT:
+As técnicas de janela e comportamento do notch — painel transparente fixo acima da barra de menus, medição do notch por `safeAreaInsets`/áreas auxiliares, verificação periódica do cursor (mais rápida só perto da ilha) para alternar a passagem de cliques, máquina de estados repouso/espiada/aberto/aviso, atalho global por `RegisterEventHotKey` (sem permissão de acessibilidade) e escolha de tela (notch, barra de menus ou mouse) — foram estudadas no projeto de código aberto Coucou (`github.com/Louis-CFM/coucou`), cujo **código** é distribuído sob a licença MIT:
 
 > MIT License — Copyright (c) 2026 Louis Raillé
 >

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 enum NotchTab: String, CaseIterable { case now = "Agora", managers = "Gestores", agents = "Agentes", system = "Sistema" }
@@ -35,35 +36,61 @@ final class NotchPanel: NSPanel {
 
 @MainActor
 final class NotchState: ObservableObject {
-    @Published var expanded = false
+    @Published var mode: IslandFSM.State = .compact
     @Published var activityFilter: String?
     @Published var tab: NotchTab = .now
     @Published var hovered: String?
     @Published var geometry: NotchGeometry
+    /// Set by the controller: views call it for clicks on the resting/peek/alert island.
+    var onClick: () -> Void = {}
+    var onClose: () -> Void = {}
     init(geometry: NotchGeometry) { self.geometry = geometry }
 
-    static let expandedSize = CGSize(width: 660, height: 540)
+    var expanded: Bool { mode == .open }
+    static let openSize = CGSize(width: 660, height: 540)
     var islandSize: CGSize {
-        expanded ? Self.expandedSize : CGSize(width: geometry.width + 150, height: geometry.height + (geometry.hasNotch ? 0 : 2))
+        let ears = geometry.width + 150, top = geometry.height + (geometry.hasNotch ? 0 : 2)
+        switch mode {
+        case .compact: return CGSize(width: ears, height: top)
+        case .peek: return CGSize(width: max(ears + 140, 420), height: top + 30)
+        case .alert: return CGSize(width: 500, height: top + 86)
+        case .open: return Self.openSize
+        }
     }
 }
 
-/// Fixed-size click-through panel; the island inside grows on hover. Mouse polling decides when the
-/// panel accepts clicks, so the rest of the menu bar keeps working. Technique studied from the MIT-licensed
-/// open-source project credited in mac/NOTICE.md; the implementation and look here are Bunker's own.
+/// Fixed-size click-through panel; the island inside changes size with the state machine.
+/// Hover peeks, click or ⌥⌘B opens, Escape / outside click / inactivity folds, new events show a short alert.
+/// Technique studied from the MIT-licensed project credited in mac/NOTICE.md; implementation and look are Bunker's own.
 @MainActor
 final class NotchController {
     private let panel: NotchPanel
     private let state: NotchState
+    private let store: Store
+    private var fsm = IslandFSM()
     private var poll: Timer?
-    private var collapseWork: DispatchWorkItem?
+    private var pollInterval: TimeInterval = PollRate.far
+    private var wasInside = false
+    private var alertWork: DispatchWorkItem?
+    private var idleWork: DispatchWorkItem?
+    private var queue: [IslandAlert] = []
+    private var monitors: [Any] = []
+    private var bag = Set<AnyCancellable>()
     private static let panelSize = CGSize(width: 700, height: 560)
+    static let alertSeconds: TimeInterval = 6
+    static let idleSeconds: TimeInterval = 45
+
+    var display: DisplayChoice {
+        get { DisplayChoice(rawValue: UserDefaults.standard.string(forKey: "display") ?? "") ?? .notch }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "display"); relocate(force: true) }
+    }
 
     init(store: Store) {
-        let screen = NotchController.preferredScreen()
+        self.store = store
+        let screen = NotchController.screen(for: DisplayChoice(rawValue: UserDefaults.standard.string(forKey: "display") ?? "") ?? .notch)
         state = NotchState(geometry: NotchGeometry.measure(screen))
-        let origin = NotchGeometry.panelOrigin(screen: screen.frame, panel: Self.panelSize)
-        panel = NotchPanel(contentRect: NSRect(origin: origin, size: Self.panelSize), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = NotchPanel(contentRect: NSRect(origin: NotchGeometry.panelOrigin(screen: screen.frame, panel: Self.panelSize), size: Self.panelSize),
+                           styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -76,45 +103,111 @@ final class NotchController {
         host.autoresizingMask = [.width, .height]
         panel.contentView = host
         panel.orderFrontRegardless()
+        state.onClick = { [weak self] in self?.send(.click) }
+        state.onClose = { [weak self] in self?.send(.escape) }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.relocate() }
+            Task { @MainActor in self?.relocate(force: true) }
         }
-        poll = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.track() }
-        }
+        // Escape and 1–4 while open; a click anywhere else folds a click-opened island.
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.fsm.isOpen else { return event }
+            return self.handleKey(event) ? nil : event
+        } as Any)
+        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor in if self?.fsm.isOpen == true { self?.send(.clickOutside) } }
+        } as Any)
+        store.$alert.compactMap { $0 }.receive(on: RunLoop.main).sink { [weak self] alert in self?.enqueue(alert) }.store(in: &bag)
+        HotKey.register { [weak self] in self?.send(.toggle) }
+        schedulePoll(PollRate.far)
     }
 
-    static func preferredScreen() -> NSScreen {
-        NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
+    func toggle() { send(.toggle) }
+
+    static func screen(for choice: DisplayChoice) -> NSScreen {
+        let screens = NSScreen.screens, mouse = NSEvent.mouseLocation
+        guard !screens.isEmpty else { return NSScreen.main! }
+        let index = DisplayChoice.resolve(choice, screens: screens.map { ($0.safeAreaInsets.top > 0, $0.frame.contains(mouse)) })
+        return screens[min(index, screens.count - 1)]
     }
 
-    func toggle() { setExpanded(!state.expanded) }
-
-    private func relocate() {
-        let screen = Self.preferredScreen()
+    private func relocate(force: Bool = false) {
+        let screen = Self.screen(for: display)
+        let frame = NSRect(origin: NotchGeometry.panelOrigin(screen: screen.frame, panel: Self.panelSize), size: Self.panelSize)
+        guard force || frame != panel.frame else { return }
         state.geometry = NotchGeometry.measure(screen)
-        panel.setFrame(NSRect(origin: NotchGeometry.panelOrigin(screen: screen.frame, panel: Self.panelSize), size: Self.panelSize), display: true)
+        panel.setFrame(frame, display: true)
     }
 
-    private func setExpanded(_ value: Bool) {
-        collapseWork?.cancel()
-        guard state.expanded != value else { return }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { state.expanded = value }
-    }
+    // MARK: - State machine
 
-    /// Mouse in panel coordinates (AppKit origin bottom-left) against the island rect.
-    private func track() {
-        let mouse = NSEvent.mouseLocation, frame = panel.frame
-        let island = NotchGeometry.islandRect(panel: frame.size, island: state.islandSize).insetBy(dx: -6, dy: -6)
-        let inside = island.contains(CGPoint(x: mouse.x - frame.minX, y: mouse.y - frame.minY))
-        if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
-        if inside {
-            collapseWork?.cancel(); collapseWork = nil
-            if !state.expanded { setExpanded(true) }
-        } else if state.expanded && collapseWork == nil {
-            let work = DispatchWorkItem { [weak self] in Task { @MainActor in self?.setExpanded(false) } }
-            collapseWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+    private func send(_ input: IslandFSM.Input) {
+        let before = fsm.state
+        let after = fsm.handle(input)
+        guard after != before else { return }
+        withAnimation(DS.Motion.spring) { state.mode = after }
+        alertWork?.cancel(); idleWork?.cancel()
+        switch after {
+        case .open:
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKey()
+            scheduleIdle()
+        case .alert:
+            let work = DispatchWorkItem { [weak self] in Task { @MainActor in self?.send(.alertExpired) } }
+            alertWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.alertSeconds, execute: work)
+        case .compact:
+            if panel.isKeyWindow { panel.resignKey() }
+            if !queue.isEmpty { let next = queue.removeFirst(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.send(.alert(next)) } }
+        case .peek: break
         }
+    }
+
+    private func enqueue(_ alert: IslandAlert) {
+        if case .compact = fsm.state { send(.alert(alert)) }
+        else if case .peek = fsm.state { send(.alert(alert)) }
+        else if queue.count < 3, !queue.contains(alert) { queue.append(alert) }
+    }
+
+    private func scheduleIdle() {
+        let work = DispatchWorkItem { [weak self] in Task { @MainActor in self?.idleCheck() } }
+        idleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.idleSeconds, execute: work)
+    }
+    private func idleCheck() {
+        guard fsm.isOpen else { return }
+        if wasInside { scheduleIdle() } else { send(.idle) }
+    }
+
+    private func handleKey(_ event: NSEvent) -> Bool {
+        if event.keyCode == 53 { send(.escape); return true } // Escape
+        if let chars = event.charactersIgnoringModifiers, let n = Int(chars), (1...NotchTab.allCases.count).contains(n) {
+            withAnimation(DS.Motion.quick) { state.tab = NotchTab.allCases[n - 1] }
+            return true
+        }
+        return false
+    }
+
+    // MARK: - Pointer tracking
+
+    private func schedulePoll(_ interval: TimeInterval) {
+        pollInterval = interval
+        poll?.invalidate()
+        poll = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in Task { @MainActor in self?.track() } }
+    }
+
+    /// Mouse in panel coordinates (AppKit origin bottom-left) against the current island rect.
+    private func track() {
+        if display == .followMouse, !fsm.isOpen { relocate() }
+        let mouse = NSEvent.mouseLocation, frame = panel.frame
+        let island = NotchGeometry.islandRect(panel: frame.size, island: state.islandSize)
+        let local = CGPoint(x: mouse.x - frame.minX, y: mouse.y - frame.minY)
+        let inside = island.insetBy(dx: -6, dy: -6).contains(local)
+        if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
+        if inside != wasInside {
+            wasInside = inside
+            send(inside ? .mouseEntered : .mouseLeft)
+        }
+        let next = PollRate.interval(mouse: local, island: island, open: fsm.isOpen)
+        if next != pollInterval { schedulePoll(next) }
     }
 }

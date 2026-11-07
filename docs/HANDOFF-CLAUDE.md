@@ -340,3 +340,27 @@ Escopo pedido pelo dono: filtro Hoje em Mudanças de orçamento e status, preser
   - O envelope MCP `cloud-data` não lê mais a central.
   - Às 14:42 UTC: coletas e etapas sem falha.
 - **Pendência:** o Site antigo ainda consulta a central a cada 2 s por aba aberta. Republicar o Site ou usar o Worker reduziria essa carga. Investigar com o Codex se os timeouts voltarem.
+
+## Notch: comportamento revisado (registro escrito às 2026-11-07 14:48:26 UTC por `date -u`)
+
+- **Bateria no app anterior:**
+  - O mouse abria o painel grande por acidente.
+  - O seletor de projeto fechava junto com o painel quando o mouse saía da ilha.
+  - Não havia teclado.
+  - O monitor externo é a tela principal, então o notch ficava fora de vista.
+  - Nada chamava atenção no notch.
+  - "Em preparação" aparecia como erro.
+  - Consumo em repouso: 0,2% de CPU, ~82 MB.
+- **Mudanças** (técnicas do Coucou MIT, crédito em `mac/NOTICE.md`):
+  - Máquina de estados pura (`IslandFSM`): passar o mouse só espia; clique ou ⌥⌘B abre e fixa; Esc, clique fora ou 45 s sem uso fecham.
+  - Avisos de nova proposta, perda ou mudança de gestor expandem o notch por 6 s, numa fila de até 3.
+  - Atalho global ⌥⌘B por Carbon.
+  - Teclas 1 a 4 trocam de aba.
+  - Escolha de tela (notch, principal, mouse) na barra de menus.
+  - A verificação do mouse roda a 30 Hz só perto da ilha (5 Hz no resto).
+  - "Em preparação" virou um estado neutro.
+  - O aviso de autor que chega depois tem identidade estável e não repete o alerta.
+- **Validação:**
+  - `Bunker --self-test` cobre a máquina de estados, a cadência, a escolha de tela e a identidade estável.
+  - Consumo em repouso: 0,0% de CPU, ~51 MB.
+  - A conferência visual do comportamento fica com o dono.

@@ -54,7 +54,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else if store.error == nil { info("Carregando…") }
         menu.addItem(.separator())
         menu.addItem(item("Abrir o Bunker", #selector(openBunker), "o"))
-        menu.addItem(item("Mostrar ou esconder o painel do notch", #selector(toggleNotch), "b"))
+        menu.addItem(item("Abrir ou fechar o notch (\(HotKey.label))", #selector(toggleNotch), ""))
+        let screens = NSMenuItem(title: "Mostrar o notch na", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for choice in DisplayChoice.allCases {
+            let i = NSMenuItem(title: choice.label, action: #selector(chooseDisplay(_:)), keyEquivalent: "")
+            i.target = self; i.representedObject = choice.rawValue; i.state = notch?.display == choice ? .on : .off
+            sub.addItem(i)
+        }
+        screens.submenu = sub
+        menu.addItem(screens)
         menu.addItem(item("Atualizar agora", #selector(refresh), "r"))
         let login = item("Abrir ao iniciar o Mac", #selector(toggleLogin), "")
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -68,6 +77,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc private func openBunker() { store.open("#cards") }
     @objc private func toggleNotch() { notch?.toggle() }
+    @objc private func chooseDisplay(_ sender: NSMenuItem) {
+        if let raw = sender.representedObject as? String, let choice = DisplayChoice(rawValue: raw) { notch?.display = choice }
+    }
     @objc private func refresh() { Task { await store.refresh() } }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func toggleLogin() {

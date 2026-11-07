@@ -24,11 +24,12 @@ struct NotchRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                IslandShape(radius: notch.expanded ? DS.Radius.island : 10).fill(DS.Color.canvas)
-                if notch.expanded {
-                    ExpandedView().padding(.top, notch.geometry.height + DS.Space.s).transition(.opacity.combined(with: .move(edge: .top)))
-                } else {
-                    CollapsedView().transition(.opacity)
+                IslandShape(radius: notch.expanded ? DS.Radius.island : notch.mode == .compact ? 10 : 18).fill(DS.Color.canvas)
+                switch notch.mode {
+                case .open: ExpandedView().padding(.top, notch.geometry.height + DS.Space.s).transition(.opacity.combined(with: .move(edge: .top)))
+                case .alert(let alert): AlertView(alert: alert).transition(.opacity)
+                case .peek: PeekView().transition(.opacity)
+                case .compact: CollapsedView().transition(.opacity)
                 }
             }
             .frame(width: notch.islandSize.width, height: notch.islandSize.height)
@@ -64,8 +65,70 @@ struct CollapsedView: View {
             }.frame(width: 75)
         }
         .frame(height: notch.geometry.height)
+        .contentShape(Rectangle())
+        .onTapGesture { notch.onClick() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Bunker: \(store.attention) itens pedem atenção")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// Hover: a one-line glance under the notch. Click (or ⌥⌘B) opens the full island.
+struct PeekView: View {
+    @EnvironmentObject var store: Store
+    @EnvironmentObject var notch: NotchState
+    var body: some View {
+        VStack(spacing: 0) {
+            CollapsedView().allowsHitTesting(false)
+            HStack(spacing: DS.Space.s) {
+                StatusDot(tone: healthTone(store), size: 6)
+                Text(headline).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(1)
+                Spacer(minLength: DS.Space.s)
+                Text("clique ou \(HotKey.label)").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
+            }
+            .padding(.horizontal, DS.Space.l).frame(height: 30)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { notch.onClick() }
+    }
+    var headline: String {
+        if store.preparing { return "Resumo em preparação pelo executor…" }
+        if let e = store.error { return e }
+        guard let s = store.summary else { return "Lendo o Bunker…" }
+        let losses = s.queue.filter { $0.kind == "loss" }.count
+        var parts = ["ROAS hoje \(Format.ratio(s.today.today?.roas))"]
+        if s.approvals.count > 0 { parts.insert("\(s.approvals.count) aguardando você", at: 0) }
+        if losses > 0 { parts.append("\(losses) perda(s)") }
+        let changes = s.activity.summary.values.reduce(0) { $0 + $1.count }
+        parts.append("\(changes) mudança(s) em \(s.activity.hours)h")
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// New approval, loss or manager change: expands by itself for a few seconds.
+struct AlertView: View {
+    @EnvironmentObject var notch: NotchState
+    let alert: IslandAlert
+    var tone: Tone { alert.kind == .approval ? .warn : alert.kind == .loss ? .bad : .accent }
+    var symbol: String { alert.kind == .approval ? "checkmark.seal.fill" : alert.kind == .loss ? "arrow.down.right" : "person.crop.circle.badge.exclamationmark" }
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: notch.geometry.height)
+            HStack(alignment: .center, spacing: DS.Space.m) {
+                IconBadge(symbol: symbol, tone: tone)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(alert.title).font(DS.Font.bodyStrong).foregroundStyle(DS.Color.ink).lineLimit(1)
+                    Text(alert.detail).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(2).truncationMode(.middle)
+                }
+                Spacer(minLength: DS.Space.s)
+                Text("abrir").font(DS.Font.caption).foregroundStyle(DS.Color.accent)
+            }
+            .padding(.horizontal, DS.Space.l).padding(.vertical, DS.Space.m)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { notch.onClick() }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(alert.title + ". " + alert.detail)
     }
 }
 
@@ -76,6 +139,7 @@ struct ExpandedView: View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             Header()
             if let error = store.error { Banner(text: error, tone: .bad) }
+            if store.preparing && store.summary == nil { Banner(text: "Resumo em preparação pelo executor. Aparece em 1 a 2 minutos.", tone: .neutral) }
             if let s = store.summary {
                 KPIStrip(s: s)
                 TabBar(s: s)
@@ -90,7 +154,7 @@ struct ExpandedView: View {
                     }
                     .padding(.bottom, DS.Space.l)
                 }
-            } else if store.error == nil {
+            } else if store.error == nil && !store.preparing {
                 HStack(spacing: DS.Space.s) { ProgressView().controlSize(.small); Text("Lendo o Bunker…").font(DS.Font.body).foregroundStyle(DS.Color.inkMuted) }
                     .frame(maxWidth: .infinity, alignment: .center).padding(.top, DS.Space.xl)
             }
@@ -102,6 +166,7 @@ struct ExpandedView: View {
 
 struct Header: View {
     @EnvironmentObject var store: Store
+    @EnvironmentObject var notch: NotchState
     var body: some View {
         HStack(spacing: DS.Space.s) {
             HStack(spacing: 6) {
@@ -122,6 +187,7 @@ struct Header: View {
                     .foregroundStyle(.black.opacity(0.85))
                     .background(DS.Color.accent, in: Capsule())
             }.buttonStyle(.plain).help("Abrir os cards de decisão no navegador")
+            IconButton(symbol: "xmark", help: "Fechar (Esc) · abrir de novo com \(HotKey.label)") { notch.onClose() }
         }
     }
     var freshness: String {

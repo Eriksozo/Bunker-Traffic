@@ -11,6 +11,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
+        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
     }
@@ -52,6 +53,44 @@ enum SelfTest {
         check(Credential.valid(String(repeating: "a", count: 43)), #line)
         check(!Credential.valid("short"), #line)
         check(!Credential.valid(String(repeating: "a", count: 42) + "\""), #line)
+    }
+
+    private static func testIslandStateMachine() {
+        var f = IslandFSM()
+        let a = IslandAlert(id: "x", kind: .loss, title: "Perda", detail: "C")
+        check(f.handle(.mouseEntered) == .peek, #line)               // hover only peeks
+        check(f.handle(.mouseLeft) == .compact, #line)
+        check(f.handle(.click) == .open && f.pinned, #line)          // click opens and pins
+        check(f.handle(.mouseLeft) == .open, #line)                  // visiting a menu outside keeps it open
+        check(f.handle(.alert(a)) == .open, #line)                   // an alert never replaces an open island
+        check(f.handle(.escape) == .compact && !f.pinned, #line)
+        check(f.handle(.alert(a)) == .alert(a), #line)
+        check(f.handle(.mouseLeft) == .alert(a), #line)              // leaving never hides an alert early
+        check(f.handle(.alertExpired) == .compact, #line)
+        check(f.handle(.toggle) == .open, #line)                     // ⌥⌘B
+        check(f.handle(.toggle) == .compact, #line)
+        _ = f.handle(.click); check(f.handle(.clickOutside) == .compact, #line)
+        _ = f.handle(.click); check(f.handle(.idle) == .compact, #line)
+        check(f.handle(.alert(a)) == .alert(a) && f.handle(.click) == .open, #line) // clicking an alert opens
+    }
+
+    private static func testPollRateAndDisplayChoice() {
+        let island = CGRect(x: 180, y: 528, width: 340, height: 32)
+        check(PollRate.interval(mouse: CGPoint(x: 300, y: 540), island: island, open: false) == PollRate.near, #line)
+        check(PollRate.interval(mouse: CGPoint(x: 300, y: 20), island: island, open: false) == PollRate.far, #line)
+        check(PollRate.interval(mouse: CGPoint(x: 300, y: 20), island: island, open: true) == PollRate.near, #line)
+        let screens: [(hasNotch: Bool, containsMouse: Bool)] = [(false, false), (true, false)]
+        check(DisplayChoice.resolve(.notch, screens: screens) == 1, #line)
+        check(DisplayChoice.resolve(.menuBar, screens: screens) == 0, #line)
+        check(DisplayChoice.resolve(.followMouse, screens: [(false, true), (true, false)]) == 0, #line)
+        check(DisplayChoice.resolve(.followMouse, screens: screens) == 1, #line)
+        check(DisplayChoice.resolve(.notch, screens: [(false, false)]) == 0, #line)
+    }
+
+    private static func testStableChangeKey() {
+        let json = #"[{"action":"pause","field":"status","before":"ACTIVE","after":"PAUSED","percent":null,"currency":null,"at":"2026-11-07T12:00:00.000Z","from":"2026-11-07T11:45:00.000Z","actor":null,"origin":"observed","campaign":"C","account":null,"campaignId":"2"},{"action":"pause","field":"status","before":"ACTIVE","after":"PAUSED","percent":null,"currency":null,"at":"2026-11-07T11:52:00.000Z","from":null,"actor":"Jorge","origin":"history","campaign":"C","account":null,"campaignId":"2"}]"#
+        guard let pair = try? JSONDecoder().decode([Summary.Activity].self, from: Data(json.utf8)) else { check(false, #line); return }
+        check(Store.changeKey(pair[0]) == Store.changeKey(pair[1]), #line) // the author arriving later is not a new alert
     }
 
     private static func testIslandSitsAtTheTopCentre() {
