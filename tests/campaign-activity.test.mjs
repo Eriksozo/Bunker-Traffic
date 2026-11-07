@@ -98,3 +98,19 @@ test('observed transition only merges within its observed interval; distinct acc
  const s={campaignChanges:[observed],decisionHistory:[history('outside','dailyBudget',100,200,2,'Outra'),history('currency','dailyBudget',100,200,1.1,'Dolar',{currency:'USD'}),history('account','dailyBudget',100,200,1.1,'Outra conta',{adAccountId:'act2'}),history('project','dailyBudget',100,200,1.1,'Outro projeto',{project:'q',projects:['q']})]};
  const log=activityLog(s,{project:'p',now});assert.equal(log.find(e=>e.origin==='observed').actor,null);assert.equal(log.length,4);
 });
+
+test('a net observed increase is replaced by the complete ordered history chain with each actual manager',()=>{
+ const observation={id:'net',project:'p',adAccountId:'act',objectId:'c1',observedAt:iso(1),previousObservedAt:iso(2),changes:[{field:'dailyBudget',before:100,after:300}],before:{budgetCurrency:'BRL'},after:{budgetCurrency:'BRL'}};
+ const a=history('a','dailyBudget',100,150,1.8,'Ana'),b=history('b','dailyBudget',150,300,1.7,'Bruno');
+ const s={campaignChanges:[observation],decisionHistory:[a,b]},out=activityLog(s,{now});
+ assert.deepEqual(out.map(e=>[e.before,e.after,e.actor]),[[150,300,'Bruno'],[100,150,'Ana']]);
+ assert.equal(activitySummary(out).increase.unknown,0);
+ const card={project:'p',sourceAt:iso(2),liveAt:iso(1),row:{adAccountId:'act',externalId:'c1',budgetCurrency:'BRL'},liveDrift:{changes:[{field:'dailyBudget',before:100,after:300}]}};
+ assert.equal(cardActivity(s,card,{now}).events.length,2);
+ for(const historyRows of [[a],[b],[a,{...b,occurredAt:a.occurredAt}],[a,{...b,currency:'USD'}],[a,{...b,before:120}],[a,{...b,project:'q',projects:['q']}]])assert.ok(activityLog({...s,decisionHistory:historyRows},{now}).some(e=>e.origin==='observed'));
+});
+
+test('daily and lifetime changes with matching values are distinct financial events',()=>{
+ const out=activityLog({decisionHistory:[history('daily','dailyBudget',100,200,1,'Ana'),history('lifetime','lifetimeBudget',100,200,1,'Ana')]},{now});
+ assert.equal(out.length,2);
+});
