@@ -58,10 +58,15 @@ struct BunkerWebView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {
-        if context.coordinator.lastURL != url || context.coordinator.lastToken != reloadToken {
+        if context.coordinator.lastURL != url {
             context.coordinator.lastURL = url
             context.coordinator.lastToken = reloadToken
             view.load(URLRequest(url: url))
+        } else if context.coordinator.lastToken != reloadToken {
+            // After sign-in the requested URL may be an already-consumed e-mail link.
+            // Refresh the current card, never replay that one-use verification URL.
+            context.coordinator.lastToken = reloadToken
+            view.reload()
         }
     }
 
