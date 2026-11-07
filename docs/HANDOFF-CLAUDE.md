@@ -103,7 +103,7 @@ Esta conferência substitui as pendências de autenticação da tabela anterior.
 
 Os OAuths pertencem ao cliente Claude e devem ser renovados pelo fluxo próprio quando necessário. A credencial dedicada do Bunker permanece em arquivo privado fora do Git. O próximo trabalho concreto deve começar pela investigação de persistência do executor, preservando histórico e reservas; este repasse não autoriza aprovar propostas pelo proprietário.
 
-## Validação de conexões pela sessão nova do Claude — 07/11/2026 (≈02:15 UTC)
+## Validação de conexões pela sessão nova do Claude — 07/11/2026 (status do executor lido com `controlReadAt` 02:13:49 UTC)
 
 Somente leituras pelos MCPs da própria sessão; nenhuma reserva, coleta, campanha, agenda, pausa, dado, código ou infraestrutura alterados.
 
@@ -123,7 +123,7 @@ Diagnóstico das falhas `CLOUD_STEP_FAILED` (sem correção nesta etapa):
 - Não identificado: qual operação de `bunker_store` (commit da central, `reports`, `daily`, `suggestions`/`collaborations` ou `resolutions`) excedeu o limite. `pg_stat_statements` registra só a chamada RPC de nível superior, e o `lastErrorDetail` do executor é limpo pelo próximo passo bem-sucedido.
 - Próximo passo sugerido (exige decisão do proprietário): identificar a operação lenta (log por operação no Worker ou telemetria com escopo adicional) antes de qualquer mudança de esquema, timeout ou retenção. Não aumentar timeouts nem apagar histórico para contornar.
 
-## Gargalo de persistência do executor — causa e correção local (07/11/2026, ≈02:45 UTC)
+## Gargalo de persistência do executor — causa e correção (07/11/2026: investigação após 02:13:49 UTC; migração registrada às 02:31:58 UTC; registro escrito às 02:34:10 UTC por `date -u`)
 
 Estado: revisado e aprovado pelo Codex (instrumentação e migração de duas linhas); aplicação e publicação autorizadas pelo proprietário via copiloto. Reversão: reaplicar a função de `20261104175212_index_card_archive_projects.sql`, que difere só nas duas linhas do ramo `get`.
 
@@ -142,7 +142,7 @@ Limitações:
 - Não há Postgres local; a equivalência SQL foi comprovada na base viva por leitura, não por teste automatizado.
 - `collaborations` decodifica todas as colaborações do projeto antes do limite; não faz parte das falhas e ficou fora desta etapa.
 
-Aplicação no Supabase Bunker Traffic (07/11 ≈02:32 UTC), versão `20261107023158`:
+Aplicação no Supabase Bunker Traffic, versão `20261107023158` (02:31:58 UTC, conforme registrado pelo Supabase):
 - O corpo vivo é idêntico ao do arquivo (md5 `cc29c4ed…`). A ACL (`postgres`, `service_role`), o `search_path` e o modo security invoker não mudaram. Índices, RLS, timeouts e dados não foram tocados.
 - Pela própria função, os 7 casos deram hashes idênticos à forma anterior e aos valores medidos antes da aplicação. A projeção `revision` não traz `payload`, e a central continuou na revisão 5437.
 - Em 8 chamadas seguidas, `get central` levou de 4 a 18 ms (de 4 a 6 ms a partir da 6ª, já com plano em cache). `auto_explain` não é permitido neste projeto, então o plano interno foi conferido pelo `PREPARE` genérico com a mesma instrução.
