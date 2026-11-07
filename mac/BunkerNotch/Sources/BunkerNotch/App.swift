@@ -7,6 +7,7 @@ import SwiftUI
 enum BunkerNotchMain {
     @MainActor static func main() {
         if CommandLine.arguments.contains("--self-test") { exit(SelfTest.run()) }
+        if let i = CommandLine.arguments.firstIndex(of: "--render-notch"), i + 1 < CommandLine.arguments.count { exit(NotchPreview.render(to: CommandLine.arguments[i + 1])) }
         if let i = CommandLine.arguments.firstIndex(of: "--render-bunk"), i + 1 < CommandLine.arguments.count { exit(BunkSheet.render(to: CommandLine.arguments[i + 1])) }
         let app = NSApplication.shared
         let delegate = AppDelegate()

@@ -16,6 +16,18 @@ O Bunk fora do notch (`BunkDesktop.swift`, `BunkRoamLogic.swift`) usa mecânicas
 
 Ideias reescritas do zero, sem cópia de código, a partir de outros projetos abertos (ver `docs/notch-research.md`): animação só quando há algo para ver, agrupamento de avisos em rajada e rodízio do notch fechado por urgência (CodeIsland, MIT, github.com/wxtsky/CodeIsland); detecção de app em tela cheia só por limites de janela, sem permissão de Gravação de Tela (CodeIsland); realocação ao desconectar um monitor, pousar e andar sobre a borda das janelas com leitura adaptativa (puck-mac, MIT, github.com/desFernan/puck-mac — sem seus assets); pausa com a tela bloqueada (MewNotch, GPL-3.0 — só a ideia); esconder de gravações e compartilhamento de tela (Atoll, GPL-3.0 — só a ideia).
 
+A forma da ilha (`IslandShape` em `NotchViews.swift`: ombros côncavos no topo que se fundem à moldura, raios de topo e de base animados entre os estados) foi adaptada do `NotchShape` do DynamicNotchKit (`github.com/MrKai77/DynamicNotchKit`), distribuído sob a licença MIT:
+
+> MIT License — Copyright (c) 2025 Kai Azim
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Molas assimétricas (abrir com leve elástico, fechar sem rebote) e a troca de texto por desfoque no rodízio do notch seguem valores e ideias do CodeIsland (MIT, Copyright (c) 2026 wxtsky) e do DynamicNotchKit (MIT), reescritos aqui.
+
 Nenhum ativo de marca do Coucou é usado aqui: o nome "Coucou", o personagem e o nome "Mochi", ícones, sons e mídias pertencem ao autor e não fazem parte deste app.
 
 ## Segurança

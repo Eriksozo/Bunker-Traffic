@@ -53,6 +53,9 @@ final class Store: ObservableObject {
         return s.approvals.count + s.queue.filter { $0.kind == "loss" }.count
     }
 
+    /// `--render-notch` only: a fictional summary, no network call, no credential.
+    func showPreview(_ s: Summary) { summary = s; lastFetch = Date().addingTimeInterval(-40); error = nil; preparing = false }
+
     func refresh() async {
         guard let token = Credential.importIfNeeded() else {
             error = "Credencial do app não encontrada nas Chaves."; return

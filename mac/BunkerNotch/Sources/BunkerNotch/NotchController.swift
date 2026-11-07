@@ -193,7 +193,9 @@ final class NotchController {
         let before = fsm.state
         let after = fsm.handle(input)
         guard after != before else { return }
-        withAnimation(DS.Motion.spring) { state.mode = after }
+        // Growing springs open, shrinking settles firmly (DS.Motion.island).
+        let size = { (m: IslandFSM.State) -> Int in switch m { case .compact: return 0; case .peek: return 1; case .alert: return 2; case .open: return 3 } }
+        withAnimation(DS.Motion.island(opening: size(after) > size(before))) { state.mode = after }
         alertWork?.cancel(); idleWork?.cancel()
         switch after {
         case .open:

@@ -1,21 +1,55 @@
 import SwiftUI
 
-/// Island attached to the top edge: square top, rounded bottom corners.
+/// Island attached to the top edge. Concave top "shoulders" flow into the bezel like the hardware notch,
+/// rounded bottom corners; both radii animate between states. Path adapted from DynamicNotchKit's
+/// NotchShape (MIT, Kai Azim; credited in mac/NOTICE.md). The shoulders sit inside the rect, so hit areas are unchanged.
 struct IslandShape: Shape {
-    var radius: CGFloat
-    var animatableData: CGFloat { get { radius } set { radius = newValue } }
+    var top: CGFloat
+    var bottom: CGFloat
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(top, bottom) }
+        set { top = newValue.first; bottom = newValue.second }
+    }
+    /// Radii per state: small and tight at rest, softer as the island grows.
+    static func radii(_ mode: IslandFSM.State) -> (top: CGFloat, bottom: CGFloat) {
+        switch mode { case .compact: return (6, 12); case .peek: return (8, 16); case .alert: return (10, 20); case .open: return (14, DS.Radius.island) }
+    }
     func path(in rect: CGRect) -> Path {
-        let r = min(radius, rect.height / 2, rect.width / 2)
+        let t = max(0, min(top, rect.width / 4, rect.height / 3)), b = max(0, min(bottom, rect.height - t, (rect.width - 2 * t) / 2))
         var p = Path()
         p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-        p.addQuadCurve(to: CGPoint(x: rect.maxX - r, y: rect.maxY), control: CGPoint(x: rect.maxX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        p.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - r), control: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addQuadCurve(to: CGPoint(x: rect.minX + t, y: rect.minY + t), control: CGPoint(x: rect.minX + t, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.minX + t, y: rect.maxY - b))
+        p.addQuadCurve(to: CGPoint(x: rect.minX + t + b, y: rect.maxY), control: CGPoint(x: rect.minX + t, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX - t - b, y: rect.maxY))
+        p.addQuadCurve(to: CGPoint(x: rect.maxX - t, y: rect.maxY - b), control: CGPoint(x: rect.maxX - t, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX - t, y: rect.minY + t))
+        p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY), control: CGPoint(x: rect.maxX - t, y: rect.minY))
         p.closeSubpath()
         return p
     }
+}
+
+/// Opening content: a short blur + slight scale from the top edge, so it pours out of the notch.
+/// Reduce Motion falls back to a plain fade.
+private struct PourModifier: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View {
+        content.blur(radius: active ? 8 : 0).scaleEffect(active ? 0.96 : 1, anchor: .top).opacity(active ? 0 : 1)
+    }
+}
+extension AnyTransition {
+    @MainActor static var pour: AnyTransition {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .opacity : .modifier(active: PourModifier(active: true), identity: PourModifier(active: false))
+    }
+    /// Value swaps in small text (ticker): blur-fade instead of a slide. Idea from CodeIsland (MIT).
+    @MainActor static var blurFade: AnyTransition {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .opacity : .modifier(active: BlurFade(active: true), identity: BlurFade(active: false))
+    }
+}
+private struct BlurFade: ViewModifier {
+    let active: Bool
+    func body(content: Content) -> some View { content.blur(radius: active ? 4 : 0).opacity(active ? 0 : 1) }
 }
 
 struct NotchRootView: View {
@@ -24,16 +58,18 @@ struct NotchRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                IslandShape(radius: notch.expanded ? DS.Radius.island : notch.mode == .compact ? 10 : 18).fill(DS.Color.canvas)
+                let radii = IslandShape.radii(notch.mode)
+                IslandShape(top: radii.top, bottom: radii.bottom).fill(DS.Color.canvas)
                 switch notch.mode {
-                case .open: ExpandedView().padding(.top, notch.geometry.height + DS.Space.s).transition(.opacity.combined(with: .move(edge: .top)))
+                case .open: ExpandedView().padding(.top, notch.geometry.height + DS.Space.s).transition(.pour)
                 case .alert(let alert): AlertView(alert: alert).transition(.opacity)
                 case .peek: PeekView().transition(.opacity)
                 case .compact: CollapsedView().transition(.opacity)
                 }
             }
             .frame(width: notch.islandSize.width, height: notch.islandSize.height)
-            .shadow(color: .black.opacity(notch.expanded ? 0.5 : 0), radius: 24, y: 10)
+            // Depth grows with the island: none at rest (it is the bezel), soft when peeking, deep when open.
+            .shadow(color: .black.opacity(notch.expanded ? 0.5 : notch.mode == .compact ? 0 : 0.3), radius: notch.expanded ? 24 : 12, y: notch.expanded ? 10 : 5)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -64,7 +100,7 @@ struct CollapsedView: View {
             Text(current?.text ?? (store.preparing ? "preparando" : "…")).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit()
                 .foregroundStyle(current.map { $0.tone == .neutral ? DS.Color.inkSoft : $0.tone.color } ?? DS.Color.inkSoft)
                 .lineLimit(1).minimumScaleFactor(0.75).frame(width: NotchState.earWidth - 8)
-                .id(notch.tick).transition(.push(from: .bottom))
+                .id(notch.tick).transition(.blurFade)
         }
         // A newly urgent item (approval, loss, account at its limit) is shown at once.
         .onChange(of: tickerItems.map(\.key)) { old, new in
@@ -103,7 +139,7 @@ struct PeekView: View {
                 StatusDot(tone: healthTone(store), size: 6)
                 Text(headline).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(1)
                 Spacer(minLength: DS.Space.s)
-                Text("clique ou \(HotKey.label)").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
+                Text("clique ou \(HotKey.label)").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
             }
             .padding(.horizontal, DS.Space.l).frame(height: 30)
         }
@@ -140,9 +176,12 @@ struct AlertView: View {
                     Text(alert.detail).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(2).truncationMode(.middle)
                 }
                 Spacer(minLength: DS.Space.s)
-                Text("abrir").font(DS.Font.caption).foregroundStyle(DS.Color.accent)
+                HStack(spacing: 3) { Text("abrir"); Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .bold)) }
+                    .font(DS.Font.bodyStrong).foregroundStyle(tone.color)
+                    .padding(.horizontal, 9).padding(.vertical, 4).background(tone.color.opacity(0.14), in: Capsule())
             }
-            .padding(.horizontal, DS.Space.l).padding(.vertical, DS.Space.m)
+            .padding(.horizontal, DS.Space.l + 6)
+            .frame(maxHeight: .infinity)
         }
         .contentShape(Rectangle())
         .onTapGesture { notch.onClick() }
@@ -204,19 +243,22 @@ struct Header: View {
             ProjectMenu()
             Spacer(minLength: DS.Space.s)
             HStack(spacing: 6) {
-                StatusDot(tone: healthTone(store), size: 6)
+                StatusDot(tone: freshnessTone, size: 6)
                 Text(freshness).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
             }
             .help(store.summary?.analysisAt.map { "Base de análise: " + Format.stamp($0) } ?? "")
             IconButton(symbol: "arrow.clockwise", help: "Atualizar agora", spinning: store.loading) { Task { await store.refresh() } }
-            Button { store.open("#cards") } label: {
-                HStack(spacing: 5) { Text("Abrir Bunker").font(DS.Font.bodyStrong); Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)) }
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .foregroundStyle(.black.opacity(0.85))
-                    .background(DS.Color.accent, in: Capsule())
-            }.buttonStyle(.plain).help("Abrir os cards de decisão no navegador")
+            // Quiet on purpose: each screen keeps a single accent action (e.g. "Ajustar aqui").
+            ActionButton(title: "Abrir Bunker", icon: "arrow.up.right", help: "Abrir os cards de decisão no navegador") { store.open("#cards") }
             IconButton(symbol: "xmark", help: "Fechar (Esc) · abrir de novo com \(HotKey.label)") { notch.onClose() }
         }
+    }
+    /// The dot says how fresh the data is (attention already has its own badges): error, paused or stale reads warn.
+    var freshnessTone: Tone {
+        if store.error != nil { return .bad }
+        if store.summary?.paused == true || store.summary?.executor?.paused == true { return .warn }
+        guard let at = store.lastFetch else { return .neutral }
+        return Date().timeIntervalSince(at) > 600 ? .warn : .good
     }
     var freshness: String {
         if store.loading && store.summary == nil { return "Atualizando…" }
@@ -291,7 +333,7 @@ struct StatTile: View {
             Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
             Text(value).font(DS.Font.stat).lineLimit(1).minimumScaleFactor(0.8)
             HStack(spacing: DS.Space.xs) { pill(delta?.yesterday, "ontem"); pill(delta?.week, "7d") }
-            Text(base).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.85)
+            Text(base).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.85)
         }
         .padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
     }
@@ -364,7 +406,7 @@ struct ListRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: DS.Space.xs) {
-                    if let tag { Pill(text: tag, tone: .accent) }
+                    if let tag { Pill(text: tag, tone: .tag) }
                     Text(subtitle).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
                 }
             }
@@ -372,7 +414,7 @@ struct ListRow: View {
             if let value {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(value).font(DS.Font.number).foregroundStyle(tone.color)
-                    if let valueCaption { Text(valueCaption).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted) }
+                    if let valueCaption { Text(valueCaption).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted) }
                 }
             }
             if action != nil { Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(DS.Color.inkMuted).opacity(hovered ? 1 : 0.35) }
@@ -476,9 +518,9 @@ struct ManagersTab: View {
                 }
                 Text("\(count)").font(DS.Font.stat)
                 VStack(alignment: .leading, spacing: 1) {
-                    ForEach(people.prefix(2), id: \.key) { p in Text("\(p.key) · \(p.value)").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkSoft).lineLimit(1) }
-                    if let u = b?.unknown, u > 0 { Text("\(u) sem autor").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted) }
-                    if count == 0 { Text("nenhuma").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted) }
+                    ForEach(people.prefix(2), id: \.key) { p in Text("\(p.key) · \(p.value)").font(DS.Font.micro).foregroundStyle(DS.Color.inkSoft).lineLimit(1) }
+                    if let u = b?.unknown, u > 0 { Text("\(u) sem autor").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted) }
+                    if count == 0 { Text("nenhuma").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted) }
                 }
                 Spacer(minLength: 0)
             }
@@ -506,7 +548,7 @@ struct AgentsTab: View {
                             HStack(spacing: DS.Space.xs) {
                                 Text(m.agent ?? "Agente").font(DS.Font.bodyStrong)
                                 if let to = m.to { Text("→ \(to)").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted) }
-                                if s.project == "all", let p = m.project { Pill(text: p, tone: .accent) }
+                                if s.project == "all", let p = m.project { Pill(text: p, tone: .tag) }
                                 Spacer(minLength: 0)
                                 Text(Format.relative(m.at)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                             }
@@ -616,7 +658,7 @@ struct ProjectsTab: View {
                             Spacer(minLength: DS.Space.s)
                             VStack(alignment: .trailing, spacing: 2) {
                                 Text(Format.ratio(p.roas)).font(DS.Font.number).foregroundStyle(trend.color)
-                                Text("ontem " + Format.ratio(p.roasYesterday)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
+                                Text("ontem " + Format.ratio(p.roasYesterday)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                             }
                         }
                         .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
@@ -645,7 +687,7 @@ struct CampaignDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.campaign ?? "Campanha").font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
                     HStack(spacing: DS.Space.xs) {
-                        if let p = item.project { Pill(text: p, tone: .accent) }
+                        if let p = item.project { Pill(text: p, tone: .tag) }
                         Pill(text: Format.statusName(item.detail?.status), tone: item.detail?.status == "ACTIVE" ? .good : .neutral)
                         Text("diário " + Format.money(item.detail?.dailyBudget, currency: item.detail?.budgetCurrency)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                     }
@@ -666,19 +708,29 @@ struct CampaignDetailView: View {
                         ForEach(periods, id: \.0) { key, label in
                             let w = item.detail?.windows[key] ?? nil
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                                HStack(spacing: 4) {
+                                    Text(label).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                                    Spacer(minLength: 0)
+                                    if w?.noSpend != true { Text("ROAS").font(DS.Font.microStrong).foregroundStyle(DS.Color.inkMuted) }
+                                }
                                 if w?.noSpend == true {
                                     Text("sem gasto").font(DS.Font.stat).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.6)
                                         .help("Fonte completa do período sem esta campanha: não houve gasto. Vendas ficam N/D.")
                                 } else {
                                     Text(Format.ratio(w?.roas)).font(DS.Font.stat).foregroundStyle((w?.roi ?? 1) >= 1 ? DS.Color.ink : DS.Color.bad)
                                 }
-                                Text("ROI " + Format.ratio(w?.roi)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
-                                Text("gasto " + Format.compactMoney(w?.spend)).font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
-                                Text("front \(w?.frontOrders.map { String(Int($0)) } ?? "N/D")").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
-                            }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+                                if w?.noSpend == true {
+                                    Text("gasto " + Format.compactMoney(w?.spend)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                                    Text("vendas N/D").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                                } else {
+                                    Text("ROI " + Format.ratio(w?.roi)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                                    Text("gasto " + Format.compactMoney(w?.spend)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                                    Text("front \(w?.frontOrders.map { String(Int($0)) } ?? "N/D")").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                                }
+                            }.padding(DS.Space.m).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).card()
                         }
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                     if let reason = item.detail?.reason {
                         SectionHeader(title: "Sinal", detail: item.decision)
                         Text(reason).font(DS.Font.body).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true)
@@ -738,7 +790,7 @@ struct AdjustView: View {
                     .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).stroke(DS.Color.stroke))
             }
             Text("Executa só a proposta exata que você aprovar no card, com despacho único. Sem proposta exata, a escolha fica como intenção.")
-                .font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted).padding(.bottom, DS.Space.s)
+                .font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).padding(.bottom, DS.Space.s)
         }
     }
 }

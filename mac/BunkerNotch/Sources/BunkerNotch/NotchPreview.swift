@@ -1,0 +1,107 @@
+import AppKit
+import SwiftUI
+
+/// `Bunker --render-notch folder`: one PNG per island state and tab, drawn over a fake desktop with
+/// fictional data (no network, no credential, no real campaign). For design review without screen capture.
+@MainActor enum NotchPreview {
+    static func render(to folder: String) -> Int32 {
+        guard let summary = fixture() else { FileHandle.standardError.write(Data("fixture inválida\n".utf8)); return 1 }
+        let dir = URL(fileURLWithPath: folder, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let geometry = NotchGeometry(hasNotch: true, width: 186, height: 32)
+        let loss = summary.queue.first { $0.kind == "loss" }
+        let shots: [(String, (NotchState) -> Void)] = [
+            ("01-compact", { $0.mode = .compact }),
+            ("02-peek", { $0.mode = .peek }),
+            ("03-alert", { $0.mode = .alert(IslandAlert(id: "a", kind: .loss, title: "Perda acima do limite", detail: "TESTE 07 · Criativo C · −R$ 412 hoje")) }),
+            ("04-open-agora", { $0.mode = .open; $0.tab = .now }),
+            ("05-open-projetos", { $0.mode = .open; $0.tab = .projects }),
+            ("06-open-contas", { $0.mode = .open; $0.tab = .accounts }),
+            ("07-open-gestores", { $0.mode = .open; $0.tab = .managers }),
+            ("08-open-agentes", { $0.mode = .open; $0.tab = .agents }),
+            ("09-open-sistema", { $0.mode = .open; $0.tab = .system }),
+            ("10-detalhe", { $0.mode = .open; $0.selected = loss }),
+        ]
+        var failures: Int32 = 0
+        for (name, setup) in shots {
+            let store = Store(), notch = NotchState(geometry: geometry)
+            store.showPreview(summary)
+            setup(notch)
+            let scene = ZStack(alignment: .top) {
+                LinearGradient(colors: [Color(red: 0.20, green: 0.24, blue: 0.33), Color(red: 0.36, green: 0.30, blue: 0.40)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                Rectangle().fill(.black.opacity(0.25)).frame(height: geometry.height)
+                NotchRootView().environmentObject(store).environmentObject(notch)
+            }
+            .frame(width: 760, height: 600)
+            .environment(\.colorScheme, .dark)
+            if !write(scene, to: dir.appendingPathComponent(name + ".png")) { failures += 1 }
+        }
+        print(failures == 0 ? "Notch salvo em \(dir.path)" : "\(failures) imagem(ns) falharam")
+        return failures == 0 ? 0 : 1
+    }
+
+    /// Hosted in an off-screen window so AppKit-backed controls (scroll views, menus, buttons) draw too.
+    private static func write<V: View>(_ view: V, to url: URL) -> Bool {
+        let size = CGSize(width: 760, height: 600)
+        let host = NSHostingView(rootView: view)
+        host.frame = CGRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: CGRect(x: -4000, y: -4000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = host
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.orderFrontRegardless()
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return false }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        window.orderOut(nil)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return false }
+        return (try? png.write(to: url)) != nil
+    }
+
+    private static func ago(_ minutes: Double) -> String { Format.isoFull.string(from: Date().addingTimeInterval(-minutes * 60)) }
+
+    /// Fictional names and values only: this file is in a public repository.
+    static func fixture() -> Summary? {
+        func window(_ spend: Double, _ roas: Double?, _ front: Double?) -> String {
+            "{\"spend\":\(spend),\"roas\":\(roas.map { String($0) } ?? "null"),\"roi\":\(roas.map { String($0 * 0.9) } ?? "null"),\"frontOrders\":\(front.map { String($0) } ?? "null"),\"cpaFront\":null}"
+        }
+        let change = { (action: String, actor: String, before: Double, after: Double, pct: Double, mins: Double, camp: String) in
+            "{\"action\":\"\(action)\",\"field\":\"dailyBudget\",\"before\":\(before),\"after\":\(after),\"percent\":\(pct),\"currency\":\"BRL\",\"at\":\"\(ago(mins))\",\"from\":null,\"actor\":\"\(actor)\",\"origin\":\"malva\",\"campaign\":\"\(camp)\",\"account\":\"Conta Exemplo 01\",\"campaignId\":\"c\(Int(mins))\"}"
+        }
+        let detail = { (reason: String, noSpend: Bool) in
+            let closed = noSpend ? "{\"spend\":0,\"roas\":null,\"roi\":null,\"frontOrders\":null,\"cpaFront\":null,\"noSpend\":true}" : window(1240, 0.82, 6)
+            return "{\"projectId\":\"p1\",\"malvaObjectId\":null,\"status\":\"ACTIVE\",\"dailyBudget\":250,\"budgetCurrency\":\"BRL\",\"reason\":\"\(reason)\",\"windows\":{\"today\":\(window(412, 0, 0)),\"yesterday\":\(closed),\"3d\":\(closed),\"7d\":\(noSpend ? closed : window(2980, 0.91, 14))},\"changes\":[\(change("reduce", "Ana Souza", 300, 250, -16.7, 95, "TESTE 07 · Criativo C"))]}"
+        }
+        let json = """
+        {"generatedAt":"\(ago(1))","project":"all","projectName":"Todos os projetos",
+         "projects":[{"id":"p1","name":"Alfa"},{"id":"p2","name":"Beta"},{"id":"p3","name":"Gama"}],
+         "paused":false,"analysisAt":"\(ago(3))",
+         "today":{"today":{"roas":1.42,"roi":1.21,"cpaFront":86.4,"spend":18420},"yesterday":{"roas":1.31,"roi":1.12,"cpaFront":92.1,"spend":21030},"week":{"roas":1.55,"roi":1.33,"cpaFront":80.2,"spend":131200},
+                  "deltas":{"roas":{"yesterday":0.084,"week":-0.084},"roi":{"yesterday":0.08,"week":-0.09},"cpaFront":{"yesterday":-0.062,"week":0.077}}},
+         "queue":[
+          {"kind":"loss","campaign":"07/11 - [CBO] - [TESTE] - Criativo C","account":"Conta Exemplo 01","project":"Alfa","adAccountId":"a1","campaignId":"c1","decision":"Revisar teste novo sem vendas","period":"today","basis":"result","amount":412,"spend":412,"roas":0,"roas7d":null,"detail":\(detail("Teste novo com gasto e sem vendas hoje. Conferir início real, checkout e filhos antes de decidir.", true))},
+          {"kind":"loss","campaign":"[ABO] - [ESCALA] - Criativo A - Público amplo","account":"Conta Exemplo 02","project":"Beta","adAccountId":"a2","campaignId":"c2","decision":"Revisar perda","period":"3d","basis":"result","amount":1860,"spend":5320,"roas":0.65,"roas7d":0.78,"detail":\(detail("Abaixo do equilíbrio em 3 e 7 dias.", false))},
+          {"kind":"gain","campaign":"[CBO] - [ESCALA] - Criativo B","account":"Conta Exemplo 03","project":"Gama","adAccountId":"a3","campaignId":"c3","decision":"Candidato à escala","period":"3d","basis":"result","amount":3240,"spend":4100,"roas":1.79,"roas7d":1.92,"detail":\(detail("Retorno consistente em 3 e 7 dias.", false))}
+         ],"queueSize":27,
+         "board":[
+          {"id":"p1","name":"Alfa","spend":8200,"roas":1.62,"roi":1.4,"roasYesterday":1.38,"approvals":1,"losses":1,"changes":6},
+          {"id":"p2","name":"Beta","spend":6400,"roas":0.94,"roi":0.81,"roasYesterday":1.21,"approvals":0,"losses":2,"changes":3},
+          {"id":"p3","name":"Gama","spend":3820,"roas":1.77,"roi":1.52,"roasYesterday":1.66,"approvals":0,"losses":0,"changes":1}
+         ],
+         "approvals":{"count":1,"items":[{"id":"pr1","title":"Conta Exemplo 02 · Reduzir 20% · R$ 500 → R$ 400","project":"Beta","expiresAt":"\(ago(-50))"}]},
+         "activity":{"hours":24,"summary":{"increase":{"count":4,"actors":{"Ana Souza":3,"Bruno Lima":1},"unknown":0},"reduce":{"count":3,"actors":{"Ana Souza":2},"unknown":1},"pause":{"count":2,"actors":{"Bruno Lima":2},"unknown":0},"activate":{"count":0,"actors":{},"unknown":0}},
+           "recent":[\(change("reduce", "Ana Souza", 300, 250, -16.7, 18, "TESTE 07 · Criativo C")),\(change("increase", "Bruno Lima", 400, 480, 20, 62, "[CBO] - [ESCALA] - Criativo B")),\(change("increase", "Ana Souza", 200, 240, 20, 140, "[ABO] - Criativo D"))]},
+         "agents":{"recent":[{"agent":"Lia","role":"traffic","to":"Theo","kind":"conclusion","decision":"Segurar escala do Criativo B até fechar o dia","text":"ROAS de 3 dias sustenta, mas o gasto de hoje está 40% acima do ritmo.","at":"\(ago(22))","project":"Gama"},{"agent":"Nina","role":"creative","to":null,"kind":"question","decision":null,"text":"O Criativo C trocou de gancho ontem? A retenção caiu pela metade.","at":"\(ago(75))","project":"Alfa"}]},
+         "executor":{"enabled":true,"paused":false,"lastPulseAt":"\(ago(1.5))","lastError":null,"recentFailures":0},
+         "notice":"Somente leitura. Decidir e aprovar continua no Bunker, com a confirmação exata.",
+         "shadow":{"day":"2026-11-07","total":5,"byRule":{"loss":{"total":3,"wouldExecute":2,"managerDid":1,"bunkerFirst":1}},"recent":[{"rule":"loss","ruleLabel":"Perda no dia","project":"Beta","account":"Conta Exemplo 02","campaign":"[ABO] - Criativo E","action":"status","reason":"x","firstAt":"\(ago(130))","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":{"actor":"Bruno Lima","at":"\(ago(60))","minutesAfter":70}}]},
+         "accounts":{"generatedAt":"\(ago(12))","metaConnected":true,"metaError":null,"counts":{"total":14,"active":11,"running":8,"disabled":1,"nearLimit":2,"withLimit":9},
+           "rows":[{"accountId":"ac1","name":"Conta Exemplo 01","group":"Alfa","status":"active","statusLabel":"Ativa","runningLabel":"rodando","currency":"BRL","dailyLimit":2000,"todaySpend":1780,"usedPct":89,"balance":null,"alerts":["perto do limite"]},
+                   {"accountId":"ac2","name":"Conta Exemplo 02","group":"Beta","status":"active","statusLabel":"Ativa","runningLabel":"rodando","currency":"USD","dailyLimit":500,"todaySpend":180,"usedPct":36,"balance":null,"alerts":[]},
+                   {"accountId":"ac3","name":"Conta Exemplo 04","group":"Gama","status":"disabled","statusLabel":"Desativada","runningLabel":"parada","currency":"BRL","dailyLimit":null,"todaySpend":0,"usedPct":null,"balance":null,"alerts":["conta desativada"]}]}
+        }
+        """
+        do { return try JSONDecoder().decode(Summary.self, from: Data(json.utf8)) }
+        catch { FileHandle.standardError.write(Data("\(error)\n".utf8)); return nil }
+    }
+}

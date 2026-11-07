@@ -498,3 +498,11 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Bunk (c3db506/2a61bee, esta sessão):** falas carregam a campanha; clique durante o aviso de perda, ou botão "Ajustar" no balão do notch, abre a ilha no ajuste daquela campanha (`notch.openAdjust`); proposta abre a lista.
 - **Tela de ajuste (sessão "Ajuste de campanhas via notch"):** seção "Já fiz no Gerenciador" no `OwnerAdjustView`, envio assinado com Touch ID. Os arquivos dela entraram por engano no commit c3db506 (índice compartilhado); conteúdo testado, histórico mantido; as duas sessões passaram a usar índice próprio.
 - **Pendente:** o envio assinado depende do secret `BUNKER_OWNER_DEVICE_KEY` no Worker (cadastro do dono); sem ele volta 503.
+
+## Notch: ciclo de design system e UX (registro escrito às 2026-11-07 22:56:20 UTC por `date -u`)
+
+- **Pedido do dono:** autoaprimoramento do design system, UI e experiência do notch, com pesquisa de projetos abertos. Um ciclo, fechado: renderizar, auditar, corrigir, renderizar de novo.
+- **Ferramenta:** `Bunker --render-notch pasta` gera um PNG por estado e aba (repouso, espiada, aviso, abas, detalhe) com dados fictícios, sem rede e sem credencial (`NotchPreview.swift`, `Store.showPreview`).
+- **Aplicado:** ilha com ombros côncavos e raios animados por estado (adaptado do DynamicNotchKit, MIT, aviso em `mac/NOTICE.md`); molas assimétricas (abre com leve elástico, fecha firme; fade com Reduzir movimento); conteúdo aberto com desfoque e escala pelo topo; rodízio com troca por desfoque; sombra por estado; um só botão de destaque por tela ("Abrir Bunker" ficou discreto); ponto do cabeçalho mostra frescor da leitura (não atenção); ROAS rotulado no detalhe e janelas sem gasto só com o que se sabe; etiquetas de projeto/conta neutras; tokens `DS.Font.micro`/`microStrong`, `Tone.tag`, `ActionButton`, `DS.Motion.island`.
+- **Pesquisa:** `docs/notch-research.md` atualizado com licenças conferidas e próximos candidatos (pré-hover, háptico, deslizar para fechar).
+- **Não verificado:** a animação ao vivo (molas, desfoque) só aparece no app; os PNGs mostram os estados parados.

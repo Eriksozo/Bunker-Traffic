@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Bunker design tokens for the Mac companion. One source for colour, type, spacing and shape,
@@ -26,15 +27,31 @@ enum DS {
         static let bodyStrong = SwiftUI.Font.system(size: 12, weight: .semibold)
         static let number = SwiftUI.Font.system(size: 12.5, weight: .semibold, design: .rounded).monospacedDigit()
         static let stat = SwiftUI.Font.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit()
+        /// Secondary lines under a value (bases, captions of captions).
+        static let micro = SwiftUI.Font.system(size: 9.5)
+        static let microStrong = SwiftUI.Font.system(size: 9.5, weight: .semibold)
         static let mark = SwiftUI.Font.system(size: 11, weight: .heavy)
     }
-    enum Motion { static let spring = Animation.spring(response: 0.3, dampingFraction: 0.85); static let quick = Animation.easeOut(duration: 0.15) }
+    /// Opening is lively, closing is firm (no bounce back toward the camera). Values studied in the MIT
+    /// projects CodeIsland and DynamicNotchKit (credited in mac/NOTICE.md).
+    enum Motion {
+        static let open = Animation.spring(response: 0.42, dampingFraction: 0.8)
+        static let close = Animation.spring(response: 0.36, dampingFraction: 1.0)
+        static let spring = Animation.spring(response: 0.3, dampingFraction: 0.85)
+        static let quick = Animation.easeOut(duration: 0.15)
+        /// Island changes: open for growth, close for shrinking; a plain fade when Reduce Motion is on.
+        static func island(opening: Bool) -> Animation {
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return .easeInOut(duration: 0.18) }
+            return opening ? open : close
+        }
+    }
 }
 
 enum Tone {
-    case neutral, good, bad, warn, accent
+    /// `tag` is for context labels (project, account): readable but quiet, so accent stays for brand and actions.
+    case neutral, good, bad, warn, accent, tag
     var color: Color {
-        switch self { case .neutral: return DS.Color.inkMuted; case .good: return DS.Color.good; case .bad: return DS.Color.bad; case .warn: return DS.Color.warn; case .accent: return DS.Color.accent }
+        switch self { case .neutral: return DS.Color.inkMuted; case .good: return DS.Color.good; case .bad: return DS.Color.bad; case .warn: return DS.Color.warn; case .accent: return DS.Color.accent; case .tag: return DS.Color.inkSoft }
     }
 }
 
@@ -65,7 +82,7 @@ struct Pill: View {
         .lineLimit(1)
         .padding(.horizontal, 6).padding(.vertical, 2)
         .foregroundStyle(tone.color)
-        .background(tone.color.opacity(tone == .neutral ? 0.12 : 0.15), in: Capsule())
+        .background(tone == .tag ? SwiftUI.Color.white.opacity(0.07) : tone.color.opacity(tone == .neutral ? 0.12 : 0.15), in: Capsule())
     }
 }
 
@@ -99,5 +116,25 @@ struct IconBadge: View {
         Image(systemName: symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(tone.color)
             .frame(width: 26, height: 26)
             .background(tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+    }
+}
+
+/// Capsule action. `prominent` is the one primary action of a screen (accent fill); the rest are quiet.
+struct ActionButton: View {
+    let title: String; var icon: String? = nil; var leadingIcon = false; var prominent = false; let help: String; let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if leadingIcon, let icon { Image(systemName: icon).font(.system(size: 10, weight: .bold)) }
+                Text(title).font(DS.Font.bodyStrong)
+                if !leadingIcon, let icon { Image(systemName: icon).font(.system(size: 9.5, weight: .bold)) }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .foregroundStyle(prominent ? SwiftUI.Color.black.opacity(0.85) : DS.Color.ink)
+            .background(prominent ? DS.Color.accent : DS.Color.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(prominent ? SwiftUI.Color.clear : DS.Color.stroke))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain).help(help)
     }
 }
