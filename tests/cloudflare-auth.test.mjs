@@ -133,3 +133,39 @@ test('a refused sign-in e-mail explains the Supabase reason without echoing the 
  const r=await cloudflareAuth(new Request('https://bunker.example/auth/email',{method:'POST',headers:{Origin:'https://bunker.example','Content-Type':'application/x-www-form-urlencoded'},body:'email=owner%40example.com'}),env);
  assert.equal(r.status,429);const text=await r.text();assert.match(text,/Limite de envio/);assert.doesNotMatch(text,/owner@example/);
 });
+
+
+test('OTP cooldown distinguishes per-recipient seconds from hourly limits, never echoes raw messages',async(t)=>{
+ const {otpFailure}=await import('../lib/cloudflare-auth.mjs');
+ const perRecipient=await otpFailure(Response.json({error_code:'over_email_send_rate_limit',msg:'For security purposes, you can only request this after 59 seconds.'},{status:429}));
+ assert.equal(perRecipient.retryAfter,59);assert.match(perRecipient.message,/59 segundos/);assert.doesNotMatch(perRecipient.message,/1 hora/);
+ assert.equal((await otpFailure(Response.json({code:'over_email_send_rate_limit'},{status:429,headers:{'Retry-After':'120'}}))).retryAfter,120);
+ assert.equal((await otpFailure(Response.json({code:'over_email_send_rate_limit'},{status:429}))).retryAfter,60);
+ t.mock.method(globalThis,'fetch',async()=>Response.json({error_code:'over_email_send_rate_limit',msg:'wait after 39 seconds. private@example.com'}, {status:429}));
+ const r=await cloudflareAuth(new Request('https://bunker.example/auth/email',{method:'POST',headers:{Origin:'https://bunker.example','Content-Type':'application/x-www-form-urlencoded'},body:'email=owner%40example.com'}),env);
+ assert.equal(r.status,429);assert.equal(r.headers.get('Retry-After'),'39');
+ const body=await r.text();assert.match(body,/39 segundos/);assert.match(body,/bunker.auth.emailAfter/);assert.match(body,/b.disabled=true/);assert.doesNotMatch(body,/private@example.com/);
+});
+
+test('successful email request offers a guarded resend and does not claim delivery or grant access',async(t)=>{
+ t.mock.method(globalThis,'fetch',async()=>Response.json({}));
+ const r=await cloudflareAuth(new Request('https://bunker.example/auth/email',{method:'POST',headers:{Origin:'https://bunker.example','Content-Type':'application/x-www-form-urlencoded'},body:'email=owner%40example.com'}),env);
+ assert.equal(r.status,200);assert.equal(r.headers.has('Set-Cookie'),false);assert.equal(r.headers.get('Referrer-Policy'),'no-referrer');
+ const body=await r.text();assert.match(body,/Pedido aceito pelo serviço de login/);assert.match(body,/Date.now\(\)\+60\*1000/);assert.match(body,/pending=true;b.disabled=true/);
+});
+
+
+test('email form blocks double submit and keeps cooldown across a reload without auto-sending',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const html=await (await cloudflareAuth(new Request('https://bunker.example/auth/login?email=1'),env)).text();
+ const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+ let now=100000,listener,tick;const storage=new Map();
+ const form={addEventListener:(kind,handler)=>{assert.equal(kind,'submit');listener=handler;}},button={},hint={};
+ const run=()=>runInNewContext(script,{document:{getElementById:id=>({'bunker-email-form':form,'bunker-email-submit':button,'bunker-email-wait':hint}[id])},sessionStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},Date:{now:()=>now},setInterval:fn=>{tick=fn;}});
+ run();assert.equal(button.disabled,false);let prevented=0;
+ listener({preventDefault:()=>prevented++});assert.equal(button.disabled,true);assert.equal(button.textContent,'Enviando…');
+ listener({preventDefault:()=>prevented++});assert.equal(prevented,1);
+ run();assert.equal(button.disabled,true);assert.match(button.textContent,/60s/);
+ listener({preventDefault:()=>prevented++});assert.equal(prevented,2);
+ now+=61000;tick();assert.equal(button.disabled,false);assert.equal(button.textContent,'Receber link de acesso');
+});

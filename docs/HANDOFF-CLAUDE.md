@@ -383,3 +383,13 @@ Escopo pedido pelo dono: filtro Hoje em Mudanças de orçamento e status, preser
 - **Pendências:**
   - Link direto da campanha na Malva: a API pública não expõe a URL de tela, e falta um exemplo real do dono para montar o formato.
   - Conferir o primeiro login e um ajuste real com o dono.
+
+
+## Continuidade do primeiro login no notch — 07/11/2026
+
+Última tarefa real da sessão Claude 9ad6ce4f: conferir o envio do e-mail de acesso; interrompida pelo limite semanal do Claude. O commit 77ca955 mostrava um motivo genérico de rate limit, mas não concluía o primeiro acesso.
+
+- Logs Auth do Supabase Bunker Traffic confirmaram 429 over_email_send_rate_limit em tentativas repetidas com 59/39 segundos de intervalo mínimo. Houve também envio aceito anteriormente e um erro transitório de consulta cancelada. Leitura de auth.users ainda não mostrava confirmação de e-mail nem primeiro login nesta conferência; isso não foi alterado artificialmente.
+- Correção: respeitar Retry-After ou os segundos informados pela Supabase; sem prazo informado, não afirmar espera exata de uma hora. Formulário bloqueia duplo envio, mantém espera no sessionStorage, oferece reenviar manualmente e não dispara sozinho. Resposta de sucesso é pedido aceito, não entrega confirmada. Códigos de erro passam por allowlist de formato; conteúdo bruto do fornecedor não entra no log.
+- App Mac: após login, volta ao card exato que estava aberto. Link colado recusa credenciais na URL, porta e prefixos de caminho que apenas imitem /auth/v1/verify. Cookies continuam próprios e persistentes do WKWebView; token de leitura não vira identidade de dono.
+- Validação: testes Auth e do contador/reload, suíte completa, typecheck/build e self-test nativo. O proprietário foi solicitado a colar o link recebido no notch, sem enviar credenciais no chat. Gmail MCP indisponível nesta sessão; leitura de envio não comprova recebimento nem sessão iniciada. Nenhuma campanha alterada.

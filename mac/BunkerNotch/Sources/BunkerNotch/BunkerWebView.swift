@@ -17,13 +17,22 @@ enum WebScope {
         if host.hasSuffix(".chatgpt.site") { return .emailLogin }
         return .external
     }
+    /// Successful sign-in must return to the exact campaign the owner was already viewing.
+    static func cardToResume(requested: URL?, finished: URL?) -> URL? {
+        guard let requested, let finished, requested.scheme == "https", requested.host == bunkerHost,
+              requested.user == nil, requested.password == nil, requested.port == nil,
+              requested.path == "/", requested.fragment?.hasPrefix("cards?") == true,
+              finished.scheme == "https", finished.host == bunkerHost, finished.path == "/",
+              finished.query == nil, finished.fragment == nil else { return nil }
+        return requested
+    }
     static var emailLogin: URL { URL(string: "https://\(bunkerHost)/auth/login?email=1")! }
     /// A pasted sign-in link must be the Bunker callback or the Supabase verify link, nothing else.
     static func signInLink(_ text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), url.scheme == "https", let host = url.host?.lowercased() else { return nil }
+        guard let url = URL(string: trimmed), url.scheme == "https", url.user == nil, url.password == nil, url.port == nil, let host = url.host?.lowercased() else { return nil }
         if host == bunkerHost && url.path == "/auth/callback" { return url }
-        if host == authHost && url.path.hasPrefix("/auth/v1/verify") { return url }
+        if host == authHost && url.path == "/auth/v1/verify" { return url }
         return nil
     }
 }
@@ -60,7 +69,8 @@ struct BunkerWebView: NSViewRepresentable {
         let parent: BunkerWebView
         var lastToken = 0
         var lastURL: URL?
-        init(_ parent: BunkerWebView) { self.parent = parent }
+        var ownerTarget: URL?
+        init(_ parent: BunkerWebView) { self.parent = parent; ownerTarget = parent.url }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
             switch WebScope.decide(action.request.url) {
@@ -73,6 +83,9 @@ struct BunkerWebView: NSViewRepresentable {
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             let url = webView.url
+            if let target = WebScope.cardToResume(requested: ownerTarget, finished: url) {
+                webView.load(URLRequest(url: target)); return
+            }
             Task { @MainActor in self.parent.currentURL = url }
         }
         /// target=_blank links: same scope rules, never a second window.

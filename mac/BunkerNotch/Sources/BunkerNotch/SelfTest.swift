@@ -75,6 +75,14 @@ enum SelfTest {
         check(WebScope.signInLink("https://bunker-traffic.erik-iplou.workers.dev/api/state") == nil, #line)
         check(WebScope.signInLink("https://evil.example/auth/callback#access_token=x") == nil, #line)
         check(WebScope.signInLink("texto qualquer") == nil, #line)
+        check(WebScope.signInLink("https://user:pass@bunker-traffic.erik-iplou.workers.dev/auth/callback#access_token=x") == nil, #line)
+        check(WebScope.signInLink("https://enehgnotumknjlmwfcta.supabase.co/auth/v1/verify/other?token=x") == nil, #line)
+        let card = u("https://bunker-traffic.erik-iplou.workers.dev/#cards?project=p&q=123")
+        let root = u("https://bunker-traffic.erik-iplou.workers.dev/")
+        check(WebScope.cardToResume(requested: card, finished: root) == card, #line)
+        check(WebScope.cardToResume(requested: card, finished: WebScope.emailLogin) == nil, #line)
+        check(WebScope.cardToResume(requested: card, finished: card) == nil, #line)
+        check(WebScope.cardToResume(requested: u("https://evil.example/#cards?project=p"), finished: root) == nil, #line)
     }
 
     private static func testCompactMoneyAndDetailDecode() {
