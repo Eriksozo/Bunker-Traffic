@@ -56,6 +56,8 @@ struct BunkStageView: View {
     private var roaming = false
     private var memory = RoamPolicy.Memory()
     private var lines: [String] = [], lineIndex = 0
+    /// Campaign (or approvals) the current warning or bubble is about: a click opens its adjustment.
+    private var currentTarget: AdjustTarget?
     private var lastActivity = Date(), yawned = false
     private var dragStart: NSPoint?, dragOrigin = NSPoint.zero, dragging = false
     private var clickWork: DispatchWorkItem?, bubbleWork: DispatchWorkItem?, reactionWork: DispatchWorkItem?
@@ -90,13 +92,21 @@ struct BunkStageView: View {
 
     func setRoam(_ on: Bool) { roamEnabled = on; if !on && roaming && !resident { endRoam(goHome: true) } }
     func setResident(_ on: Bool) { UserDefaults.standard.set(on, forKey: Self.residentKey); on ? flyOut() : goHome() }
-    func callNow() { consider(.demo, lines: BunkBrain.lines(store.summary, error: store.error, preparing: store.preparing)) }
+    func callNow() {
+        let topics = BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing)
+        currentTarget = topics.first?.target
+        consider(.demo, lines: topics.map(\.text))
+    }
 
     // MARK: - Triggers
 
     private func handle(_ alert: IslandAlert) {
         lastActivity = Date()
         let text = alert.detail.isEmpty ? alert.title : alert.title + " · " + alert.detail
+        // Which campaign this warning is about (loss id = "lo:<account>:<campaign>"; approvals open the list).
+        let target: AdjustTarget? = alert.kind == .approval ? BunkBrain.approvalsTarget
+            : alert.kind == .loss ? store.summary?.queue.first(where: { "lo:" + $0.id == alert.id }).map(BunkBrain.lossTarget) : nil
+        if target != nil || !roaming { currentTarget = target }
         // A burst becomes one walk: while touring, new attention items join what he is saying.
         if roaming, alert.kind != .manager { lines = RoamPolicy.merge(lines, text); return }
         consider(alert.kind == .manager ? .manager : .attention(alert.kind), lines: [text])
@@ -278,7 +288,7 @@ struct BunkStageView: View {
                     let stop = stops[stopIndex]
                     if stop.pause > 0 {
                         pauseUntil = Date().addingTimeInterval(stop.pause)
-                        if stop.speak { stage.bubble = lines[lineIndex % lines.count]; lineIndex += 1 }
+                        if stop.speak { stage.bubble = lines[lineIndex % lines.count] + (currentTarget != nil ? "\n— clique em mim para ajustar" : ""); lineIndex += 1 }
                     } else { stopIndex += 1 }
                 }
             }
@@ -368,9 +378,11 @@ struct BunkStageView: View {
     }
     private var topicIndex = 0
     private func nextTopic() {
-        let all = BunkBrain.lines(store.summary, error: store.error, preparing: store.preparing)
+        let all = BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing)
         guard !all.isEmpty else { return }
-        speak(all[topicIndex % all.count]); topicIndex += 1
+        let topic = all[topicIndex % all.count]; topicIndex += 1
+        currentTarget = topic.target
+        speak(topic.text + (topic.target != nil ? "\n— clique de novo para ajustar" : ""))
     }
 
     // MARK: - Mouse: click (wink + talk / open), double click (home), drag (move), right click (menu)
@@ -415,7 +427,11 @@ struct BunkStageView: View {
         if count >= 2 { goHome(); return }
         let w = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            if self.roaming { self.notch?.openIsland(); self.endRoam(goHome: false) }
+            // Talking about a campaign (or the approvals): open its adjustment, where "Já fiz" is registered.
+            if let target = self.currentTarget, self.roaming || self.stage.bubble != nil {
+                self.notch?.openAdjust(target); self.currentTarget = nil; self.stage.bubble = nil
+                if self.roaming { self.endRoam(goHome: false) }
+            } else if self.roaming { self.notch?.openIsland(); self.endRoam(goHome: false) }
             else { self.react(.wink, for: 0.7); self.nextTopic() }
         }
         clickWork = w
@@ -448,6 +464,9 @@ struct BunkStageView: View {
     private func menu(at event: NSEvent) {
         let m = NSMenu()
         func add(_ title: String, _ action: @escaping () -> Void) { let i = BunkMenuItem(title: title, action: action); m.addItem(i) }
+        if let target = currentTarget {
+            add(target.campaignId == nil ? "Ver propostas aguardando você" : "Ajustar esta campanha (registrar o que fiz)") { [weak self] in self?.notch?.openAdjust(target); self?.stage.bubble = nil }
+        }
         add("Abrir no notch") { [weak self] in self?.notch?.openIsland() }
         add("O que está acontecendo?") { [weak self] in self?.nextTopic() }
         if roaming { add("Já vi") { [weak self] in self?.endRoam(goHome: false) } }

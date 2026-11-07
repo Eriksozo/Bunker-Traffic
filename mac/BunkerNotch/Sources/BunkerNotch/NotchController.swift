@@ -62,10 +62,12 @@ final class NotchState: ObservableObject {
     private var bunkTopic = 0
     private var bunkHide: DispatchWorkItem?
     /// Each call says the next topic; the bubble hides by itself after 8 s.
-    func bunkSpeak(_ lines: [String]) {
-        guard !lines.isEmpty else { return }
-        let text = lines[bunkTopic % lines.count]; bunkTopic += 1
-        withAnimation(DS.Motion.quick) { bunkSays = text }
+    /// Campaign (or approvals) the current bubble is about; the bubble's button opens its adjustment.
+    @Published var bunkTarget: AdjustTarget?
+    func bunkSpeak(_ topics: [BunkBrain.Topic]) {
+        guard !topics.isEmpty else { return }
+        let topic = topics[bunkTopic % topics.count], text = topic.text; bunkTopic += 1
+        withAnimation(DS.Motion.quick) { bunkSays = text; bunkTarget = topic.target }
         bunkHide?.cancel()
         let hide = DispatchWorkItem { [weak self] in withAnimation(DS.Motion.quick) { if self?.bunkSays == text { self?.bunkSays = nil } } }
         bunkHide = hide
@@ -165,6 +167,8 @@ final class NotchController {
     var bunkHomeScreen: NSScreen { Self.screen(for: display) }
     var bunkHomeZone: NSRect { let s = Self.screen(for: display).frame; return NSRect(x: s.midX - 180, y: s.maxY - 90, width: 360, height: 90) }
     func openIsland() { if !fsm.isOpen { send(.toggle) } }
+    /// Bunk's click: open the island straight on that campaign's adjustment (or the approvals list).
+    func openAdjust(_ target: AdjustTarget) { state.adjust = target; openIsland() }
     func applyCapturePrivacy(_ hidden: Bool) { panel.sharingType = hidden ? .none : .readOnly }
 
     static func screen(for choice: DisplayChoice) -> NSScreen {

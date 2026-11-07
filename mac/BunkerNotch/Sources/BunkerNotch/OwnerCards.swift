@@ -6,7 +6,11 @@ struct OwnerCards: Decodable, Equatable {
     struct Window: Decodable, Equatable { let spend: Double?; let roas: Double?; let roi: Double?; let frontOrders: Double? }
     struct Suggestion: Decodable, Equatable { let action: String; let percent: Double?; let reason: String?; let origin: String? }
     struct Actions: Decodable, Equatable { let increase: Bool; let reduce: Bool; let pause: Bool; let keep: Bool }
-    struct Choice: Decodable, Equatable { let action: String?; let percent: Double?; let status: String?; let createdAt: String?; let reopenable: Bool? }
+    struct Choice: Decodable, Equatable {
+        let action: String?; let percent: Double?; let status: String?; let createdAt: String?; let reopenable: Bool?
+        /// "Já fiz no Gerenciador": reported by the owner, checked by the next Malva reading (A conferir / Conferida / Divergente).
+        let appliedByOwner: Bool?; let canReportApplied: String?; let verification: String?
+    }
     struct Values: Decodable, Equatable { let dailyBudget: Double?; let status: String? }
     struct Proposal: Decodable, Equatable, Identifiable {
         let id: String; let version: Int; let signature: String; let status: String; let project: String
@@ -60,6 +64,24 @@ enum OwnerAdjust {
                                     "cardId": card.id, "signature": card.signature, "choice": action, "reason": reason.trimmingCharacters(in: .whitespacesAndNewlines), "approveExact": false]
         if action == "increase" || action == "reduce", let percent { input["percent"] = percent }
         return input
+    }
+    /// "Já fiz no Gerenciador": the owner reports an action already made in Meta. Never approves, never executes.
+    static func applied(card: OwnerCards.Card, revision: Int, action: String, percent: Double?, reason: String, clientId: String) -> [String: Any] {
+        var input = intent(card: card, revision: revision, action: action, percent: percent, reason: reason, clientId: clientId)
+        input["applied"] = true
+        return input
+    }
+    /// A new decision is open when there is none, the scenario was reopened, or (for "Já fiz") it matches the pending intent.
+    static func canDecide(_ card: OwnerCards.Card) -> Bool { card.lastChoice == nil || card.lastChoice?.reopenable == true }
+    static func canReportApplied(_ card: OwnerCards.Card, action: String) -> Bool {
+        action != "keep" && (canDecide(card) || card.lastChoice?.canReportApplied == action)
+    }
+    static func lastChoiceLine(_ last: OwnerCards.Choice) -> String {
+        var line = (last.appliedByOwner == true ? "Você informou que já fez: " : "Decisão registrada: ") + label(last.action ?? "")
+        if let p = last.percent { line += " " + Format.percent(p, signed: false) }
+        line += " · " + (last.status ?? "") + " · " + Format.stamp(last.createdAt)
+        if let v = last.verification { line += " · conferência Malva: " + v }
+        return line
     }
     /// The owner's decision on an exact proposal already reviewed by the agents.
     static func review(_ p: OwnerCards.Proposal, revision: Int, decision: String, comment: String?, clientId: String) -> [String: Any] {

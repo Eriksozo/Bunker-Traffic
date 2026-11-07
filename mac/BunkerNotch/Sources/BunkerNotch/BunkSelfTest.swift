@@ -85,3 +85,15 @@ extension SelfTest {
     }
 }
 nonisolated(unsafe) var bunkFailures = 0
+
+extension SelfTest {
+    /// Bunk's topics carry the campaign they are about, so a click opens that adjustment.
+    static func testBunkTargets(_ s: Summary) {
+        let topics = BunkBrain.topics(s, error: nil, preparing: false)
+        let loss = topics.first { $0.text.hasPrefix("De olho:") }
+        expect(loss?.target?.campaignId == "1" && loss?.target?.adAccountId == "act", #line)
+        expect(topics.first { $0.text.hasPrefix("ROAS hoje") }?.target == nil, #line)
+        expect(BunkBrain.lines(s, error: nil, preparing: false) == topics.map(\.text), #line)
+        expect(BunkBrain.approvalsTarget.campaignId == nil, #line)
+    }
+}

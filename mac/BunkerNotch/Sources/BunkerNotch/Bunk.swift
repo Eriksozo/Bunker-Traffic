@@ -39,23 +39,30 @@ enum BunkBrain {
     }
 
     /// What Bunk says, most important first. Each click on Bunk moves to the next topic.
-    static func lines(_ s: Summary?, error: String?, preparing: Bool) -> [String] {
-        if let error { return ["Não consegui ler o Bunker agora: \(error)"] }
-        guard let s else { return [preparing ? "Estou montando o resumo. Volto em 1 a 2 minutos." : "Lendo o Bunker…"] }
-        var out: [String] = []
-        if s.approvals.count > 0 { out.append("\(s.approvals.count) proposta(s) exata(s) esperando você no Bunker.") }
+    /// A topic Bunk talks about; `target` opens that campaign's adjustment (or the approvals) when clicked.
+    struct Topic: Equatable { let text: String; var target: AdjustTarget? = nil }
+    static func lossTarget(_ q: Summary.QueueItem) -> AdjustTarget {
+        AdjustTarget(project: q.detail?.projectId, adAccountId: q.adAccountId, campaignId: q.campaignId, name: q.campaign)
+    }
+    static let approvalsTarget = AdjustTarget(project: nil, adAccountId: nil, campaignId: nil, name: nil)
+    static func lines(_ s: Summary?, error: String?, preparing: Bool) -> [String] { topics(s, error: error, preparing: preparing).map(\.text) }
+    static func topics(_ s: Summary?, error: String?, preparing: Bool) -> [Topic] {
+        if let error { return [Topic(text: "Não consegui ler o Bunker agora: \(error)")] }
+        guard let s else { return [Topic(text: preparing ? "Estou montando o resumo. Volto em 1 a 2 minutos." : "Lendo o Bunker…")] }
+        var out: [Topic] = []
+        if s.approvals.count > 0 { out.append(Topic(text: "\(s.approvals.count) proposta(s) exata(s) esperando você no Bunker.", target: approvalsTarget)) }
         if let loss = s.queue.first(where: { $0.kind == "loss" }) {
             let account = loss.account.map { " em \($0)" } ?? ""
-            out.append("De olho: \(loss.campaign ?? "uma campanha")\(account) está −\(Format.money(loss.amount)) \(loss.period == "today" ? "hoje" : "em 3 dias").")
+            out.append(Topic(text: "De olho: \(loss.campaign ?? "uma campanha")\(account) está −\(Format.money(loss.amount)) \(loss.period == "today" ? "hoje" : "em 3 dias").", target: lossTarget(loss)))
         }
-        if let a = s.accounts, a.counts.nearLimit > 0 { out.append("\(a.counts.nearLimit) conta(s) perto do limite diário da Meta.") }
+        if let a = s.accounts, a.counts.nearLimit > 0 { out.append(Topic(text: "\(a.counts.nearLimit) conta(s) perto do limite diário da Meta.")) }
         if let sh = s.shadow, sh.total > 0 {
             let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
-            out.append("Na sombra, hoje eu teria agido \(would) vez(es)\(first > 0 ? ", \(first) antes do gestor" : ""). Ainda não executo nada.")
+            out.append(Topic(text: "Na sombra, hoje eu teria agido \(would) vez(es)\(first > 0 ? ", \(first) antes do gestor" : ""). Ainda não executo nada."))
         }
-        out.append("ROAS hoje \(Format.ratio(s.today.today?.roas)), ontem \(Format.ratio(s.today.yesterday?.roas)).")
-        if let e = s.activity.recent.first { out.append("Última mudança: \(Format.who(e)) · \(e.campaign ?? "campanha") · \(Format.relative(e.at)).") }
-        if out.count <= 2 && s.approvals.count == 0 { out.append("Tudo calmo por aqui. Sigo vigiando.") }
+        out.append(Topic(text: "ROAS hoje \(Format.ratio(s.today.today?.roas)), ontem \(Format.ratio(s.today.yesterday?.roas))."))
+        if let e = s.activity.recent.first { out.append(Topic(text: "Última mudança: \(Format.who(e)) · \(e.campaign ?? "campanha") · \(Format.relative(e.at)).")) }
+        if out.count <= 2 && s.approvals.count == 0 { out.append(Topic(text: "Tudo calmo por aqui. Sigo vigiando.")) }
         return out
     }
 }
@@ -228,7 +235,7 @@ struct BunkAvatar: View {
                 case .ended: notch.bunkHovering = false; withAnimation(DS.Motion.quick) { notch.bunkLook = 0 }
                 }
             }
-            .onTapGesture { if interactive { notch.bunkSpeak(BunkBrain.lines(store.summary, error: store.error, preparing: store.preparing)) } }
+            .onTapGesture { if interactive { notch.bunkSpeak(BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing)) } }
             .help(interactive ? "Bunk · clique para ele contar o que importa agora" : "Bunk")
     }
 }
@@ -242,6 +249,13 @@ struct BunkBubble: View {
             Text("Bunk").font(DS.Font.bodyStrong).foregroundStyle(DS.Color.accent)
             Text(text).font(DS.Font.body).foregroundStyle(DS.Color.ink).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
+            // The topic is a campaign (or the approvals): open its adjustment, where "Já fiz" lives.
+            if let target = notch.bunkTarget {
+                Button { withAnimation(DS.Motion.quick) { notch.bunkSays = nil; notch.adjust = target } } label: {
+                    Text(target.campaignId == nil ? "Ver propostas" : "Ajustar").font(DS.Font.bodyStrong).foregroundStyle(.black.opacity(0.85))
+                        .padding(.horizontal, 8).padding(.vertical, 3).background(DS.Color.accent, in: Capsule())
+                }.buttonStyle(.plain)
+            }
             Button { withAnimation(DS.Motion.quick) { notch.bunkSays = nil } } label: { Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(DS.Color.inkMuted) }.buttonStyle(.plain)
         }
         .padding(.horizontal, DS.Space.m).padding(.vertical, DS.Space.s)

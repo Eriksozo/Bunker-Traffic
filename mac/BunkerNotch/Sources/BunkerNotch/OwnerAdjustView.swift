@@ -95,7 +95,8 @@ struct OwnerAdjustView: View {
                     .font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(3).fixedSize(horizontal: false, vertical: true)
             }
             if let last = card.lastChoice {
-                Banner(text: "Já há decisão registrada: " + OwnerAdjust.label(last.action ?? "") + " · " + (last.status ?? "") + " · " + Format.stamp(last.createdAt) + (last.reopenable == true ? "" : ". Para decidir de novo, use Rever cenário no Histórico do Bunker."), tone: .neutral)
+                Banner(text: OwnerAdjust.lastChoiceLine(last) + (last.canReportApplied != nil ? ". Se já fez no Gerenciador, escolha a mesma ação e toque em \"Já fiz\"." : last.reopenable == true ? "" : ". Para decidir de novo, use Rever cenário no Histórico do Bunker."),
+                       tone: last.verification == "Divergente" ? .bad : last.verification == "Conferida" ? .good : .neutral)
             }
             HStack(spacing: DS.Space.xs) {
                 ForEach(OwnerAdjust.choices, id: \.self) { a in
@@ -123,10 +124,16 @@ struct OwnerAdjustView: View {
                 Button { Task { await sendIntent(card, revision: revision, percent: needsPercent ? percent : nil) } } label: {
                     Label(m.action == "keep" ? "Registrar manter (Touch ID)" : "Pedir à equipe (Touch ID)", systemImage: "touchid").font(DS.Font.bodyStrong)
                         .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(canSend ? DS.Color.accent : DS.Color.inkMuted, in: Capsule())
-                }.buttonStyle(.plain).disabled(!canSend)
+                }.buttonStyle(.plain).disabled(!canSend || !OwnerAdjust.canDecide(card))
+                let canApplied = canSend && OwnerAdjust.canReportApplied(card, action: m.action)
+                Button { Task { await sendApplied(card, revision: revision, percent: needsPercent ? percent : nil) } } label: {
+                    Label("Já fiz no Gerenciador (Touch ID)", systemImage: "checkmark.circle").font(DS.Font.bodyStrong)
+                        .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(canApplied ? DS.Color.ink : DS.Color.inkMuted)
+                        .background(DS.Color.surface, in: Capsule()).overlay(Capsule().stroke(canApplied ? DS.Color.accent : DS.Color.stroke))
+                }.buttonStyle(.plain).disabled(!canApplied).help("Avise que você já fez esta ação no Gerenciador da Meta. O Bunker registra e confere na próxima leitura do Malva.")
                 if m.busy { ProgressView().controlSize(.small) }
             }
-            Text("Vira pedido para os agentes prepararem a proposta exata. Quando ela chegar, aparece aqui em \"Aguardando você\" para aprovar com a digital. Nada é alterado na Meta agora.")
+            Text("\"Pedir à equipe\" vira pedido para os agentes prepararem a proposta exata, que volta aqui em \"Aguardando você\". \"Já fiz no Gerenciador\" só registra o que você fez na Meta; o Bunker confere na próxima leitura do Malva. Nenhum dos dois altera a Meta.")
                 .font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted).fixedSize(horizontal: false, vertical: true)
             if !card.blockedReasons.isEmpty {
                 Text("Para executar depois: " + card.blockedReasons.prefix(3).joined(separator: " ")).font(.system(size: 9.5)).foregroundStyle(DS.Color.warn).fixedSize(horizontal: false, vertical: true)
@@ -159,6 +166,15 @@ struct OwnerAdjustView: View {
         let what = OwnerAdjust.label(m.action) + (percent.map { " " + Format.percent($0, signed: false) } ?? "")
         await submit(input, prompt: "registrar \(what) em \(card.campaign ?? "campanha") (\(card.account ?? card.adAccountId))", key: key,
                      success: m.action == "keep" ? "Decisão de manter registrada." : "Pedido registrado. A equipe vai conferir e preparar a proposta exata; nada foi alterado na Meta.")
+    }
+
+    func sendApplied(_ card: OwnerCards.Card, revision: Int?, percent: Double?) async {
+        guard let revision else { return }
+        let key = ["applied", card.id, card.signature, m.action, percent.map { String($0) } ?? "", m.reason].joined(separator: "|")
+        let input = OwnerAdjust.applied(card: card, revision: revision, action: m.action, percent: percent, reason: m.reason, clientId: clientId(key))
+        let what = OwnerAdjust.label(m.action) + (percent.map { " " + Format.percent($0, signed: false) } ?? "")
+        await submit(input, prompt: "informar que já fez \(what) em \(card.campaign ?? "campanha") (\(card.account ?? card.adAccountId))", key: key,
+                     success: "Registrado: você já fez \(what) no Gerenciador. O Bunker confere na próxima leitura do Malva.")
     }
 
     func review(_ p: OwnerCards.Proposal, revision: Int?, decision: String) async {
