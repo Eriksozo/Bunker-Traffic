@@ -21,6 +21,7 @@ import {decisionContingency} from '../lib/decision-contingency.mjs';
 import {campaignHistoryTrend} from '../lib/campaign-forecast.mjs';
 import './campaign-forecast.css';
 import {Button} from '@/components/ui/button';
+import {ActivityBadge,ActivityChip,MetricEvolution,CampaignActivityLog} from './campaign-activity';
 import {Badge} from '@/components/ui/badge';
 import {Input} from '@/components/ui/input';
 import {Textarea} from '@/components/ui/textarea';
@@ -118,7 +119,9 @@ function Card({card,state,draft,setDraft,saving,now,onSave,onApprove,liveItems=[
  const today=todayDisplay(card,now);
  return <UiCard className={'dc-card dc-card-'+actionOf(recommended.action)} aria-label={'Decisão para '+row.name}>
   <header className="dc-card-head"><div className="dc-card-tags"><span className="dc-phase">{card.phase||'Fase N/D'}</span><Badge variant="outline" className={'dc-state '+(observedRow.effectiveStatus==='ACTIVE'?'dc-active':'')}>{statusLabel(observedRow.effectiveStatus||observedRow.status)}</Badge></div><h3>{row.name||'Campanha sem nomenclatura'}</h3><div className="dc-card-identity"><strong>{state.config?.[card.project]?.projectName} · {row.accountName||'Conta sem nome'}</strong><code>ID da campanha: {row.externalId||'N/D'}</code></div></header>
+  <ActivityChip card={card} state={state} now={now}/><MetricEvolution card={card}/>
   <MonitoringContext card={card}/>
+  <CampaignActivityLog card={card} state={state} now={now}/>
   <div className="dc-suggestion"><span className={'dc-suggestion-icon dc-'+actionOf(recommended.action)}><Icon size={21}/></span><div><small>{origin}</small><strong>{!reviewed?review.label:actions[actionOf(recommended.action)].label}{reviewed&&finite(recommended.percent)&&['increase','reduce'].includes(recommended.action)?` ${number(recommended.percent)}%`:''}</strong></div>{reviewed&&<span className="dc-consensus" title="Pareceres da campanha disponíveis"><Check size={12}/> Equipe</span>}</div>
   <details className="dc-rationale"><summary><p className="dc-reason dc-reason-preview">{reviewed?recommendationSummary(card):review.detail}</p><span>Ler análise <ChevronDown size={13}/></span></summary><p className="dc-reason">{recommended.reason||'Conferir os períodos e o efeito dos ajustes anteriores antes da próxima decisão.'}</p></details>
   <div className="dc-card-metrics"><span><small>{recentLabel(card,'ROAS')}</small><strong>{ratio(card.windows?.['3d']?.roas)}</strong></span><span><small>{recentLabel(card,'Front')}</small><strong>{number(card.windows?.['3d']?.frontOrders)}</strong></span><span><small>{today.label}</small><strong>{money(today.metrics?.spend)}</strong></span></div>
@@ -142,6 +145,7 @@ function KanbanTile({card,state,stage,now,onOpen,projectName}:{card:any;state:an
   <p className="dc-kanban-account">{projectName&&<><strong>{projectName}</strong> · </>}{row.accountName||'Conta sem nome'}</p>
   <div className="dc-kanban-recommendation"><Icon size={14}/><strong>{diagnostic?review.label:actions[action].label}{!diagnostic&&finite(suggestion.percent)&&['increase','reduce'].includes(action)?` ${number(suggestion.percent)}%`:''}</strong></div>
   <p className="dc-kanban-reason">{diagnostic?review.detail:recommendationSummary(card)}</p>
+  <ActivityChip card={card} state={state} now={now}/><MetricEvolution card={card}/>
   {(card.liveDrift||card.monitor)&&<span className="dc-context-flag"><RefreshCw size={12}/>{card.liveDrift?.title||card.monitor.title}</span>}
   {context?.kind==='mixed-return'&&<span className="dc-context-flag"><Clock3 size={12}/>{context.title}</span>}
   {stale&&<span className="dc-context-flag"><Clock3 size={12}/>Atualizar análise</span>}
@@ -165,7 +169,7 @@ function DecisionList({rows,state,now,expanded,setExpanded,drafts,updateDraft,sa
    const suggestionText=suggestion?actions[action].label+(finite(suggestion.percent)&&['increase','reduce'].includes(action)?` ${number(suggestion.percent)}%`:''):'Aguarda equipe';
    return <li key={key} className={'dc-list-row dc-list-stage-'+stage+(open?' is-open':'')}>
     <button type="button" className="dc-list-summary" aria-expanded={open} aria-controls={panel} onClick={()=>setExpanded(open?null:key)}>
-     <span className="dc-list-name"><strong>{row.name||'Campanha sem nomenclatura'}</strong><small>{name?name+' · ':''}{row.accountName||'Conta sem nome'} · {statusLabel(row.effectiveStatus||row.status)}</small></span>
+     <span className="dc-list-name"><strong>{row.name||'Campanha sem nomenclatura'}</strong><small>{name?name+' · ':''}{row.accountName||'Conta sem nome'} · {statusLabel(row.effectiveStatus||row.status)}<ActivityBadge card={card} state={state} now={now}/></small></span>
      <span className={'dc-list-stage dc-list-stage-tag-'+stage}>{stageLabel(stage,review)}</span>
      <span className={'dc-list-suggestion'+(suggestion?' dc-'+action:' is-pending')}><Icon size={14}/>{suggestionText}</span>
      <span className="dc-list-metric" data-label="Gasto hoje">{money(metrics.spendToday)}{metrics.liveStale&&<em title="Leitura atual desatualizada">desatualizada</em>}</span>
@@ -177,7 +181,9 @@ function DecisionList({rows,state,now,expanded,setExpanded,drafts,updateDraft,sa
     </button>
     {open&&<div className="dc-list-detail" id={panel}>
      <p className="dc-list-reason">{suggestion?recommendationSummary(card):review.detail}</p>
+     <ActivityChip card={card} state={state} now={now}/><MetricEvolution card={card}/>
      <MonitoringContext card={card}/>
+     <CampaignActivityLog card={card} state={state} now={now}/>
      <details className="dc-list-guard" open={!!proposal}><summary><ShieldCheck size={14}/>Proteção da operação · {guard.blocked?(proposal?'bloqueia a aprovação':'pontos a resolver antes de aprovar'):'conferências da ação'}<ChevronDown size={13}/></summary><DecisionContingency state={state} card={card} proposal={proposal} action={draft.action} percent={percentage(draft)} liveItems={liveItems} now={now}/></details>
      <ActionBox card={card} state={state} draft={draft} setDraft={next=>updateDraft(card,next)} saving={saving} now={now} onSave={onSave} onApprove={onApprove} liveItems={liveItems}/>
      {blocked.length>0&&<details className="dc-detail dc-pending"><summary><Clock3 size={13}/>{blocked.length} {blocked.length===1?'ponto para conferir':'pontos para conferir'}<ChevronDown size={13}/></summary><ul>{blocked.map((text:any,index:number)=><li key={index}>{String(text)}</li>)}</ul></details>}

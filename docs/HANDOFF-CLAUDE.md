@@ -251,3 +251,25 @@ Pedido do proprietário: Nina e Theo pareciam parados no painel "Aprender, confe
   - Republicar o Site.
   - Investigar com o Codex as falhas de evidência de memória e de citação de filhos.
   - Acompanhar se os cortes por tamanho desaparecem nas próximas respostas do Cai.
+
+## Atividade dos gestores e evolução nos cards (registro escrito às 2026-11-07 12:02:00 UTC por `date -u`)
+
+- **Pedido do dono:** os cards devem acompanhar a evolução das métricas e o log dos outros gestores. Se alguém agir antes ou durante a sugestão, isso deve ficar evidente, com % e de quanto para quanto. A Visão geral deve somar a atividade recente por ação, com nomes, e abrir o log ao clicar.
+- **Fontes, sem inventar autor:**
+  - histórico de edições Malva (`decisionHistory`): autor e horário exatos;
+  - leituras completas que observaram mudança (`campaignChanges`): sem autor, com o intervalo entre as leituras;
+  - execuções do Bunker confirmadas: "Bunker · aprovado por você";
+  - acompanhamento ao vivo (`liveDrift`) ainda não registrado em log.
+  A mesma transição em várias fontes vira uma linha, com a fonte mais rica e "confirmado também por".
+- **Tela:**
+  - **Card do quadro, linha da lista e card completo:** o aviso "Mudou depois da análise: quem/ação · −30% · R$ 1.000 → R$ 700/dia · horário"; a evolução de hoje desde a análise (gasto, front, ROAS antes → agora); o log "Atividade na campanha · últimas 72h".
+  - **Linha recolhida da lista:** selo "Reduzida −30% após a análise".
+  - **Análise da campanha:** mesmo log.
+  - **Visão geral:** "Mudanças de orçamento e status", com caixas Aumentos/Reduções/Pausas/Ativações, contagem, nomes e quantas sem autor informado, em 24h ou 7 dias. Clicar abre o log com quem, data/hora, campanha e de → para.
+- **Arquivos:** `lib/campaign-activity.mjs` (testado; log em cache por versão do estado e indexado por campanha), `app/campaign-activity.tsx`/`.css`, integrações em `app/decision-cards.tsx` e `app/bunker.tsx`.
+- **Limites:**
+  - "tempo real" segue a cadência existente: acompanhamento visual em minutos, leituras de análise na agenda;
+  - o autor só aparece quando o histórico Malva foi importado; a política atual renova esse histórico por escopo a cada 24h;
+  - mudanças vistas só na leitura ficam "autor não informado".
+- **Validação:** 960 testes, typecheck e build. Conferido localmente com leituras fictícias que geraram aumento, redução e ativação.
+- **O Site `chatgpt.site` continua em versão antiga até ser republicado.** Os deploys pela `main` atualizam o Worker.
