@@ -38,9 +38,9 @@ test('action queue ranks money lost today, keeps opportunities, and leaves pause
 
 test('tests with under 24h of delivery are preserved and counted, also when the start is unknown and only today exists',()=>{
  const now=Date.parse('2026-11-07T12:00:00Z');
- const young=candidate('young',{today:metrics(500,50)});young.row.deliveryStartedAt='2026-11-07T01:00:00Z';
+ const young=candidate('young',{today:metrics(500,50)});young.row.name='[TESTE] young';young.row.deliveryStartedAt='2026-11-07T01:00:00Z';
  const old=candidate('old',{today:metrics(500,50),week:metrics(3000,2000)});old.row.deliveryStartedAt='2026-10-01T00:00:00Z';
- const unknown=candidate('unknown',{today:metrics(400,40)});delete unknown.row.deliveryStartedAt;
+ const unknown=candidate('unknown',{today:metrics(400,40)});unknown.row.name='[TESTE] unknown';delete unknown.row.deliveryStartedAt;
  const q=actionQueue([young,old,unknown],{now});
  assert.deepEqual(q.items.map(i=>i.candidate.id),['old']);assert.equal(q.protectedTests,2);assert.equal(q.considered,1);
 });

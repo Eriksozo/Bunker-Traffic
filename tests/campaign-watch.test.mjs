@@ -57,3 +57,8 @@ test('Duplicate current identities do not manufacture a unique campaign signal',
 test('Actual spend outranks idle unanalysed archive without claiming a new creation',()=>{
  const {state,feed,snapshot}=setup();snapshot.rows=[{...row('idle'),spend:0},{...row('live'),spend:50},{...row('disabled'),accountStatus:{active:false}}];const p=campaignWatchPlan(state,feed,now);const targets=p.signals.filter(s=>s.objectId);assert.deepEqual(targets.map(s=>s.objectId),['live','idle','disabled']);assert.equal(targets[0].title,'Campanha sem análise');assert.match(targets[0].reason,/não comprova criação recente/);
 });
+test('Fresh first-day no-sale spend stays visible even when the four-period analysis is stale',()=>{
+ const {state,feed,snapshot}=setup();Object.assign(snapshot.rows[0],{name:'03/11 - [TESTE] NEW',frontOrders:0,orders:0,revenueNet:0});state.snapshots.forEach(s=>{s.fetchedAt=stamp(-3600001);if(s.period!=='today')Object.assign(s.rows[0],{spend:0,frontOrders:0,orders:0,revenueNet:0});});
+ const p=campaignWatchPlan(state,feed,now);assert.ok(kinds(p).includes('new-test-risk'),JSON.stringify(p));assert.ok(kinds(p).includes('reread'));assert.equal(p.signals.find(s=>s.kind==='new-test-risk').canExecute,false);
+ snapshot.lastSyncAt=stamp(-901000);assert.equal(kinds(campaignWatchPlan(state,feed,now)).includes('new-test-risk'),false);
+});

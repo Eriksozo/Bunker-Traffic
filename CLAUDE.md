@@ -7,7 +7,7 @@ Leia primeiro `docs/HANDOFF-CLAUDE.md`, `AGENT-RUNBOOK.md`, `docs/connections.md
 ## Limites obrigatórios
 
 - Apenas projetos Meta configurados: Gabe, John, Leandro, Murilo, Nico e Ronald. Kwai fora do escopo. Aquecimento/engajamento fora das recomendações de vendas.
-- Compare 7 e 3 dias completos, ontem e hoje parcial; confira sequência diária, hierarquia e últimas edições antes de sugerir. Preserve testes com menos de 24h. Front, pedidos, upsells, ROI e ROAS são medidas diferentes. Ausência permanece N/D.
+- Compare 7 e 3 dias completos, ontem e hoje parcial; confira sequência diária, hierarquia e últimas edições antes de sugerir. Preserve a maturação dos testes, mas testes novos com gasto e sem vendas exigem revisão prioritária desde o primeiro dia; menos de 24h não impede proposta fundamentada de contenção. Veja `docs/test-launch-protocol.md`. Front, pedidos, upsells, ROI e ROAS são medidas diferentes. Ausência permanece N/D.
 - Conexão técnica, parecer, aprendizado e intenção do dono não autorizam execução. Apenas orçamento diário/status Meta de proposta atual aprovada pelo dono na interface, com projeto, conta, objeto, versão, moeda e valores exatos.
 - Use claim → prepare → submit. Execute uma vez somente quando a primeira resposta de submit conceder `dispatchGranted:true`, usando exclusivamente o comando preparado via Malva MCP. Releia e confirme. Resposta ambígua/timeout exige verificação; jamais reenvio cego. Não aprove pelo dono.
 - O executor Cloudflare é o único executor automático. Não crie outro daemon/cron, não ative a automação local e não dispute reservas vivas. Preserve cadência, fuso, pausa, metas e limites configurados.
