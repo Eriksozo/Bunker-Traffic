@@ -30,3 +30,11 @@ test('The production model packet reaches all six campaigns and four roles witho
  for(let i=0;i<4;i++){const out=await engine.step();assert.equal(out.kind,'stage');assert.equal(out.prioritized,6);assert.equal(out.deferredTargets,0);assert.equal(out.model,'Workers AI gpt-oss-120b');}
  assert.equal(calls,4);assert.equal(state.collaborationMessages.filter(m=>m.kind==='conclusion').length,4);for(const m of state.collaborationMessages.filter(m=>m.kind==='conclusion')){assert.equal(m.analysisCoverage.reviewed,6);assert.equal(m.model.policy,'wide');assert.equal(m.campaignReadings.length,6);}assert.equal(state.proposals.length,0);assert.equal(state.executions.length,0);
 });
+test('a reply to a teammate question gets the stage output cap; other non-stage calls keep the smaller cap',async()=>{
+ const {cloudOutputTokens}=await import('../lib/cloud-analysis.mjs');const wide=cloudModelPolicy('wide'),legacy=cloudModelPolicy('legacy');
+ assert.equal(cloudOutputTokens(wide,{campaignReviewPolicy:{}}),6400);assert.equal(cloudOutputTokens(wide,{receivedQuestion:{id:'m1'}}),6400);assert.equal(cloudOutputTokens(wide,{}),4400);
+ assert.equal(cloudOutputTokens(legacy,{receivedQuestion:{id:'m1'}}),3200);assert.equal(cloudOutputTokens(legacy,{}),2200);
+ let request;const reply={...value,campaignReadings:[]};
+ await runCloudAnalyst({run:async(_m,r)=>{request=r;return envelope(reply);}},'ops',{project:'p',campaigns:[],receivedQuestion:{id:'m1',fromAgent:'traffic',text:'Qual o risco?'}},'wide');
+ assert.equal(request.max_tokens,6400);
+});

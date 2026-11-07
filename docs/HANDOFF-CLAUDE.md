@@ -231,3 +231,23 @@ Pedido do proprietário: Nina e Theo pareciam parados no painel "Aprender, confe
 - **Conferência pós-deploy:** `/health` 200; MCP `initialize`, `tools/list` (9) e `bunker_ler` com 200; secrets preservados (somente nomes conferidos); 156 críticas elegíveis, nenhuma feita ainda; executor ativo, sem falhas desde 03:00 UTC.
 - **A conferir:** a primeira crítica real só ocorre na próxima janela (06:00 America/Sao_Paulo). O painel não foi conferido visualmente.
 - **Fora desta etapa:** execução autônoma via Malva sem aprovação exata do dono não foi implementada; exige mudança de política escrita, com limites, e revisão.
+
+## Rotina do dia e teto de resposta entre agentes (registro escrito às 2026-11-07 11:32:37 UTC por `date -u`)
+
+- **Bateria de uso diário** (Bunker real em modo leitura e Bunker local com dados fictícios): o Site privado `chatgpt.site` roda uma versão anterior à lista de cards (`56b1b54`). Deploys pela `main` atualizam só o Worker; para o dono ver as melhorias, o Site precisa ser republicado. Outros gaps: fila de 450+ cards quase toda "Investigar", métricas sem comparação, tabela sem hoje/ontem nem ordenação, seleção esquecida, perguntas aos agentes só pelo Escritório.
+- **Entrega 1** (commit `a92500e`, versão Cloudflare `89ee7627`):
+  - "Hoje em 1 minuto" compara ROAS/ROI/CPA de hoje com ontem e 7 dias, só por índices.
+  - "O que fazer agora" mostra até 5 campanhas ativas por dinheiro em jogo: 3 perdas e 2 oportunidades.
+  - Testes com menos de 24h de entrega (ou sem início conhecido e sem janela fechada) ficam fora e são contados.
+  - Tabela de Campanhas com gasto e ROAS de hoje/ontem, ordenação, filtro "Ativas" e título corrigido.
+  - Projeto e período lembrados por navegador.
+  - Só apresentação; conferida localmente em desktop e 375 px.
+- **Falhas do executor lidas** pela seção `context` do envelope `review-data`, entre 09:13 e 10:12 UTC:
+  - 9 `CLOUD_MEMORY_REVIEW_EVIDENCE` (já ocorria antes da crítica prévia).
+  - 5 `CLOUD_AI_INVALID`, 4 delas do Cai, que não recebe crítica. Duas foram cortadas no teto de 4.400 tokens (`finishReason: length`) ao responder perguntas.
+  - 3 `CLOUD_CAMPAIGN_READING_EVIDENCE` (`child_citation_required`, Nina/Nico).
+- **Correção:** a resposta a uma pergunta entre agentes usa o teto de saída das etapas (6.400 no gpt-oss-120b, 3.200 no legado). Chamadas avulsas mantêm o teto menor. Entrada, validações, aprovação e execução não mudam.
+- **Pendências:**
+  - Republicar o Site.
+  - Investigar com o Codex as falhas de evidência de memória e de citação de filhos.
+  - Acompanhar se os cortes por tamanho desaparecem nas próximas respostas do Cai.
