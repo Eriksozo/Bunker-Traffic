@@ -212,5 +212,5 @@ Pedido do proprietário: a aba não estava prática. Ele marcou os quatro proble
   - O aviso "Atualizar análise" continua visível.
   - Título, lista e quadro ganharam o mesmo recuo dos filtros.
 - **Conferência visual:** página temporária local com dados de exemplo, em 800 e 1440 px; a página não foi commitada.
-- **Validação:** só estes arquivos, numa worktree limpa a partir de `a36d8ef`: 944 testes, typecheck e build aprovados.
+- **Validação:** só estes arquivos, numa worktree limpa a partir de `d112cee`: 944 testes, typecheck e build aprovados.
 - **Pendência alheia:** no checkout principal há edições não commitadas de outro escritor (`lib/learning-cycle.mjs`, `lib/learning-peer-review.mjs`, `lib/automatic-agent-hypotheses.mjs` e `tests/learning-peer-review.test.mjs`). Com elas, 8 testes de `cloud-executor` e `cloud-model-policy` falham com `CLOUD_LEARNING_REVIEW_REQUIRED`. Essas edições não foram commitadas nem alteradas.
