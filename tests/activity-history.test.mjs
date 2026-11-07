@@ -47,6 +47,7 @@ test('invalid source identity, future dates, out-of-window data and changed pagi
  }
  const prior={pending:{project:'other',timezone:project.timezone}};
  await assert.rejects(collectActivityHistory(source([page([])]),project,prior,{now:()=>now}),/IDENTITY/);
+ await assert.rejects(collectActivityHistory(source([{...page([]),period:{...page([]).period,from:'2026-11-07T03:00:00Z'}}]),project,null,{now:()=>now}),/PERIOD/);
  const other={...page([]),period:{...page([]).period,from:'2026-11-02T03:00:00Z'}};
  await assert.rejects(collectActivityHistory(source([page([],'next'),other]),project,null,{now:()=>now}),/PERIOD_CHANGED/);
  await assert.rejects(collectActivityHistory(source([page([],'loop'),page([],'loop')]),project,{pending:{project:'p',timezone:project.timezone,request:{},period:page([]).period,cursor:'loop',cursors:['loop']}},{now:()=>now}),/CURSOR/);

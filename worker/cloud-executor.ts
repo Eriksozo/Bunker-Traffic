@@ -107,11 +107,14 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   try{
    await this.ctx.storage.put('runtime',{...setting,lastPulseAt:new Date().toISOString()});const engine=this.engine();
    // Bounded work prevents one large project from owning a whole alarm forever.
+   try{
    const started=Date.now();for(let n=0;n<4&&Date.now()-started<90000;n++){
     setting=await this.setting();if(!setting.enabled)break;
     const result=await engine.step(),at=new Date().toISOString();const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,lastErrorDetail:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});
     if(['idle','blocked'].includes(result.kind))break;
    }
+   }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
+   // A rejected model opinion must not starve live reads, edit authors or the notch.
    const liveState=(await this.setting()).enabled?await this.syncLive():null;
    // Optional attribution never turns into an executor failure.
    if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});

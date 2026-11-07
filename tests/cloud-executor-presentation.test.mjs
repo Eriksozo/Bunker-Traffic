@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+import {runtimeFailure} from '../lib/cloud-failure-diagnostics.mjs';
+// Exercise the real Durable Object alarm with only infrastructure and provider boundaries replaced.
+const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+function executor({step,enabled=true}={}){
+ const exports={},values=new Map([['runtime',{enabled,history:[]}]]),alarms=[];
+ const storage={get:async k=>values.get(k),put:async(k,v)=>values.set(k,v),setAlarm:async at=>alarms.push(at)};
+ class DurableObject{constructor(ctx,env){this.ctx=ctx;this.env=env;}}
+ vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:{},Date,Response});
+ const e=new exports.BunkerCloudExecutor({storage},{}),calls=[];
+ e.engine=()=>({step:step||(async()=>{calls.push('analysis');throw Object.assign(Error('rejected'),{code:'CLOUD_MEMORY_REVIEW_EVIDENCE'});})});
+ e.syncLive=async()=>{calls.push('live');return {paused:false};};e.syncAttribution=async()=>calls.push('authors');e.storeCompanion=async()=>calls.push('notch');
+ return {e,calls,values,alarms};
+}
+test('a failed opinion keeps its failure record and still refreshes live data, authors and the notch',async()=>{
+ const {e,calls,values,alarms}=executor();await e.alarm();
+ assert.deepEqual(calls,['analysis','live','authors','notch']);
+ assert.equal(values.get('runtime').lastError,'CLOUD_MEMORY_REVIEW_EVIDENCE');assert.equal(values.get('runtime').history[0].kind,'failure');
+ assert.equal(alarms.length,1);assert.equal(e.running,false);
+});
+test('disabled executor does no analysis or presentation; a pause during analysis prevents new reads',async()=>{
+ const disabled=executor({enabled:false});await disabled.e.alarm();assert.deepEqual(disabled.calls,[]);assert.equal(disabled.alarms.length,0);
+ let active;active=executor({step:async()=>{active.values.set('runtime',{enabled:false,history:[]});throw Error('stopped');}});
+ await active.e.alarm();assert.deepEqual(active.calls,[]);assert.equal(active.alarms.length,0);
+});
+test('authorship failure stays separate and does not block the notch summary',async()=>{
+ const {e,calls,values}=executor({step:async()=>({kind:'idle'})});
+ e.syncAttribution=async()=>{calls.push('authors');throw Error('source unavailable');};
+ await e.alarm();assert.deepEqual(calls,['live','authors','notch']);assert.equal(values.get('attributionStatus').failed,true);
+ assert.equal(values.get('runtime').lastError,null);
+});
