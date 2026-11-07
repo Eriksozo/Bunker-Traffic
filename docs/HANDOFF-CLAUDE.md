@@ -195,3 +195,22 @@ Conferência da publicação do painel (registro escrito às 2026-11-07 03:02:49
 - Primeiras leituras do status do executor (02:56:34–03:00:52 UTC) vieram ainda sem `modelLabel`. Desde 30/10/2026 a Cloudflare adia por padrão a troca de código de um Durable Object ativo (até 300 s ou até hibernar).
 - Na leitura de 03:02:33 UTC o objeto já estava no código novo: `"modelLabel":"Workers AI gpt-oss-120b"`, último pulso `idle`, `lastError` vazio.
 - Regra operacional: conferir mudanças do `BunkerCloudExecutor` só depois de 5 min do deploy; uma leitura anterior pode vir do código antigo. Referência: https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/
+
+## Aba Cards de decisão mais prática (registro escrito às 2026-11-07 03:20:16 UTC por `date -u`)
+
+Pedido do proprietário: a aba não estava prática. Ele marcou os quatro problemas: demora para decidir, texto demais, dificuldade de comparar campanhas e colunas ruins.
+
+- **Lista como visão padrão** (`lib/decision-list.mjs`, testado): uma linha por campanha, ordenada por etapa (Para aprovar → Sugestão da equipe → Revisão) e, dentro da etapa, pelo maior gasto de hoje.
+  - Colunas: etapa, sugestão, gasto e front de hoje, ROAS e front de 3d, diário.
+  - "Hoje" vem só da leitura atual (`liveToday`); leitura desatualizada é marcada e ausência continua N/D.
+- **Decisão na própria linha**, sem o modal grande. A caixa de ação foi extraída do card (`ActionBox`) e é a mesma no modal e na lista, com as mesmas travas.
+  - A aprovação de execução continua exigindo o diálogo de confirmação exata.
+  - A Proteção da operação fica recolhida quando não há proposta exata (registrar intenção não executa) e abre sozinha quando há proposta para aprovar.
+  - "Ver análise completa" abre o card inteiro.
+- **Quadro mantido como alternativa** (seletor Lista/Quadro, lembrado por navegador): colunas cabem na largura e empilham em telas estreitas, sem rolagem lateral.
+  - Cada cartão mostra 4 números; cenário, tendência, pareceres e fontes ficam em "Mais contexto".
+  - O aviso "Atualizar análise" continua visível.
+  - Título, lista e quadro ganharam o mesmo recuo dos filtros.
+- **Conferência visual:** página temporária local com dados de exemplo, em 800 e 1440 px; a página não foi commitada.
+- **Validação:** só estes arquivos, numa worktree limpa a partir de `a36d8ef`: 944 testes, typecheck e build aprovados.
+- **Pendência alheia:** no checkout principal há edições não commitadas de outro escritor (`lib/learning-cycle.mjs`, `lib/learning-peer-review.mjs`, `lib/automatic-agent-hypotheses.mjs` e `tests/learning-peer-review.test.mjs`). Com elas, 8 testes de `cloud-executor` e `cloud-model-policy` falham com `CLOUD_LEARNING_REVIEW_REQUIRED`. Essas edições não foram commitadas nem alteradas.
