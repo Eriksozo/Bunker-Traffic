@@ -419,7 +419,7 @@ Pedido do proprietário: aprender com o log nominal do gestor e não ocultar tes
 
 Estudo rastreável registrado no aprendizado privado do John, com pausas e contraexemplos de aumentos por conta/ID. Dados operacionais permanecem fora do Git público. O protocolo não cria teto universal, não altera cadência/pausa e não habilita execução sem aprovação exata. Testes de regressão cobrem cópias por conta, vencedores, dados ausentes, virada de fuso, histórico rentável, fonte vencida e fila/foco. Nenhuma campanha alterada nesta manutenção.
 
-## Testes novos sem vendas — triagem de 07/11/2026 e lacuna do primeiro gasto (registro escrito às 2026-11-07 19:16 UTC por `date -u`)
+## Testes novos sem vendas — triagem de 07/11/2026 e lacuna do primeiro gasto (registro escrito às 2026-11-07 19:12:57 UTC por `date -u`)
 
 - **Triagem somente leitura** (6 agentes Claude, Malva MCP, sem escrita): John, Leandro, Murilo e Nico; Gabe e Ronald pausados pelo dono (Gabe sem gasto Meta desde 26/10). A lista por conta/campanha foi entregue ao dono no chat; dados operacionais ficam fora do Git.
 - **Cards:** proposta exata só nasce na rodada do executor (ops com claim e três conclusões reais); Claude não reservou etapas para não disputar o executor. A rodada John `55ca0b27` já priorizou dois testes novos sem vendas e os quatro papéis os marcaram "investigar". O foco ordena por revisão mais antiga, então os demais entram nas próximas rodadas (duas vagas prioritárias por rodada).
