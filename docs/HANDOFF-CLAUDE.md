@@ -179,7 +179,7 @@ Escopo: quatro pontos derivados do que foi medido nesta sessão. Nenhuma coleta,
    | um `live` | 93 → 48 ms | — |
 
    `resolutions`, `daily` e `reports` não estão entre os 15 maiores custos de 24 h; sem evidência para alterá-los.
-2. Painel do executor (aguarda publicação):
+2. Painel do executor (publicado no commit `a36d8ef`, versão Cloudflare `484b65d7-764c-466a-963d-397cf2fd76cf`, 100% às 02:56:07 UTC):
    - Mostra o diagnóstico de armazenamento saneado no histórico e a última falha registrada, mesmo depois de um passo bem-sucedido. Rótulos em `lib/storage-diagnostic-label.mjs`, só com vocabulário fixo e sem identificadores.
    - Corrige o modelo, que aparecia fixo como "Llama 3.3 70B" embora o executor use `@cf/openai/gpt-oss-120b`: o status do Worker passa a enviar `modelLabel` a partir de `cloud-model-policy`.
 3. Persistência das coletas: confirmada sem correção. Os seis projetos têm 12/12 fontes completas (7d, 3d, ontem e hoje × campanha, conjunto e anúncio) via Malva MCP. Coletas de 06/11 entre 22:28 e 22:57 UTC; John às 00:28 UTC de 07/11.
@@ -189,3 +189,9 @@ Escopo: quatro pontos derivados do que foi medido nesta sessão. Nenhuma coleta,
    - Nada foi apagado. Retenção é decisão do proprietário; opções: manter os N mais recentes ou um prazo em dias, ou mudar o formato para gravar fontes por projeto, alteração maior que exige preservar a compatibilidade `bunker-snapshot-reference`.
 
 Validação: 940 testes, typecheck, build e `git diff --check` aprovados. O painel não foi conferido visualmente: a interface exige a autenticação privada do Site.
+
+Conferência da publicação do painel (registro escrito às 2026-11-07 03:02:49 UTC por `date -u`):
+- `/health` 200; `bunker_ler`: revisão 5437, fontes `gzip-base64-v3` (72), sem pausa, nada devido, nenhuma execução pendente.
+- Primeiras leituras do status do executor (02:56:34–03:00:52 UTC) vieram ainda sem `modelLabel`. Desde 30/10/2026 a Cloudflare adia por padrão a troca de código de um Durable Object ativo (até 300 s ou até hibernar).
+- Na leitura de 03:02:33 UTC o objeto já estava no código novo: `"modelLabel":"Workers AI gpt-oss-120b"`, último pulso `idle`, `lastError` vazio.
+- Regra operacional: conferir mudanças do `BunkerCloudExecutor` só depois de 5 min do deploy; uma leitura anterior pode vir do código antigo. Referência: https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/
