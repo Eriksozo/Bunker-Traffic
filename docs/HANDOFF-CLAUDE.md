@@ -433,3 +433,11 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Notch:** a conta passa a aparecer no rótulo de cada linha de "O que fazer agora" (`Format.queueTag`, self-test). Commit `23a73bb`, app reinstalado.
 - **Fila sem campanhas pausadas depois da análise:** a fila lia o status da última análise completa; um teste pausado pelo dono às 19:07 UTC continuava listado. `pausedAfterAnalysis` usa o status mais recente de registro posterior à análise (log de gestores com autor/hora, mudança observada e, na web, leitura ao vivo) para tirar a campanha da fila; reativação posterior a devolve. Mesmo projeto + conta + ID; campos de orçamento não contam. Web e notch usam a mesma regra.
 - **Validação:** 1009 testes, typecheck e build.
+
+## Autonomia em fase sombra (registro escrito às 2026-11-07 20:22:16 UTC por `date -u`)
+
+- **Decisão do dono:** sombra de 3 a 5 dias; regras elegíveis para execução futura: pausar teste novo sem venda, reduzir 20% em dia ruim, pausar campanha sem entrega e aumento com teto (padrão de aumento observado); sem limite diário; o Bunker cuida dos testes D0–D1; avisos só ao dono. Política: `docs/autonomy-policy.md`; linha correspondente no `CLAUDE.md`.
+- **Implementação:** `lib/autonomy-shadow.mjs` (regras puras, testadas com dados sintéticos); o executor avalia a cada pulso com a central e a leitura ao vivo já obtidas, guarda em `shadow:*` no Durable Object (7 dias, teto 3.000; grava só o que mudou) e casa cada decisão com a ação posterior de um gestor no mesmo objeto. Leitura pelo MCP `cloud-data` `{"action":"shadow"}` e bloco "Sombra do Bunker · hoje" no notch. Nada é proposto, aprovado ou enviado.
+- **Limiares** ficam no secret `AUTONOMY_SHADOW_POLICY` (fora do Git). Aumentos aparecem como bloqueados até o dono definir tetos.
+- **Validação:** 1019 testes, typecheck, build e self-test do app.
+- **Próximo:** revisar a sombra com o dono em 3 a 5 dias (acertos, vencedores que seriam cortados, aumentos que piorariam, antecedência sobre os gestores).

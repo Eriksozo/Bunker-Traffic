@@ -410,6 +410,19 @@ struct NowTab: View {
                             action: { withAnimation(DS.Motion.quick) { notch.selected = q } })
                 }
             }
+            if let sh = s.shadow, sh.total > 0 {
+                let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
+                SectionHeader(title: "Sombra do Bunker · hoje", detail: "\(would) executaria · \(first) antes do gestor · não executa nada")
+                VStack(spacing: 2) {
+                    ForEach(sh.recent.prefix(5)) { item in
+                        ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),
+                                title: item.campaign ?? "Campanha",
+                                subtitle: Format.shadowChange(item) + " · " + (item.ruleLabel ?? item.rule ?? ""),
+                                tag: Format.queueTag(project: showProject ? item.project : nil, account: item.account),
+                                value: Format.stamp(item.firstAt), valueCaption: Format.shadowOutcome(item))
+                    }
+                }
+            }
         }
     }
 }

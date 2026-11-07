@@ -75,6 +75,20 @@ enum Format {
     }
     static let actionLabels: [String: String] = ["increase": "Aumentos", "reduce": "Reduções", "pause": "Pausas", "activate": "Ativações"]
     static let verbs: [String: String] = ["increase": "aumentou", "reduce": "reduziu", "pause": "pausou", "activate": "ativou"]
+    /// "Pausar" or "100 → 80 USD": the shadow's proposed change, never a command.
+    static func shadowChange(_ item: Summary.ShadowItem) -> String {
+        if item.action == "status" { return item.after?["status"]?.text == "PAUSED" ? "Pausar" : "Ativar" }
+        let before = item.before?["dailyBudget"]?.number, after = item.after?["dailyBudget"]?.number
+        let currency = item.after?["currency"]?.text ?? ""
+        guard let b = before, let a = after else { return "Orçamento" }
+        let pct = b > 0 ? Int(((a - b) / b * 100).rounded()) : 0
+        return "\(pct > 0 ? "+" : "")\(pct)% · \(number(b)) → \(number(a)) \(currency)".trimmingCharacters(in: .whitespaces)
+    }
+    static func shadowOutcome(_ item: Summary.ShadowItem) -> String {
+        if let m = item.manager { let who = m.actor ?? "gestor"; let mins = m.minutesAfter ?? 0; return mins > 0 ? "\(who) fez \(mins) min depois" : "\(who) fez antes" }
+        return item.wouldExecute == true ? "executaria" : "bloqueada"
+    }
+    private static func number(_ n: Double) -> String { n.rounded() == n ? String(Int(n)) : String(format: "%.2f", n) }
     /// Same campaign name runs in several ad accounts; the account always shows so rows stay distinguishable.
     static func queueTag(project: String?, account: String?) -> String? {
         let parts = [project, account].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }

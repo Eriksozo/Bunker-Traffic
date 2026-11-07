@@ -42,6 +42,14 @@ enum SelfTest {
         check(Format.queueTag(project: "John", account: "CA FbMax 720") == "John · CA FbMax 720", #line)
         check(Format.queueTag(project: "John", account: nil) == "John", #line)
         check(Format.queueTag(project: nil, account: "  ") == nil, #line)
+        check(s.shadow == nil, #line)
+        let shadowJSON = #"{"day":"2026-11-07","total":2,"byRule":{"test-no-sale":{"total":1,"wouldExecute":1,"managerDid":1,"bunkerFirst":1}},"recent":[{"rule":"test-no-sale","ruleLabel":"Pausar teste","project":"P","account":"A","campaign":"C","action":"status","reason":"x","firstAt":"2026-11-07T17:00:00.000Z","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":{"actor":"Gestor","at":"2026-11-07T17:40:00.000Z","minutesAfter":40}},{"rule":"bad-day-reduce","action":"budget","before":{"dailyBudget":100,"currency":"USD"},"after":{"dailyBudget":80,"currency":"USD"},"wouldExecute":false,"blockedBy":["x"],"manager":null}]}"#
+        if let sh = try? JSONDecoder().decode(Summary.Shadow.self, from: Data(shadowJSON.utf8)) {
+            check(Format.shadowChange(sh.recent[0]) == "Pausar", #line)
+            check(Format.shadowOutcome(sh.recent[0]) == "Gestor fez 40 min depois", #line)
+            check(Format.shadowChange(sh.recent[1]) == "-20% · 100 → 80 USD", #line)
+            check(Format.shadowOutcome(sh.recent[1]) == "bloqueada", #line)
+        } else { check(false, #line) }
         check(Format.who(s.activity.recent[1]) == "Pausas · autor não informado", #line)
     }
 

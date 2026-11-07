@@ -58,6 +58,19 @@ struct Summary: Decodable, Equatable {
     let agents: Agents
     let executor: Executor?
     let notice: String
+    /// Shadow mode: what the Bunker would have done and whether a manager did it later. Observation only.
+    let shadow: Shadow?
+
+    struct ShadowManager: Decodable, Equatable { let actor: String?; let at: String?; let minutesAfter: Int? }
+    struct ShadowRule: Decodable, Equatable { let total: Int; let wouldExecute: Int; let managerDid: Int; let bunkerFirst: Int }
+    struct ShadowItem: Decodable, Equatable, Identifiable {
+        var id: String { [rule ?? "", account ?? "", campaign ?? "", firstAt ?? ""].joined(separator: "|") }
+        let rule: String?; let ruleLabel: String?; let project: String?; let account: String?; let campaign: String?
+        let action: String?; let reason: String?; let firstAt: String?
+        let before: [String: JSONValue]?; let after: [String: JSONValue]?
+        let wouldExecute: Bool?; let blockedBy: [String]?; let manager: ShadowManager?
+    }
+    struct Shadow: Decodable, Equatable { let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem] }
 }
 
 /// Budgets are numbers, statuses are strings: keep both without guessing.

@@ -19,11 +19,14 @@ import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
+import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy} from '../lib/autonomy-shadow.mjs';
+import {activityLog} from '../lib/campaign-activity.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
  private running=false;
  private centralView:any=null;
+ private liveItems:any[]=[];
  private async setting():Promise<Runtime>{return await this.ctx.storage.get<Runtime>('runtime')||{enabled:false,history:[]};}
  private db(){return new SupabaseStorage({url:this.env.SUPABASE_URL,key:this.env.SUPABASE_SERVICE_ROLE_KEY});}
  private async read(){const current=await readPersistedState(this.db(),empty);this.centralView={paused:current.state.paused,cadence:current.state.cadence,at:new Date().toISOString()};return current;}
@@ -32,9 +35,37 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  }
  private async syncLive():Promise<any>{
   const current=await this.read();if(current.state.paused)return null;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
+  // The shadow reuses this pulse's live reads: no extra central or Supabase read.
+  const fresh:Record<string,any>={};
   const projects=live.projects.sort((a:any,b:any)=>Date.parse(live.items.find((i:any)=>i.projectId===a.projectId)?.lastSuccessAt||'1970-01-01')-Date.parse(live.items.find((i:any)=>i.projectId===b.projectId)?.lastSuccessAt||'1970-01-01')).slice(0,2);
-  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
+  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId)fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
+  this.liveItems=(live.items||[]).map((i:any)=>fresh[i.projectId]||i);
   return current.state;
+ }
+ /**
+  * Shadow mode (docs/autonomy-policy.md): records what each owner-chosen rule would do now and what a
+  * manager did afterwards. Never proposes, approves or dispatches. Stored in this object, not in the central.
+  */
+ private async storeShadow(state:any){
+  if(!state||state.paused)return [];
+  let policy:any={};try{policy=JSON.parse(this.env.AUTONOMY_SHADOW_POLICY||'{}');}catch{policy={};}
+  const now=Date.now(),list=await this.ctx.storage.list<any>({prefix:'attr:'}),withAuthors={...state,changeAttributions:usableAttributions([...list.values()])};
+  const events=activityLog(withAuthors,{since:now-26*3600000,now});
+  const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
+  let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={};
+  for(const project of Object.keys(state.config||{})){
+   const params=policy?.projects?.[project];if(!params||params.enabled===false)continue;
+   const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now});
+   if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;
+  }
+  const merged=shadowOutcomes(mergeShadow(prior,decisions,{now,day:day||new Date(now).toISOString().slice(0,10)}),events);
+  const keep=new Set(merged.map((e:any)=>'shadow:'+e.id)),stale=prior.map((e:any)=>'shadow:'+e.id).filter((k:string)=>!keep.has(k));
+  const before=new Map(prior.map((e:any)=>[e.id,JSON.stringify(e)]));
+  const entries=merged.filter((e:any)=>before.get(e.id)!==JSON.stringify(e)).map((e:any)=>['shadow:'+e.id,e] as [string,any]);
+  for(let i=0;i<entries.length;i+=100)await this.ctx.storage.put(Object.fromEntries(entries.slice(i,i+100)));
+  for(let i=0;i<stale.length;i+=128)await this.ctx.storage.delete(stale.slice(i,i+128));
+  await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped});
+  return merged;
  }
  /** Recent Malva campaign edits, including edits between reads and campaigns not in the analysis queue. */
  private async syncAttribution(state:any){
@@ -70,11 +101,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),version:activityHistoryPolicy.version,projects:checked,checked,matched,failed,itemsSeen,codes,limited:overflow.length>0,known:all.size-overflow.length,coverage:[...progress.values()]});
  }
  /** Mac companion summaries built from the central state this pulse already read; served from this object, never re-reading the central. */
- private async storeCompanion(state:any){
+ private async storeCompanion(state:any,shadow:any[]=[]){
   if(!state)return;
+  const shadowDay=(await this.ctx.storage.get<any>('shadowStatus'))?.day||undefined;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
   const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},board=projectBoard(withAuthors,now);
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]=companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any});
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any}),shadow:shadowSummary(shadow,{project,day:shadowDay})};
   await this.ctx.storage.put(out);
  }
  private async assertEnabled(){if(!(await this.setting()).enabled){const error:any=new Error('CLOUD_EXECUTOR_PAUSED');error.code='CLOUD_EXECUTOR_PAUSED';throw error;}}
@@ -83,6 +115,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
   if(input.action==='companion'){const key='companion:'+(typeof input.project==='string'&&input.project?input.project:'all');const summary=await this.ctx.storage.get(key);return Response.json(summary?{summary}:{summary:null});}
+  if(input.action==='shadow'){
+   const status=await this.ctx.storage.get<any>('shadowStatus'),all=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
+   const day=typeof input.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.day)?input.day:status?.day;
+   const entries=all.filter((e:any)=>!day||e.day===day).sort((a:any,b:any)=>Date.parse(a.firstAt)-Date.parse(b.firstAt)).slice(0,300).map((e:any)=>({rule:e.rule,project:e.projectName,account:e.accountName,adAccountId:e.adAccountId,objectId:e.objectId,campaign:e.name,action:e.action,before:e.before,after:e.after,reason:e.reason,launchDay:e.launchDay,metrics:e.metrics,firstAt:e.firstAt,firstWouldExecuteAt:e.firstWouldExecuteAt,lastAt:e.lastAt,blockedBy:e.blockedBy,manager:e.manager}));
+   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries});
+  }
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus');return Response.json({...runtime,attribution:attribution||null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
   if(input.action==='check'){
@@ -118,7 +156,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const liveState=(await this.setting()).enabled?await this.syncLive():null;
    // Optional attribution never turns into an executor failure.
    if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
-   if(liveState)await this.storeCompanion(liveState).catch(()=>{});
+   // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
+   const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
+   if(liveState)await this.storeCompanion(liveState,shadow).catch(()=>{});
   }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
   finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+60000);}
  }
