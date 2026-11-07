@@ -13,7 +13,7 @@ test('MCP requires its separate credential and never receives visitor supplied o
  const result=await cloudflareAuth(req,env);assert.ok(result instanceof Request);assert.equal(result.headers.has('oai-authenticated-user-id'),false);
 });
 test('foreign origin cannot create a login session or trigger owner email',async()=>{
- for(const path of ['/auth/session','/auth/email'])assert.equal((await cloudflareAuth(new Request('https://bunker.example'+path,{method:'POST',headers:{Origin:'https://attacker.example'}}),env)).status,403);
+ for(const origin of ['https://attacker.example','null',undefined])for(const path of ['/auth/session','/auth/email'])assert.equal((await cloudflareAuth(new Request('https://bunker.example'+path,{method:'POST',headers:origin?{Origin:origin}:{}}),env)).status,403);
 });
 test('expired owner access rotates both secure cookies and validates identity again',async(t)=>{
  const calls=[];t.mock.method(globalThis,'fetch',async(url)=>{
@@ -46,7 +46,7 @@ test('direct entry uses the configured private Site, ignores request destination
  const r=await cloudflareAuth(new Request('https://bunker.example/auth/login?return_to=https://attacker.example'),configured);
  assert.equal(r.status,303);assert.equal(r.headers.get('location'),configured.BUNKER_DIRECT_ACCESS_URL);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.has('set-cookie'),false);
  const alternate=await cloudflareAuth(new Request('https://bunker.example/auth/login?email=1'),configured);
- assert.equal(alternate.status,200);assert.match(await alternate.text(),/Receber link de acesso/);
+ assert.equal(alternate.status,200);assert.equal(alternate.headers.get('Referrer-Policy'),'same-origin');assert.match(await alternate.text(),/Receber link de acesso/);
  assert.equal((await cloudflareAuth(new Request('https://bunker.example/api/state'),configured)).status,401);
 });
 test('invalid optional direct destinations cannot redirect a visitor or weaken authentication',async()=>{
@@ -150,7 +150,7 @@ test('OTP cooldown distinguishes per-recipient seconds from hourly limits, never
 test('successful email request offers a guarded resend and does not claim delivery or grant access',async(t)=>{
  t.mock.method(globalThis,'fetch',async()=>Response.json({}));
  const r=await cloudflareAuth(new Request('https://bunker.example/auth/email',{method:'POST',headers:{Origin:'https://bunker.example','Content-Type':'application/x-www-form-urlencoded'},body:'email=owner%40example.com'}),env);
- assert.equal(r.status,200);assert.equal(r.headers.has('Set-Cookie'),false);assert.equal(r.headers.get('Referrer-Policy'),'no-referrer');
+ assert.equal(r.status,200);assert.equal(r.headers.has('Set-Cookie'),false);assert.equal(r.headers.get('Referrer-Policy'),'same-origin');
  const body=await r.text();assert.match(body,/Pedido aceito pelo serviço de login/);assert.match(body,/Date.now\(\)\+60\*1000/);assert.match(body,/pending=true;b.disabled=true/);
 });
 
