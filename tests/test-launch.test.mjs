@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {testLaunchContext,isTestCampaign} from '../lib/test-launch.mjs';
+import {testLaunchContext,isTestCampaign,verifiedNoSpendPeriods} from '../lib/test-launch.mjs';
 import {actionQueue,isYoungTest} from '../lib/daily-brief.mjs';
 import {candidates} from '../lib/analysis.mjs';
 import {selectLearningFocus} from '../lib/campaign-learning-coverage.mjs';
@@ -55,4 +55,44 @@ test('The daily queue retains young winners for maturation and prioritizes the e
 test('Agent focus admits smaller exposed tests without replacing two rotating slots or freezing a new target set mid-job',()=>{
  const r=row(),s=state(r);for(const cut of s.snapshots)for(let i=0;i<10;i++)cut.rows.push({...row('old'+i),name:'[ESCALA] OLD',spend:10000-i,revenueNet:20000,frontOrders:10,orders:10});
  const focus=selectLearningFocus(s,'p',now);assert.equal(focus.length,6);assert.equal(focus[0].externalId,'c');assert.equal(new Set(focus.map(r=>r.externalId)).size,6);
+});
+
+// Closed windows are collected with status "spent": a genuinely new test never has a row there.
+const spentOnlyState=(r,extra=[])=>{
+ const today={projectId:'p',level:'campaign',period:'today',source:'Malva MCP',timezone:'America/Sao_Paulo',from:'2026-11-07T03:00:00.000Z',to:'2026-11-08T03:00:00.000Z',fetchedAt:new Date(now-1000).toISOString(),lastSyncAt:new Date(now-2000).toISOString(),complete:true,rows:[r,...extra]};
+ const closedCut=(period,from)=>({...today,period,from,to:'2026-11-07T03:00:00.000Z',rows:extra.map(x=>({...x,spend:500}))});
+ return {config:{p:{projectName:'Fictício',testHours:24}},snapshots:[closedCut('7d','2026-10-31T03:00:00.000Z'),closedCut('3d','2026-11-04T03:00:00.000Z'),closedCut('yesterday','2026-11-06T03:00:00.000Z'),today]};
+};
+test('A test named for yesterday and first spending today is found through complete spent-only closed sources',()=>{
+ const r={...row(),name:'06/11 - [TESTE] SCHEDULED'},s=spentOnlyState(r),todayFrom=s.snapshots[3].from;
+ assert.deepEqual(verifiedNoSpendPeriods(s.snapshots,'p',r,todayFrom),['7d','3d','yesterday']);
+ assert.equal(context(r,{today:r}).eligible,false,'without verified sources the absence stays N/D');
+ const v=context(r,{today:r},{noSpendPeriods:verifiedNoSpendPeriods(s.snapshots,'p',r,todayFrom)});
+ assert.equal(v.priority,true);assert.equal(v.basis,'first-spend-unconfirmed');assert.equal(v.historyKnown,true);assert.deepEqual(v.noSpendPeriods,['7d','3d','yesterday']);assert.equal(v.canExecute,false);assert.equal(v.automaticPause,false);
+ const c=candidates(s,'p',now).find(x=>x.row.externalId==='c');assert.equal(c.decision,'Revisar teste novo sem vendas');
+ assert.equal(actionQueue([c],{now}).priorityTests,1);
+});
+test('Stale, incomplete, duplicated, unsynced or foreign closed cuts never prove absence of spend',()=>{
+ const r={...row(),name:'06/11 - [TESTE] SCHEDULED'},base=spentOnlyState(r),todayFrom=base.snapshots[3].from;
+ const variant=f=>{const s=structuredClone(base);f(s.snapshots);return verifiedNoSpendPeriods(s.snapshots,'p',r,todayFrom);};
+ assert.deepEqual(variant(x=>{x[2].to='2026-11-06T03:00:00.000Z';}),['7d','3d'],'a closed cut from another day is not today\'s yesterday');
+ assert.deepEqual(variant(x=>{x[1].complete=false;}),['7d','yesterday']);
+ assert.deepEqual(variant(x=>{x.push({...x[0]});}),['3d','yesterday']);
+ assert.deepEqual(variant(x=>{x[0].lastSyncAt=null;}),['3d','yesterday']);
+ assert.deepEqual(variant(x=>{x[0].lastSyncAt='2026-11-06T20:00:00.000Z';}),['3d','yesterday'],'source synced before the window closed');
+ assert.deepEqual(variant(x=>{x[0].source='Importado';}),['3d','yesterday']);
+ assert.deepEqual(variant(x=>{x[0].projectId='q';}),['3d','yesterday']);
+ assert.deepEqual(verifiedNoSpendPeriods(base.snapshots,'p',r,undefined),[]);
+ // The same ID in another account does not hide this account's absence; this account's own row does.
+ assert.deepEqual(variant(x=>{x[2].rows.push({...r,adAccountId:'other',spend:90});}),['7d','3d','yesterday']);
+ assert.deepEqual(variant(x=>{x[2].rows.push({...r,spend:90});}),['7d','3d']);
+});
+test('Earlier spend found in a closed source still defeats the date and the verified absences of other windows',()=>{
+ const r={...row(),name:'06/11 - [TESTE] SCHEDULED'},w={today:r,yesterday:{...r,spend:90,frontOrders:0}};
+ assert.equal(context(r,w,{noSpendPeriods:['7d','3d','yesterday']}).eligible,false);
+ assert.equal(context(r,{today:r},{noSpendPeriods:['7d','3d']}).eligible,false,'two verified windows are not three');
+});
+test('Agent focus reserves a priority slot for the scheduled first-day test instead of the archive',()=>{
+ const r={...row(),name:'06/11 - [TESTE] SCHEDULED',spend:120},old=Array.from({length:10},(_,i)=>({...row('old'+i),name:'[ESCALA] OLD',spend:10000-i,revenueNet:20000,frontOrders:10,orders:10}));
+ const focus=selectLearningFocus(spentOnlyState(r,old),'p',now);assert.equal(focus.length,6);assert.equal(focus[0].externalId,'c');
 });

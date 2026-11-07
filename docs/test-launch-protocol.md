@@ -8,7 +8,7 @@ Objetivo: não deixar testes novos com gasto e sem aquisição fora do acompanha
 - Apenas fase Teste. Aquecimento, Avatar e campanhas de escala seguem seus próprios contextos.
 - Conferir entrega real e início programado quando disponíveis. Data no nome é apenas indicação, nunca prova de criação ou programação noturna.
 - Gasto em alguma janela anterior ou entrega antiga impedem classificar a campanha como primeiro dia apenas por ter sido renomeada.
-- Três janelas fechadas com zero gasto observado podem apoiar a classificação provisória de primeiro gasto. As janelas se sobrepõem e não são três experimentos independentes. Linhas ausentes continuam N/D.
+- Três janelas fechadas com zero gasto observado podem apoiar a classificação provisória de primeiro gasto. As janelas se sobrepõem e não são três experimentos independentes. As janelas fechadas são coletadas só com linhas que gastaram; a ausência do mesmo projeto + conta + ID numa fonte Malva completa, única, que termina onde hoje começa e foi lida e sincronizada depois disso, conta como gasto não observado (`verifiedNoSpendPeriods`). Qualquer outra ausência (dia anterior, fonte incompleta, duplicada ou sem sincronização) continua N/D. Isso cobre o teste nomeado na véspera e programado para hoje.
 
 ## Antes e desde o primeiro gasto
 
