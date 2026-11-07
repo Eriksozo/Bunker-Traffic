@@ -12,6 +12,7 @@ import {decisionLearningSummary} from './decision-learning-view.mjs';
 import {reopenDecision} from './decision-reconsider.mjs';
 import {learningCyclePlan,recordLearningReview} from './learning-cycle.mjs';
 import {autonomousWorkPlan} from './autonomous-work.mjs';
+import {requestLiveRefresh} from './owner-applied.mjs';
 
 export function ownerAutonomy(state:any,input:any,ownerId:string){
  if(input.op==='reviewBatch')return requestReviewBatch(state,input,ownerId);
@@ -24,6 +25,8 @@ export function ownerAutonomy(state:any,input:any,ownerId:string){
   // A reviewed choice is a user-requested analysis. Do not fence an earlier
   // approved execution by queuing a successor before it has been reconciled.
   if(shouldQueueChoiceReview(state,record,replay))apply(state,{op:'job',project:record.project});
+  // "Já fiz": re-read this project's live data on the next pulse so every screen reconciles it soon.
+  if(record.appliedByOwner&&!replay)requestLiveRefresh(state,record.project);
   if(!replay){state.events.unshift({id:crypto.randomUUID(),at:new Date().toISOString(),text:`${record.accountName} · ${record.name}: decisão de ${record.action} registrada; ${record.status.toLowerCase()}.`});state.events=state.events.slice(0,120);}
   return record;
  }

@@ -22,6 +22,7 @@ import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} fr
 import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy} from '../lib/autonomy-shadow.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
+import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
@@ -38,7 +39,10 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const current=await this.read();if(current.state.paused)return null;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
   // The shadow reuses this pulse's live reads: no extra central or Supabase read.
   const fresh:Record<string,any>={};
-  const projects=live.projects.sort((a:any,b:any)=>Date.parse(live.items.find((i:any)=>i.projectId===a.projectId)?.lastSuccessAt||'1970-01-01')-Date.parse(live.items.find((i:any)=>i.projectId===b.projectId)?.lastSuccessAt||'1970-01-01')).slice(0,2);
+  // Owner "Já fiz" reports jump the queue: their project is read first, then the oldest reads as before.
+  const lastSuccess=Object.fromEntries((live.items||[]).map((i:any)=>[i.projectId,i.lastSuccessAt]));
+  const urgent=pendingLiveRefresh(current.state,lastSuccess);
+  const projects=live.projects.sort((a:any,b:any)=>{const ua=urgent.indexOf(a.projectId),ub=urgent.indexOf(b.projectId);if(ua!==ub)return (ua<0?99:ua)-(ub<0?99:ub);return Date.parse(lastSuccess[a.projectId]||'1970-01-01')-Date.parse(lastSuccess[b.projectId]||'1970-01-01');}).slice(0,2);
   for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId)fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
   this.liveItems=(live.items||[]).map((i:any)=>fresh[i.projectId]||i);
   return current.state;
