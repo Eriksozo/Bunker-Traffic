@@ -14,3 +14,12 @@ test('Cloud collection records an identity failure on its own job and preserves 
 });
 
 test('Repeated briefing preserves the failure reason without expanding successful reports or raw state',()=>{const s={config:{p:{}},agents:{p:{jobId:'bad'}},jobs:[{id:'bad',project:'p',status:'Falhou',note:'SOURCE_TRACKED_IDENTITY'}],snapshots:[]};const once=briefAgentState(s),twice=briefAgentState(once);assert.equal(twice.jobs[0].failureNote,'SOURCE_TRACKED_IDENTITY');assert.equal(twice.jobs[0].note,undefined);});
+test('Storage diagnostics survive a later successful step and stay sanitized',()=>{
+ const error=Object.assign(Error('Falha no armazenamento Supabase (500).'),{storage:{op:'get',keyClasses:['central'],keyCount:1,ms:8881,status:500,pgCode:'57014',requestId:'a568d8f5c80c772a-GIG',payload:'secret',url:'https://x.supabase.co'}});
+ const r=runtimeFailure({enabled:true,history:[]},error,now);
+ assert.deepEqual(r.history[0].storage,{op:'get',keyClasses:['central'],keyCount:1,ms:8881,status:500,pgCode:'57014',requestId:'a568d8f5c80c772a-GIG'});
+ assert.equal(r.history[0].code,'CLOUD_STEP_FAILED');
+ const success={...r,lastError:null,lastErrorDetail:null,history:[{kind:'idle'},...r.history]};
+ assert.equal(success.lastFailure.storage.pgCode,'57014');assert.equal(success.history[1].storage.op,'get');
+ const c=collectionFailure(error,{project:'p',jobId:'j',phase:'persist'},now);assert.equal(c.storage.op,'get');assert.equal(c.storage.payload,undefined);
+});

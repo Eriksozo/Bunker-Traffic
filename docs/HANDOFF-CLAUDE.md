@@ -102,3 +102,47 @@ Esta conferência substitui as pendências de autenticação da tabela anterior.
 - As falhas Supabase 500 registradas acima continuam pendentes de investigação. Não foram reprocessadas, e nenhuma campanha, aprovação, cadência ou pausa foi alterada nesta validação.
 
 Os OAuths pertencem ao cliente Claude e devem ser renovados pelo fluxo próprio quando necessário. A credencial dedicada do Bunker permanece em arquivo privado fora do Git. O próximo trabalho concreto deve começar pela investigação de persistência do executor, preservando histórico e reservas; este repasse não autoriza aprovar propostas pelo proprietário.
+
+## Validação de conexões pela sessão nova do Claude — 07/11/2026 (≈02:15 UTC)
+
+Somente leituras pelos MCPs da própria sessão; nenhuma reserva, coleta, campanha, agenda, pausa, dado, código ou infraestrutura alterados.
+
+| Acesso | Status real | Evidência |
+| --- | --- | --- |
+| Malva | Confirmado | `workspace_whoami`: Erik Sozo, espaço Epidemia, conexão OAuth "Claude Code (malva)"; papel Leitor com Tracking gerente e escopo `tracking:ads`; Financeiro sem acesso. O token OAuth da sessão expira em 07/11 03:00 UTC. `tracking_list_projects`: Gabe, John, Leandro, Murilo, Nico, Ronald (Meta, BRL, America/Sao_Paulo, ao vivo) e Gabe Kwai (fora do escopo). |
+| Órbita | Confirmado | `quem_sou_eu`: sigla SOZO, papéis Tráfego/Líder de tráfego, squads SQ1–SQ3. |
+| Supabase | Confirmado | `get_project_url` do projeto Bunker Traffic; `list_tables`: `bunker_records` e `bunker_reports`, ambas com RLS. |
+| Cloudflare MCP | Confirmado para leitura de conta | `whoami` e `GET /accounts`: uma conta, "Erik Sozo". A consulta de telemetria de Workers exige o escopo adicional `workers-observability.write`; o MCP voltou a `needs_auth` pedindo esse escopo. Reautorizar pelo `/mcp` do cliente somente se a leitura de logs do Worker for necessária. |
+| Bunker | Confirmado | `bunker_ler` pelo Worker `/mcp` com credencial própria: revisão 5437, sem pausa, nada devido, sem execuções aprovadas; refresh pendente da fonte John. Status do executor (`cloud-data`): ativo, `host: cloudflare`, `independentOfDesktop: true`, último pulso `idle`. |
+
+Diagnóstico das falhas `CLOUD_STEP_FAILED` (sem correção nesta etapa):
+- Causa confirmada nos logs do Supabase: cada falha foi um `POST /rest/v1/rpc/bunker_store` cancelado pelo PostgREST com `57014 canceling statement due to statement timeout` após ≈8,6–10,8 s. O papel `authenticator` tem `statement_timeout=8s` e `lock_timeout=8s`.
+- 17 timeouts nas últimas 24 h, todos a partir de 06/11 22:00 UTC (1 às 22h, 4 às 23h, 3 às 00h, 8 à 01h, 1 às 02h). Nenhum entre 02:02 e 02:15 UTC.
+- Tendência: p95 das chamadas bem-sucedidas de `bunker_store` subiu de ≈0,3 s (06/11 02h UTC) para ≈1,2–2,1 s (20h–23h UTC); máximas de 7,5–12,6 s em horas sem falha registrada.
+- `bunker_records`: 565 linhas vivas, heap 232 kB, mas 66 MB no total (TOAST) após ≈17,5 mil atualizações da central (≈1,30 MB por gravação). Indício de inchaço do TOAST; não comprovado como causa.
+- Não identificado: qual operação de `bunker_store` (commit da central, `reports`, `daily`, `suggestions`/`collaborations` ou `resolutions`) excedeu o limite. `pg_stat_statements` registra só a chamada RPC de nível superior, e o `lastErrorDetail` do executor é limpo pelo próximo passo bem-sucedido.
+- Próximo passo sugerido (exige decisão do proprietário): identificar a operação lenta (log por operação no Worker ou telemetria com escopo adicional) antes de qualquer mudança de esquema, timeout ou retenção. Não aumentar timeouts nem apagar histórico para contornar.
+
+## Gargalo de persistência do executor — causa e correção local (07/11/2026, ≈02:45 UTC)
+
+Estado: revisado e aprovado pelo Codex (instrumentação e migração de duas linhas); aplicação e publicação autorizadas pelo proprietário via copiloto. Reversão: reaplicar a função de `20261104175212_index_card_archive_projects.sql`, que difere só nas duas linhas do ramo `get`.
+
+Causa confirmada (leituras Supabase somente leitura):
+- As 17 respostas 500 de `bunker_store` em 24 h tinham corpo de 48 bytes (`get` da `central` completa) ou 115 bytes (`get` do blob `snapshots:<sha256>` v3). Os três `CLOUD_STEP_FAILED` do executor terminam ≈9 s depois de três desses `get central`. Todas canceladas por `57014 statement timeout` (8 s do papel `authenticator`).
+- O ramo `get` usava `key in (select jsonb_array_elements_text(...))` com `to_jsonb(r)`: plano Hash Semi Join sobre Seq Scan das 565 linhas, montando a linha inteira de cada uma e buscando todo o TOAST antes do filtro. Medido também sob `plan_cache_mode=force_generic_plan`: 8.820 buffers (≈69 MB) e ≈80 ms em cache quente para devolver uma linha.
+- Hipótese de inchaço do TOAST não é a causa principal: 50 MB de payload vivo para 61 MB de relação TOAST. O TOAST estava todo em cache (`toast_blks_read=0`); o custo é a leitura dos 50 MB vivos a cada `get`, multiplicada pela frequência (≈5,9 mil `get central` e ≈2,7 mil `get snapshots` em 24 h). Por que o tempo chega a 8–12 s em parte das chamadas (contenção ou limite de CPU da instância) não foi medido.
+
+Correção:
+- Migração `supabase/migrations/20261107023158_index_bound_record_get.sql` (criada por `supabase migration new` como `…022811`; renomeada para a versão que o Supabase registrou ao aplicar): só o ramo `get` muda para `key = any(array(select jsonb_array_elements_text(input->'keys')))`, nas duas projeções. O corpo vivo conferido antes era idêntico ao da migração anterior (md5 do corpo `bd22b7dc…`). Plano genérico novo: Bitmap Index Scan em `bunker_records_pkey`, 198 buffers, ≈7 ms. Equivalência conferida na base viva, só por hash, em 7 casos: uma chave, chave repetida, ausente, lista vazia, `keys` nulo, várias chaves com repetição e projeção `revision` sem `payload`. Os três chamadores de várias chaves indexam por chave; a ordem não importa.
+- Instrumentação em `lib/supabase-storage.mjs`: cada falha e cada operação com 2 s ou mais gera `console.warn` com operação e classes de chave de vocabulário fechado, quantidade de chaves, duração (incluindo a leitura e decodificação do corpo), status, SQLSTATE e `requestId` (somente UUID ou CF-Ray). Falhas de rede, timeout e corpo indecodificável usam mensagens fixas. Nenhum payload, chave, SQL, URL ou token; sem retry.
+- `lib/cloud-failure-diagnostics.mjs` grava o mesmo diagnóstico saneado em `lastFailure`/`history` e nas falhas de coleta, preservado após um passo bem-sucedido.
+- Testes: suíte completa, typecheck e build aprovados (novos testes comportamentais: transporte, decodificação, saneamento e preservação do diagnóstico). A migração não tem teste automatizado: a evidência é a execução na base (7 casos semânticos e o plano genérico acima).
+
+Limitações:
+- Não há Postgres local; a equivalência SQL foi comprovada na base viva por leitura, não por teste automatizado.
+- `collaborations` decodifica todas as colaborações do projeto antes do limite; não faz parte das falhas e ficou fora desta etapa.
+
+Aplicação no Supabase Bunker Traffic (07/11 ≈02:32 UTC), versão `20261107023158`:
+- O corpo vivo é idêntico ao do arquivo (md5 `cc29c4ed…`). A ACL (`postgres`, `service_role`), o `search_path` e o modo security invoker não mudaram. Índices, RLS, timeouts e dados não foram tocados.
+- Pela própria função, os 7 casos deram hashes idênticos à forma anterior e aos valores medidos antes da aplicação. A projeção `revision` não traz `payload`, e a central continuou na revisão 5437.
+- Em 8 chamadas seguidas, `get central` levou de 4 a 18 ms (de 4 a 6 ms a partir da 6ª, já com plano em cache). `auto_explain` não é permitido neste projeto, então o plano interno foi conferido pelo `PREPARE` genérico com a mesma instrução.
