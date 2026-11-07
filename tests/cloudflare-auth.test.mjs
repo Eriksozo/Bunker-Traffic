@@ -169,3 +169,16 @@ test('email form blocks double submit and keeps cooldown across a reload without
  listener({preventDefault:()=>prevented++});assert.equal(prevented,2);
  now+=61000;tick();assert.equal(button.disabled,false);assert.equal(button.textContent,'Receber link de acesso');
 });
+
+test('private Site gateway can read edit authors, while agent and public callers cannot reach that gateway',async()=>{
+ let call;
+ const bridge={...env,BUNKER_STORAGE_TOKEN:'storage-test',BUNKER_EXECUTOR:{getByName(name){assert.equal(name,'primary');return {async fetch(url,options){call={url,input:JSON.parse(options.body)};return Response.json({items:[{actor:'Gestora A'}]});}};}}};
+ const request=auth=>new Request('https://bunker.example/internal/storage',{method:'POST',headers:auth?{Authorization:'Bearer '+auth}:{},body:JSON.stringify({operation:'cloudExecutor',input:{action:'attribution'}})});
+ const result=await cloudflareAuth(request('storage-test'),bridge);
+ assert.equal(result.status,200);assert.deepEqual(call.input,{action:'attribution'});assert.equal((await result.json()).items[0].actor,'Gestora A');
+ call=null;
+ for(const auth of [null,'agent-test','companion-test'])assert.equal((await cloudflareAuth(request(auth),bridge)).status,401);
+ assert.equal(call,null);
+ const unsupported=new Request('https://bunker.example/internal/storage',{method:'POST',headers:{Authorization:'Bearer storage-test'},body:JSON.stringify({operation:'cloudExecutor',input:{action:'arbitrary'}})});
+ assert.equal((await cloudflareAuth(unsupported,bridge)).status,503);
+});
