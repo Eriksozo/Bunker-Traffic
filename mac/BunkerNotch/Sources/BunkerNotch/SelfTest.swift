@@ -54,6 +54,7 @@ enum SelfTest {
         check(BunkBrain.mood(s, error: nil, preparing: false, muted: false, now: afternoon) == .alert, #line)
         check(BunkBrain.mood(s, error: nil, preparing: false, muted: true, now: afternoon) == .sleeping, #line)
         let said = BunkBrain.lines(s, error: nil, preparing: false)
+        testBunkTargets(s)
         check(said.first?.hasPrefix("De olho: C em A") == true, #line)
         check(said.contains { $0.hasPrefix("ROAS hoje") }, #line)
         check(BunkBrain.lines(nil, error: nil, preparing: true) == ["Estou montando o resumo. Volto em 1 a 2 minutos."], #line)
