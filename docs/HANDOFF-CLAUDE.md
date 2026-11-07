@@ -146,3 +146,16 @@ Aplicação no Supabase Bunker Traffic, versão `20261107023158` (02:31:58 UTC, 
 - O corpo vivo é idêntico ao do arquivo (md5 `cc29c4ed…`). A ACL (`postgres`, `service_role`), o `search_path` e o modo security invoker não mudaram. Índices, RLS, timeouts e dados não foram tocados.
 - Pela própria função, os 7 casos deram hashes idênticos à forma anterior e aos valores medidos antes da aplicação. A projeção `revision` não traz `payload`, e a central continuou na revisão 5437.
 - Em 8 chamadas seguidas, `get central` levou de 4 a 18 ms (de 4 a 6 ms a partir da 6ª, já com plano em cache). `auto_explain` não é permitido neste projeto, então o plano interno foi conferido pelo `PREPARE` genérico com a mesma instrução.
+
+Publicação e conferência pós-deploy (registro escrito às 02:45:16 UTC por `date -u`):
+- Commits no `main`: `da2200c` (correção e instrumentação) e `2bee11a` (horários reais neste registro). Suíte, typecheck, build e `git diff --check` aprovados antes do push.
+- Cloudflare: o check "Workers Builds" do GitHub liga `da2200c` à versão `3a3461c1-8bf6-43bb-9bd1-2b1761829507` (100% às 02:35:41 UTC) e `2bee11a` ao build `5eae7481` → versão `b664d1c7-7c5f-4421-8ae9-8d1d055d7b0e` (100% às 02:36:02 UTC), que contém o código de `da2200c`. Este registro gera um novo build só de documentação.
+- `/health`: 200, `configured: true`. `bunker_ler` pelo MCP: revisão 5437, fontes `gzip-base64-v3` (72; 1,30 MB de 1,75 MB), sem pausa, nada devido, nenhuma execução pendente.
+- Executor (`cloud-data` status): pulsos de 02:36:33 e 02:37:34 UTC, já na versão nova, terminaram `idle`; `lastError` vazio.
+- Última falha registrada: `CLOUD_STEP_FAILED` às 02:22:54 UTC, causada pelo timeout de um `get snapshots` às 02:22:44, antes da migração. Ocorreu no código antigo e por isso não tem `storage` no histórico.
+- `bunker_store` de 02:31:58 a 02:37:57 UTC: 100 chamadas, todas 200, p95 427 ms, máximo 975 ms. Comparando 01:30–02:31 com depois de 02:31:58: `get central` foi de 5 respostas 500 e p95 2.304 ms para nenhum 500 e p95 702 ms; `get snapshots` foi de 3 respostas 500 para nenhum 500 e máximo de 316 ms.
+- A janela é curta e não comprova ausência de timeouts futuros.
+
+Acompanhamento:
+- Na janela das 06:00 (America/Sao_Paulo), conferir os 500 de `bunker_store` e o p95 por tamanho de pedido. Se houver falha, ler o campo `storage` em `lastFailure`.
+- `daily` e `reports` ainda decodificam JSON; ficaram fora desta entrega porque nenhuma das falhas veio deles.
