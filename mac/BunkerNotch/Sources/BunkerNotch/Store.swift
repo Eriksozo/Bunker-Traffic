@@ -35,6 +35,9 @@ final class Store: ObservableObject {
     private var seen = Set<String>()
     private var primed = false
     private var failures = 0
+    /// Edit pulse from the executor's fast watch: when it moves, a Malva edit just happened; read the summary now.
+    private var pulseTimer: Timer?
+    private var pulseVersion: Int?
     private var asleep = false
     private var bag = Set<AnyCancellable>()
     /// Alerts and notifications held while the owner is in a call; shown when it ends (at most three).
@@ -72,7 +75,21 @@ final class Store: ObservableObject {
         }
         dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.setAsleep(true) } }
         dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.setAsleep(false) } }
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: Store.pulseSeconds, repeats: true) { [weak self] _ in Task { @MainActor in await self?.checkPulse() } }
         CallWatch.shared.$inCall.removeDuplicates().dropFirst().receive(on: RunLoop.main).sink { [weak self] inCall in if !inCall { self?.releaseHeld() } }.store(in: &bag)
+    }
+
+    static let pulseSeconds: TimeInterval = 8
+    /// A tiny read (served by the executor object, no central): only the counter and the newest edit.
+    func checkPulse() async {
+        guard !asleep, !loading, let token = Credential.importIfNeeded() else { return }
+        var request = URLRequest(url: Store.base.appendingPathComponent("api/companion/pulse"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        guard let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let pulse = json["pulse"] as? [String: Any],
+              let version = pulse["version"] as? Int else { return }
+        defer { pulseVersion = version }
+        if let previous = pulseVersion, previous != version { await refresh() }
     }
 
     /// Screens asleep or locked: no reading; waking up reads at once if the last one is old.

@@ -4,13 +4,14 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import {runtimeFailure} from '../lib/cloud-failure-diagnostics.mjs';
+import * as changeWatch from '../lib/change-watch.mjs';
 // Exercise the real Durable Object alarm with only infrastructure and provider boundaries replaced.
 const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 function executor({step,enabled=true}={}){
  const exports={},values=new Map([['runtime',{enabled,history:[]}]]),alarms=[];
- const storage={get:async k=>values.get(k),put:async(k,v)=>values.set(k,v),setAlarm:async at=>alarms.push(at)};
+ const storage={get:async k=>values.get(k),put:async(k,v)=>{if(typeof k==='object'){for(const [a,b] of Object.entries(k))values.set(a,b);}else values.set(k,v);},setAlarm:async at=>alarms.push(at)};
  class DurableObject{constructor(ctx,env){this.ctx=ctx;this.env=env;}}
- vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:{},Date,Response});
+ vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:name.includes('change-watch')?changeWatch:{},Date,Response});
  const e=new exports.BunkerCloudExecutor({storage},{}),calls=[];
  e.engine=()=>({step:step||(async()=>{calls.push('analysis');throw Object.assign(Error('rejected'),{code:'CLOUD_MEMORY_REVIEW_EVIDENCE'});})});
  e.syncLive=async()=>{calls.push('live');return {paused:false};};e.syncAttribution=async()=>calls.push('authors');e.storeCompanion=async()=>calls.push('notch');
@@ -32,4 +33,16 @@ test('authorship failure stays separate and does not block the notch summary',as
  e.syncAttribution=async()=>{calls.push('authors');throw Error('source unavailable');};
  await e.alarm();assert.deepEqual(calls,['live','authors','notch']);assert.equal(values.get('attributionStatus').failed,true);
  assert.equal(values.get('runtime').lastError,null);
+});
+
+test('between minute pulses a new Malva edit refreshes the notch at once, then the live read, and moves the pulse after each',async()=>{
+ const {e,calls,values,alarms}=executor();values.set('lastHeavyAt',Date.now());
+ const edit={key:'history:p:1',project:'p',name:'Campanha',accountName:'Conta',field:'status',before:'ACTIVE',after:'PAUSED',currency:'BRL',actor:'Erik',at:new Date().toISOString()};
+ e.watchChanges=async()=>{e.freshChanges=[{project:'p',events:[edit]}];return ['p'];};e.read=async()=>({state:{paused:false}});e.storedShadow=async()=>[];
+ await e.alarm();
+ assert.deepEqual(calls,['notch','live','notch'],'no analysis between minute pulses');
+ assert.equal(values.get('syncPulse').version,2);assert.equal(values.get('syncPulse').last.actor,'Erik');
+ assert.equal(alarms.length,1);assert.ok(alarms[0]-Date.now()<=changeWatch.changeWatchPolicy.tickMs+50);
+ const quiet=executor();quiet.values.set('lastHeavyAt',Date.now());quiet.e.watchChanges=async()=>[];await quiet.e.alarm();
+ assert.deepEqual(quiet.calls,[]);assert.equal(quiet.values.get('syncPulse'),undefined);
 });

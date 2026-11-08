@@ -23,6 +23,7 @@ import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy} fr
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
+import {changeWatchPolicy,watchProject,nextPulse,liveOrder} from '../lib/change-watch.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
@@ -35,18 +36,44 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async write(fn:(s:any,revision:number)=>any){
   const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);return result;
  }
- private async syncLive():Promise<any>{
+ private async syncLive(first:string[]=[]):Promise<any>{
   const current=await this.read();if(current.state.paused)return null;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
   // The shadow reuses this pulse's live reads: no extra central or Supabase read.
   const fresh:Record<string,any>={};
   // Owner "Já fiz" reports jump the queue: their project is read first, then the oldest reads as before.
   const lastSuccess=Object.fromEntries((live.items||[]).map((i:any)=>[i.projectId,i.lastSuccessAt]));
   const urgent=pendingLiveRefresh(current.state,lastSuccess);
-  const projects=live.projects.sort((a:any,b:any)=>{const ua=urgent.indexOf(a.projectId),ub=urgent.indexOf(b.projectId);if(ua!==ub)return (ua<0?99:ua)-(ub<0?99:ub);return Date.parse(lastSuccess[a.projectId]||'1970-01-01')-Date.parse(lastSuccess[b.projectId]||'1970-01-01');}).slice(0,2);
+  const projects=liveOrder(live.projects,{first,urgent,lastSuccess});
   for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId)fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
   this.liveItems=(live.items||[]).map((i:any)=>fresh[i.projectId]||i);
   return current.state;
  }
+ /** Fast edit watch (lib/change-watch.mjs): a small read per configured project; new edits are stored with
+  * their author at once and bump the pulse the web and the notch follow. Never reads the central. */
+ private freshChanges:any[]=[];
+ /** Moves the pulse only after the summaries were rewritten, so a client reading it never gets the old view. */
+ private async bumpPulse(){if(!this.freshChanges.length)return;await this.ctx.storage.put('syncPulse',nextPulse(await this.ctx.storage.get<any>('syncPulse'),this.freshChanges,Date.now()));}
+ private async watchChanges():Promise<string[]>{
+  this.freshChanges=[];
+  const config=await this.ctx.storage.get<string[]>('watchConfig');if(!Array.isArray(config)||!config.length)return [];
+  const source=cloudMalvaClient(this.db());
+  let targets=await this.ctx.storage.get<any>('watchTargets');
+  if(!targets||Date.now()-Date.parse(targets.at)>changeWatchPolicy.targetsMs){
+   const listed=await source.read('tracking_list_projects',{});
+   targets={at:new Date().toISOString(),items:(listed.items||[]).filter((x:any)=>config.includes(x.id)).map((x:any)=>({id:x.id,name:x.name,timezone:x.timezone}))};
+   await this.ctx.storage.put('watchTargets',targets);
+  }
+  const heads=await this.ctx.storage.get<any>((targets.items as any[]).map((t:any)=>'watch-head:'+t.id));
+  const results=await Promise.all((targets.items as any[]).map(async(project:any)=>{try{return await watchProject(source,project,heads.get('watch-head:'+project.id)||null,Date.now());}catch{return null;}}));
+  const changes=results.filter(Boolean) as any[];
+  const writes:Record<string,any>={};
+  for(const c of changes){writes['watch-head:'+c.project]=c.head;for(const e of c.events)writes['attr:'+e.key]=e;}
+  const fresh=changes.filter(c=>c.events.length);this.freshChanges=fresh;
+  if(Object.keys(writes).length)await this.ctx.storage.put(writes);
+  await this.ctx.storage.put('watchStatus',{at:new Date().toISOString(),projects:changes.length,failed:results.length-changes.length,fresh:fresh.map(c=>c.project)});
+  return fresh.map(c=>c.project);
+ }
+ private async storedShadow(){return [...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];}
  /**
   * Shadow mode (docs/autonomy-policy.md): records what each owner-chosen rule would do now and what a
   * manager did afterwards. Never proposes, approves or dispatches. Stored in this object, not in the central.
@@ -139,6 +166,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  async fetch(request:Request){
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
+  if(input.action==='pulse'){const pulse=await this.ctx.storage.get<any>('syncPulse'),watch=await this.ctx.storage.get<any>('watchStatus');return Response.json({pulse:pulse||{version:0,at:null,last:null},watchedAt:watch?.at||null});}
   if(input.action==='companion'){const key='companion:'+(typeof input.project==='string'&&input.project?input.project:'all');const summary=await this.ctx.storage.get(key);return Response.json(summary?{summary}:{summary:null});}
   if(input.action==='accounts'){const panel=await this.ctx.storage.get<any>('accountsPanel');return Response.json(panel?{panel}:{panel:null});}
   if(input.action==='shadow'){
@@ -169,6 +197,18 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  async alarm(){
   if(this.running)return;let setting=await this.setting();if(!setting.enabled)return;this.running=true;
   try{
+   // Every tick: the cheap edit watch. A failure never blocks the minute pulse.
+   const changed=await this.watchChanges().catch(()=>[] as string[]);
+   const lastHeavy=await this.ctx.storage.get<number>('lastHeavyAt')||0;
+   if(Date.now()-lastHeavy<changeWatchPolicy.heavyMs){
+    // Between minute pulses: only when an edit appeared. Notch first (authors already stored), then the live read.
+    if(changed.length){
+     const central=await this.read();if(!central.state.paused){await this.storeCompanion(central.state,await this.storedShadow()).catch(()=>{});await this.bumpPulse();
+      const liveState=await this.syncLive(changed).catch(()=>null);if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.bumpPulse();}}
+    }
+    return;
+   }
+   await this.ctx.storage.put('lastHeavyAt',Date.now());
    await this.ctx.storage.put('runtime',{...setting,lastPulseAt:new Date().toISOString()});const engine=this.engine();
    // Bounded work prevents one large project from owning a whole alarm forever.
    try{
@@ -179,7 +219,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    }
    }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
    // A rejected model opinion must not starve live reads, edit authors or the notch.
-   const liveState=(await this.setting()).enabled?await this.syncLive():null;
+   const liveState=(await this.setting()).enabled?await this.syncLive(changed):null;
+   if(liveState)await this.ctx.storage.put('watchConfig',Object.keys(liveState.config||{}));
    // Optional attribution never turns into an executor failure.
    if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
    // The account panel is optional: a failure keeps the last panel and never affects the executor.
@@ -187,7 +228,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
    const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    if(liveState)await this.storeCompanion(liveState,shadow).catch(()=>{});
+   await this.bumpPulse();
   }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
-  finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+60000);}
+  finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+changeWatchPolicy.tickMs);}
  }
 }
