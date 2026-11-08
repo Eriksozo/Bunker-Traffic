@@ -60,7 +60,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const lastSuccess=Object.fromEntries((live.items||[]).map((i:any)=>[i.projectId,i.lastSuccessAt]));
   const urgent=pendingLiveRefresh(current.state,lastSuccess);
   for(const [id,at] of Object.entries(lastSuccess)){const t=Date.parse(String(at||''));if(Number.isFinite(t))this.liveReadAt[id]=Math.max(this.liveReadAt[id]||0,t);}
-  const projects=only?live.projects.filter((p:any)=>first.includes(p.projectId)).slice(0,changeWatchPolicy.maxLiveReads):liveOrder(live.projects,{first,urgent,lastSuccess});
+  const projects=only?live.projects.filter((p:any)=>first.includes(p.projectId)).slice(0,changeWatchPolicy.maxLiveReads+1):liveOrder(live.projects,{first,urgent,lastSuccess});
   for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project||this.liveReading.has(p.projectId))continue;this.liveReading.add(p.projectId);try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId){fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};this.liveReadAt[p.projectId]=Date.now();}}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}finally{this.liveReading.delete(p.projectId);}}
   this.liveItems=(live.items||[]).map((i:any)=>fresh[i.projectId]||i);
   return current.state;
@@ -272,19 +272,19 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     ran=true;this.laneExecuted=true;await this.recordUnit({...result,lane:'fast'});if(result.project)touched.add(result.project);
    }
   }
-  if(!touched.size){
-   // Nothing new: refresh the stalest live project so a status changed anywhere shows in minutes, not a full rotation.
-   const known=Object.entries(this.liveReadAt).sort((a,b)=>a[1]-b[1])[0];
-   if(!known||Date.now()-known[1]<changeWatchPolicy.liveStaleMs)return;
-   this.liveReadAt[known[0]]=Date.now();   // one try per stale window, even when the read fails
-   const liveState=await this.syncLive([known[0]],true).catch(()=>null);
-   if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.bumpLive([known[0]]);}
-   return;
+  // The stalest live project always joins the reads once it is older than liveStaleMs, also when edits keep arriving
+  // elsewhere: measured on 08/11, busy projects were reread again and again while two quiet ones waited ~9 min.
+  const stale=Object.entries(this.liveReadAt).filter(([id])=>!touched.has(id)).sort((a,b)=>a[1]-b[1])[0];
+  const extra=stale&&Date.now()-stale[1]>=changeWatchPolicy.liveStaleMs?stale[0]:null;
+  if(extra)this.liveReadAt[extra]=Date.now();   // one try per stale window, even when the read fails
+  const reads=[...[...touched].slice(0,changeWatchPolicy.maxLiveReads),...(extra?[extra]:[])];
+  if(!reads.length)return;
+  if(touched.size){
+   const central=await this.read();if(central.state.paused)return;
+   if(this.freshChanges.length||ran){await this.storeCompanion(central.state,await this.storedShadow()).catch(()=>{});await this.bumpPulse();this.freshChanges=[];await this.publishOrders(central.state);}
   }
-  const central=await this.read();if(central.state.paused)return;
-  if(this.freshChanges.length||ran){await this.storeCompanion(central.state,await this.storedShadow()).catch(()=>{});await this.bumpPulse();this.freshChanges=[];await this.publishOrders(central.state);}
-  const liveState=await this.syncLive([...touched],true).catch(()=>null);
-  if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.publishOrders(liveState);await this.bumpLive([...touched]);}
+  const liveState=await this.syncLive(reads,true).catch(()=>null);
+  if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.publishOrders(liveState);await this.bumpLive(reads);}
  }
  async fetch(request:Request){
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}

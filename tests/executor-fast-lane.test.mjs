@@ -68,6 +68,13 @@ test('with nothing new the fast lane rereads only the stalest live project, once
  await e.alarm();assert.deepEqual(calls,['fast:verify/followUp/execution','live:proj-old','notch'],'the first look also sweeps for orders approved elsewhere');
  calls.length=0;e.lastWatchAt=0;await e.alarm();assert.deepEqual(calls,[],'not again until it is stale again, and the order sweep waits a minute');
 });
+test('busy projects never starve a quiet one: the stalest joins the reads of the edited projects',async()=>{
+ const {e,calls}=executor();e.ctx.storage.put('lastHeavyAt',Date.now());e.lastOrderSweepAt=Date.now();
+ const old=Date.now()-changeWatch.changeWatchPolicy.liveStaleMs-1000;e.liveReadAt={'proj-busy':Date.now()-1000,'proj-quiet':old};
+ e.watchChanges=async()=>{e.freshChanges=[{project:'proj-busy',events:[{key:'k',project:'proj-busy',at:new Date().toISOString()}]}];return ['proj-busy'];};
+ await e.alarm();
+ assert.ok(calls.includes('live:proj-busy,proj-quiet'),'one read of the edited project and the stale one: '+calls.join(' > '));
+});
 test('the fast lane never asks the engine for model work',()=>{
  assert.deepEqual([...changeWatch.fastLaneKinds],['verify','followUp','execution']);
  const s={config:{},jobs:[],agents:{},snapshots:[],proposals:[],executions:[],messages:[{id:'q',project:'a',status:'Pendente',agentId:'traffic'}],collaborationRounds:[]};
