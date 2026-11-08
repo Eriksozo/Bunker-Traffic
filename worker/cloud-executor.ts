@@ -23,7 +23,9 @@ import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy} fr
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
-import {changeWatchPolicy,watchProject,nextPulse,liveOrder} from '../lib/change-watch.mjs';
+import {changeWatchPolicy,watchProject,nextPulse,liveOrder,orderPulse} from '../lib/change-watch.mjs';
+import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
+import {addSale,salesView} from '../lib/sales-feed.mjs';
 
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
@@ -167,7 +169,18 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
   if(input.action==='pulse'){const pulse=await this.ctx.storage.get<any>('syncPulse'),watch=await this.ctx.storage.get<any>('watchStatus');return Response.json({pulse:pulse||{version:0,at:null,last:null},watchedAt:watch?.at||null});}
-  if(input.action==='companion'){const key='companion:'+(typeof input.project==='string'&&input.project?input.project:'all');const summary=await this.ctx.storage.get(key);return Response.json(summary?{summary}:{summary:null});}
+  if(input.action==='companion'){const project=typeof input.project==='string'&&input.project?input.project:'all',key='companion:'+project;const summary:any=await this.ctx.storage.get(key);
+   // Sales arrive between pulses (webhook): merged at read time so the notch sees them at once.
+   return Response.json(summary?{summary:{...summary,sales:salesView(await this.ctx.storage.get<any[]>('salesFeed'),{project,now:Date.now()})}}:{summary:null});}
+  if(input.action==='sale'){
+   const v=input.sale,ok=v&&typeof v==='object'&&typeof v.amount==='number'&&Number.isFinite(v.amount)&&v.amount>0&&v.amount<=1e7&&typeof v.at==='string'&&Number.isFinite(Date.parse(v.at));
+   if(!ok)return Response.json({error:'Venda inválida.'},{status:400});
+   const t=(x:any,n:number)=>typeof x==='string'?x.slice(0,n):null;
+   const sale={amount:v.amount,currency:t(v.currency,3),product:t(v.product,120),campaign:t(v.campaign,120),project:t(v.project,80),at:new Date(Date.parse(v.at)).toISOString(),orderRef:t(v.orderRef,32)};
+   const out=addSale(await this.ctx.storage.get<any[]>('salesFeed'),sale);
+   if(out.added){const prev=await this.ctx.storage.get<any>('syncPulse');await this.ctx.storage.put({salesFeed:out.list,syncPulse:{...(prev||{}),version:(prev?.version||0)+1,at:new Date().toISOString(),last:{kind:'sale',project:sale.project,campaign:sale.campaign,product:sale.product,amount:sale.amount,currency:sale.currency,at:sale.at}}});}
+   return Response.json({ok:true,added:out.added});
+  }
   if(input.action==='accounts'){const panel=await this.ctx.storage.get<any>('accountsPanel');return Response.json(panel?{panel}:{panel:null});}
   if(input.action==='shadow'){
    const status=await this.ctx.storage.get<any>('shadowStatus'),all=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
@@ -229,6 +242,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    if(liveState)await this.storeCompanion(liveState,shadow).catch(()=>{});
    await this.bumpPulse();
+   // A receipt that changed stage (order queued, sent, confirmed or failed) reaches the notch without waiting.
+   if(liveState){const o=orderPulse(await this.ctx.storage.get<any>('syncPulse'),ownerOrderReceipts(liveState,{now:Date.now()}),await this.ctx.storage.get<string>('ordersSig'));await this.ctx.storage.put(o.pulse?{ordersSig:o.sig,syncPulse:o.pulse}:{ordersSig:o.sig});}
   }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
   finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+changeWatchPolicy.tickMs);}
  }

@@ -37,3 +37,13 @@ test('all projects combine only within one currency', () => {
  const mixed=budgetPace(two,'all',Date.parse(at(12)));
  assert.equal(mixed.status,'nd');assert.match(mixed.reason,/moedas diferentes/);
 });
+
+test('owner warnings: running out before 18:00 project time, or far below pace past 40% of the day', () => {
+ const st=(rows,hours)=>({config:{p:{projectName:'P',currency:'BRL'}},snapshots:[{projectId:'p',period:'today',level:'campaign',from,timezone:'America/Sao_Paulo',fetchedAt:at(hours),rows}]});
+ // from = 04:00Z = 01:00 in São Paulo; 600 of 1000 by +6 h runs out at +10 h = 11:00 local.
+ assert.equal(projectPace(st([row('a',600,1000)],6),'p',Date.parse(at(6))).alert,'early');
+ // 200 of 1000 by +12 h (50% of the day): leftover 60% → under.
+ assert.equal(projectPace(st([row('a',200,1000)],12),'p',Date.parse(at(12))).alert,'under');
+ assert.equal(projectPace(st([row('a',500,1000)],12),'p',Date.parse(at(12))).alert,null);
+ assert.equal(projectPace(st([row('a',300,1000)],8),'p',Date.parse(at(8))).alert,null,'under but too early in the day');
+});

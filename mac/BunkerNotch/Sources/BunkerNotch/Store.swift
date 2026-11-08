@@ -40,6 +40,9 @@ final class Store: ObservableObject {
     private var pulseVersion: Int?
     private var asleep = false
     private var bag = Set<AnyCancellable>()
+    /// Counts new sales; Bunk celebrates on each one. Island alert per sale only when the owner turns it on.
+    @Published private(set) var saleTick = 0
+    static let saleAlertKey = "alertEachSale"
     /// Alerts and notifications held while the owner is in a call; shown when it ends (at most three).
     private var held: [(String, String, String, IslandAlert.Kind)] = []
 
@@ -238,6 +241,34 @@ final class Store: ObservableObject {
             if !isQuiet(q) { fresh.append(("lo:" + q.id, came ? "Perda mudou desde que você dispensou" : "Perda para revisar", (q.campaign ?? "Campanha") + " · " + Format.money(q.amount), .loss)) }
         }
         if approvalsQuiet { fresh.removeAll { $0.3 == .approval } }
+        // Pace warnings, once a day per project and kind (runs out before 18:00, or far below pace).
+        let day = String((s.generatedAt).prefix(10))
+        for p in (s.pace?.byProject ?? []) where p.alert != nil {
+            let key = "pace:" + (p.project ?? "") + ":" + (p.alert ?? "") + ":" + day
+            guard !seen.contains(key), let w = Format.paceWarning(p) else { continue }
+            seen.insert(key); fresh.append((key, w.title, w.detail, .manager))
+        }
+        // New sales from the Malva webhook: Bunk celebrates; an island alert only if "avisar cada venda" is on.
+        var newSales = 0
+        for sale in s.sales?.recent ?? [] {
+            let key = "sa:" + sale.at + ":" + String(sale.amount)
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            guard primed else { continue }
+            newSales += 1
+            if UserDefaults.standard.bool(forKey: Store.saleAlertKey) {
+                fresh.append((key, "Venda agora · " + Format.money(sale.amount, currency: sale.currency), [sale.product, sale.campaign].compactMap { $0 }.joined(separator: " · "), .sale))
+            }
+        }
+        if newSales > 0 && primed && !muted { saleTick &+= newSales }
+        // Receipts of the owner's direct orders: tell once when one ends (confirmed by the reread, failed or to verify).
+        for o in s.orders ?? [] where ["confirmed", "failed", "verify"].contains(o.stage) {
+            let key = "or:" + o.id + ":" + o.stage
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            let title = o.stage == "confirmed" ? "Ordem confirmada na Meta" : o.stage == "failed" ? "Ordem não enviada" : "Ordem enviada: conferir na Meta"
+            fresh.append((key, title, (o.campaign ?? "Campanha") + " · " + Format.orderChange(o) + (o.reason.map { " · " + $0 } ?? ""), .order))
+        }
         defer { primed = true }
         guard primed, !muted else { return }
         // In a call: hold them (newest three) until it ends.
@@ -253,7 +284,7 @@ final class Store: ObservableObject {
 
     private func deliver(_ fresh: [(String, String, String, IslandAlert.Kind)]) {
         // Approvals first, then losses, then manager changes; at most three alerts per refresh.
-        let order: [IslandAlert.Kind: Int] = [.approval: 0, .loss: 1, .manager: 2]
+        let order: [IslandAlert.Kind: Int] = [.order: 0, .approval: 1, .loss: 2, .manager: 3, .sale: 4]
         for item in fresh.sorted(by: { order[$0.3]! < order[$1.3]! }).prefix(3) { alert = IslandAlert(id: item.0, kind: item.3, title: item.1, detail: item.2) }
         guard Bundle.main.bundleIdentifier != nil else { return }
         for (id, title, body, _) in fresh.prefix(4) {

@@ -77,6 +77,22 @@ extension SelfTest {
         let calm = [UrgencyTicker.Item(key: "roas", text: "ROAS", tone: .neutral, urgent: false)]
         let hot = [UrgencyTicker.Item(key: "loss:x", text: "↓", tone: .bad, urgent: true)] + calm
         expect(UrgencyTicker.focus(previousKeys: ["roas"], items: hot) == 0 && UrgencyTicker.focus(previousKeys: ["roas", "loss:x"], items: hot) == nil, #line)
+        // Living motion: blinks are brief and irregular, eye jumps are small, squash keeps volume, throws are capped.
+        let samples = stride(from: 0.0, to: 120.0, by: 0.01).map { BunkMotion.blink($0) }
+        let closedShare = Double(samples.filter { $0 > 0.5 }.count) / Double(samples.count)
+        expect(closedShare > 0.005 && closedShare < 0.04 && samples.allSatisfy { $0 >= 0 && $0 <= 1 }, #line)
+        expect(BunkMotion.blink(10.0) == BunkMotion.blink(10.0), #line)
+        let j = BunkMotion.saccade(42.3); expect(abs(j.x) <= 0.35 && abs(j.y) <= 0.2 && BunkMotion.saccade(42.3) == j, #line)
+        let sq = BunkMotion.squashStretch(0, strength: 1); expect(sq.y < 1 && abs(sq.x * sq.y - 1) < 0.0001 && BunkMotion.squashStretch(0.9, strength: 1) == (1, 1), #line)
+        expect(BunkMotion.squashStretch(0, strength: 0) == (1, 1), #line)
+        expect(abs(BunkMotion.antennaBend(3.1, hopSpeed: 1, hopRate: 5, walking: true)) <= 1, #line)
+        let flick = BunkMotion.throwVelocity([(CGPoint(x: 0, y: 0), 0.0), (CGPoint(x: 400, y: 100), 0.05)])
+        expect(abs((flick.dx * flick.dx + flick.dy * flick.dy).squareRoot() - 2400) < 1, #line)       // 8,200 pt/s capped to 2,400
+        expect(BunkMotion.throwVelocity([(CGPoint.zero, 0)]) == .zero, #line)
+        var fl = BunkMotion.Flight(p: CGPoint(x: 100, y: 300), v: CGVector(dx: -900, dy: 400)), landed = false, bounced = false
+        for _ in 0..<400 where !landed { let o = BunkMotion.fly(fl, floorY: 10, minX: 50, maxX: 900, dt: 1.0 / 60.0); fl = o.flight; landed = o.landed; bounced = bounced || o.bounced }
+        expect(landed && bounced && fl.p.y == 10 && fl.p.x >= 50, #line)
+        expect(BunkMotion.tilt(vx: 0, vy: 0) == 0 && abs(BunkMotion.tilt(vx: 5000, vy: -5000)) <= 35 && BunkMotion.tilt(vx: 800, vy: 0) > 0, #line)
         let s1 = BunkDesk.step(from: .zero, to: CGPoint(x: 10, y: 0), distance: 4)
         expect(s1.point == CGPoint(x: 4, y: 0) && !s1.arrived && BunkDesk.step(from: s1.point, to: CGPoint(x: 10, y: 0), distance: 8).arrived, #line)
     }

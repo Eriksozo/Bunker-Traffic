@@ -16,8 +16,8 @@ export async function POST(req:Request){
   if(!ownerDeviceOps.includes(input?.op))return response({error:'Ação não permitida pelo Mac.'},403);
   const cur=await readState() as any;
   if(input.revision!==cur.revision)return response({error:'Os dados mudaram desde que você abriu. Confira de novo e confirme.',code:'CONFLICT'},409);
-  await assertCurrentDecisionContext(cur.state,input);
-  const record=ownerAutonomy(cur.state,input,owner);
+  const context:any=await assertCurrentDecisionContext(cur.state,input);
+  const record=ownerAutonomy(cur.state,input,owner,{live:context?.live||null});
   const saved=await commit(cur.state,cur.revision) as any;
   const proposal=input.op==='proposalReview'?record:null;
   return response({ok:true,revision:saved?.revision??null,op:input.op,status:proposal?proposal.status:record?.status??null,id:record?.id??null});

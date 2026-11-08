@@ -103,6 +103,14 @@ extension SelfTest {
         expectA(OwnerAdjust.orderLine(card, action: "reduce", percent: 20) == "Reduzir 20%: " + Format.money(95.1, currency: "USD") + " → " + Format.money(76.08, currency: "USD") + "/dia", #line)
         expectA(OwnerAdjust.orderLine(card, action: "pause", percent: nil) == "Pausar: ativa → pausada", #line)
         expectA(OwnerAdjust.advisory(card.blockedReasons[0]) && !OwnerAdjust.advisory(card.blockedReasons[1]), #line)
+        // Receipts: the notch names the change and colours the stage; only confirmed is green.
+        let r = """
+        {"id":"p1","project":"p","projectName":"John","campaign":"C","account":"A","action":"budget","currency":"USD","before":{"dailyBudget":120,"status":null},"after":{"dailyBudget":90,"status":null},"stage":"confirmed","label":"Confirmada na Meta","reason":null,"source":"live","at":"2026-11-08T01:00:00.000Z","sentAt":null,"confirmedAt":null}
+        """
+        if let o = try? JSONDecoder().decode(Summary.OrderReceipt.self, from: Data(r.utf8)) {
+            expectA(Format.orderChange(o) == "Reduzir · " + Format.money(120, currency: "USD") + " → " + Format.money(90, currency: "USD") + "/dia", #line)
+            expectA(Format.orderTone("confirmed") == .good && Format.orderTone("verify") == .bad && Format.orderTone("sent") == .accent, #line)
+        } else { expectA(false, #line) }
     }
     private static func expectA(_ condition: Bool, _ line: Int) {
         if !condition { FileHandle.standardError.write(Data("self-test falhou na linha \(line) de AttentionSelfTest.swift\n".utf8)); bunkFailures += 1 }

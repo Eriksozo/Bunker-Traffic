@@ -59,6 +59,12 @@ struct Summary: Decodable, Equatable {
     let today: Today
     /// Today's spend pace against active daily budgets (lib/budget-pace.mjs). Reading aid, never a proposal.
     let pace: Pace?
+    /// The owner's direct orders of the last day and where each is in the executor path (lib/owner-orders.mjs).
+    let orders: [OrderReceipt]?
+    /// Sales pushed by the Malva webhook (lib/sales-feed.mjs): display only, never an action.
+    let sales: Sales?
+    struct Sale: Decodable, Equatable { let amount: Double; let currency: String?; let product: String?; let campaign: String?; let project: String?; let at: String }
+    struct Sales: Decodable, Equatable { let recent: [Sale]; let lastHour: Int }
     let queue: [QueueItem]
     let queueSize: Int
     let board: [BoardRow]?
@@ -88,12 +94,22 @@ struct Summary: Decodable, Equatable {
         let accountId: String; let name: String?; let group: String?; let status: String?; let statusLabel: String?; let runningLabel: String?
         let currency: String?; let dailyLimit: Double?; let todaySpend: Double?; let usedPct: Double?; let balance: Double?; let alerts: [String]?
     }
+    struct OrderValues: Decodable, Equatable { let dailyBudget: Double?; let status: String? }
+    struct OrderReceipt: Decodable, Equatable, Identifiable {
+        let id: String; let project: String?; let projectName: String?; let campaign: String?; let account: String?
+        let action: String?; let currency: String?; let before: OrderValues?; let after: OrderValues?
+        /// queued · checking · sent · confirmed · verify · failed · expired
+        let stage: String; let label: String?; let reason: String?; let source: String?
+        let at: String?; let sentAt: String?; let confirmedAt: String?
+    }
     struct Pace: Decodable, Equatable {
         let project: String?; let name: String?; let currency: String?
         /// on · under · exhausts · spent · nd
         let status: String
         let budget: Double?; let spend: Double?; let projected: Double?; let elapsedPct: Double?
         let exhaustsAt: String?; let leftoverPct: Double?; let known: Int?; let unknown: Int?; let reason: String?
+        /// "early" (runs out before 18:00 project time) or "under" (far below pace past 40% of the day).
+        let alert: String?
         let byProject: [Pace]?
     }
     struct Accounts: Decodable, Equatable { let generatedAt: String?; let metaConnected: Bool; let metaError: String?; let counts: AccountCounts; let rows: [AccountRow] }

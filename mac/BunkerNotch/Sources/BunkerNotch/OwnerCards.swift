@@ -27,7 +27,13 @@ struct OwnerCards: Decodable, Equatable {
         let lastChoice: Choice?; let proposal: Proposal?
         /// Owner direct order (Touch ID): which actions run now and what still blocks them. Older servers omit both.
         let orderActions: Actions?; let orderBlockers: [String]?
+        /// Where a direct order takes its "before" value: the live reading (minutes old) or the analysis.
+        let orderSource: OrderSource?
+        /// Current values for a direct order: the live reading when there is one.
+        var orderBudget: Double? { orderSource?.dailyBudget ?? dailyBudget }
+        var orderStatus: String? { orderSource?.status ?? status }
     }
+    struct OrderSource: Decodable, Equatable { let kind: String; let at: String?; let status: String?; let dailyBudget: Double?; let currency: String? }
     let revision: Int?
     let paused: Bool
     let cards: [Card]
@@ -84,10 +90,15 @@ enum OwnerAdjust {
     }
     /// "Pausar: ativa → pausada" or "Reduzir 20%: US$ 95,10 → US$ 76,08/dia" — screen and Touch ID prompt.
     static func orderLine(_ card: OwnerCards.Card, action: String, percent: Double?) -> String {
-        if action == "pause" { return "Pausar: " + Format.statusName(card.status) + " → pausada" }
-        let after = newBudget(card.dailyBudget, action: action, percent: percent)
+        if action == "pause" { return "Pausar: " + Format.statusName(card.orderStatus) + " → pausada" }
+        let after = newBudget(card.orderBudget, action: action, percent: percent)
         return label(action) + (percent.map { " " + Format.percent($0, signed: false) } ?? "") + ": "
-            + Format.money(card.dailyBudget, currency: card.currency) + " → " + Format.money(after, currency: card.currency) + "/dia"
+            + Format.money(card.orderBudget, currency: card.currency) + " → " + Format.money(after, currency: card.currency) + "/dia"
+    }
+    /// "valor ao vivo de 21:42" or "valor da análise de 19:05".
+    static func sourceLine(_ card: OwnerCards.Card) -> String? {
+        guard let s = card.orderSource else { return nil }
+        return (s.kind == "live" ? "valor ao vivo de " : "valor da análise de ") + Format.clock(s.at)
     }
     /// "Já fiz no Gerenciador": the owner reports an action already made in Meta. Never approves, never executes.
     static func applied(card: OwnerCards.Card, revision: Int, action: String, percent: Double?, reason: String, clientId: String) -> [String: Any] {

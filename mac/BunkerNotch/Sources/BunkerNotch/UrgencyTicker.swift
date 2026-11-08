@@ -26,6 +26,10 @@ enum UrgencyTicker {
         if let n = s.accounts?.counts.nearLimit, n > 0, !ledger.isQuiet(key: AttentionLedger.limitKey, now: now) { urgent.append(Item(key: "limit:\(n)", text: "◔ \(n) conta(s) no limite", tone: .bad, urgent: true)) }
         var calm = [Item(key: "roas", text: "ROAS " + Format.ratio(s.today.today?.roas), tone: .neutral, urgent: false),
                     Item(key: "spend", text: "Gasto " + Format.compactMoney(s.today.today?.spend), tone: .neutral, urgent: false)]
+        // The newest sale stays in the rotation for 3 minutes.
+        if let sale = s.sales?.recent.first, let at = Format.date(sale.at), now.timeIntervalSince(at) < 180 {
+            calm.insert(Item(key: "sale:" + sale.at, text: "$ " + Format.compactMoney(sale.amount, currency: sale.currency) + " venda", tone: .good, urgent: false), at: 0)
+        }
         if let p = s.pace, p.status != "nd" { calm.append(Item(key: "pace", text: Format.pace(p), tone: Format.paceTone(p), urgent: false)) }
         if let recentChange { calm.append(Item(key: "change", text: recentChange, tone: .neutral, urgent: false)) }
         if let m = staleMinutes { calm.insert(Item(key: "stale", text: "dados há \(m) min", tone: .warn, urgent: false), at: 0) }

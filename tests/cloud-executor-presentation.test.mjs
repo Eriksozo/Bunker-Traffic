@@ -5,13 +5,14 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import {runtimeFailure} from '../lib/cloud-failure-diagnostics.mjs';
 import * as changeWatch from '../lib/change-watch.mjs';
+import * as ownerOrders from '../lib/owner-orders.mjs';
 // Exercise the real Durable Object alarm with only infrastructure and provider boundaries replaced.
 const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 function executor({step,enabled=true}={}){
  const exports={},values=new Map([['runtime',{enabled,history:[]}]]),alarms=[];
  const storage={get:async k=>values.get(k),put:async(k,v)=>{if(typeof k==='object'){for(const [a,b] of Object.entries(k))values.set(a,b);}else values.set(k,v);},setAlarm:async at=>alarms.push(at)};
  class DurableObject{constructor(ctx,env){this.ctx=ctx;this.env=env;}}
- vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:name.includes('change-watch')?changeWatch:{},Date,Response});
+ vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:name.includes('change-watch')?changeWatch:name.includes('owner-orders')?ownerOrders:{},Date,Response});
  const e=new exports.BunkerCloudExecutor({storage},{}),calls=[];
  e.engine=()=>({step:step||(async()=>{calls.push('analysis');throw Object.assign(Error('rejected'),{code:'CLOUD_MEMORY_REVIEW_EVIDENCE'});})});
  e.syncLive=async()=>{calls.push('live');return {paused:false};};e.syncAttribution=async()=>calls.push('authors');e.storeCompanion=async()=>calls.push('notch');

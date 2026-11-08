@@ -106,7 +106,12 @@ struct BunkView: View {
     private func draw(_ ctx: GraphicsContext, _ canvas: CGSize, _ t: Double) {
         let u = canvas.width / 24
         let jumpy = mood == .alert || reaction == .surprised, cheerful = mood == .happy || reaction == .happy || reaction == .love
-        let hop: CGFloat = jumpy ? -abs(CGFloat(sin(t * 5))) * 1.4 * u : cheerful ? -abs(CGFloat(sin(t * 3))) * 0.9 * u : walking ? -abs(CGFloat(sin(t * 7))) * 0.5 * u : 0
+        // Hop: rate, height and how much the body squashes on contact (BunkMotion: squash and stretch keeps volume).
+        let rate: Double = jumpy ? 5 : cheerful ? 3 : walking ? 7 : 0, strength: Double = jumpy ? 1 : cheerful ? 0.7 : walking ? 0.3 : 0
+        let height = rate > 0 ? abs(sin(t * rate)) : 0
+        let hop: CGFloat = -CGFloat(height) * (jumpy ? 1.4 : cheerful ? 0.9 : 0.5) * u * (rate > 0 ? 1 : 0)
+        let squash = BunkMotion.squashStretch(height, strength: strength)
+        let bend = BunkMotion.antennaBend(t, hopSpeed: strength, hopRate: rate, walking: walking)
         let breath = 1 + (mood == .sleeping ? 0.04 : 0.022) * CGFloat(sin(t * (mood == .sleeping ? 1.2 : 2.0)))
         // Little feet: only out of the notch, stepping while walking.
         if feet || walking {
@@ -117,13 +122,14 @@ struct BunkView: View {
             }
         }
         var c = ctx
-        // Breathe from the ground, hop as a whole.
-        c.translateBy(x: 0, y: hop + 22 * u * (1 - breath))
-        c.scaleBy(x: 1, y: breath)
+        // Breathe from the ground, hop as a whole, squash around the feet.
+        let sy = breath * squash.y, sx = squash.x
+        c.translateBy(x: 12 * u * (1 - sx), y: hop + 22 * u * (1 - sy))
+        c.scaleBy(x: sx, y: sy)
 
-        // Antenna and its light.
-        let tip = CGPoint(x: 12 * u, y: 2.6 * u)
-        var stem = Path(); stem.move(to: CGPoint(x: 12 * u, y: 6.4 * u)); stem.addLine(to: tip)
+        // Antenna on a spring: the tip lags the body and sways (secondary motion).
+        let tip = CGPoint(x: 12 * u + bend * 1.7 * u, y: 2.6 * u + abs(bend) * 0.35 * u)
+        var stem = Path(); stem.move(to: CGPoint(x: 12 * u, y: 6.4 * u)); stem.addQuadCurve(to: tip, control: CGPoint(x: 12 * u + bend * 0.5 * u, y: 4.4 * u))
         c.stroke(stem, with: .color(DS.Color.accent.opacity(0.9)), lineWidth: 1.1 * u)
         let light: Color = {
             switch mood {
@@ -184,10 +190,12 @@ struct BunkView: View {
         let color: Color = mood == .alert ? DS.Color.bad : mood == .watching ? DS.Color.good : mood == .worried ? DS.Color.warn : .white.opacity(0.95)
         let sweep: CGFloat = mood == .watching ? CGFloat(sin(t * 1.4)) * 2.2 * u : look * 1.8 * u
         let lift: CGFloat = (mood == .thinking ? -0.9 * u : mood == .worried ? 0.5 * u : 0) + lookY * 0.8 * u
-        let blinking = (t.truncatingRemainder(dividingBy: 4.3)) < 0.13 && mood != .sleeping && mood != .happy && reaction == nil
-        let cy = visor.midY + lift
+        // Irregular blinks and small eye jumps (BunkMotion); a strong look at the pointer wins over the jumps.
+        let lid: CGFloat = mood != .sleeping && mood != .happy && reaction == nil ? BunkMotion.blink(t) : 0
+        let jump = mood == .watching || abs(look) > 0.25 ? CGPoint.zero : BunkMotion.saccade(t)
+        let cy = visor.midY + lift + jump.y * u
         for dx in [-3.0, 3.0] {
-            let cx = visor.midX + CGFloat(dx) * u + sweep
+            let cx = visor.midX + CGFloat(dx) * u + sweep + jump.x * u
             // Reactions (Bunk's own expressions) override the mood's eyes.
             let style: BunkMood = {
                 switch reaction {
@@ -210,7 +218,8 @@ struct BunkView: View {
                 var line = Path(); line.move(to: CGPoint(x: cx - 1.2 * u, y: cy)); line.addLine(to: CGPoint(x: cx + 1.2 * u, y: cy))
                 c.stroke(line, with: .color(color.opacity(0.7)), style: StrokeStyle(lineWidth: 0.8 * u, lineCap: .round))
             default:
-                let w = (style == .worried ? 1.4 : 1.8) * u, h = blinking ? 0.35 * u : (style == .alert ? 3.0 : 2.6) * u
+                let full = (style == .alert ? 3.0 : 2.6) * u
+                let w = (style == .worried ? 1.4 : 1.8) * u, h = max(0.35 * u, full * (1 - lid))
                 c.fill(Path(roundedRect: CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h), cornerRadius: w / 2), with: .color(color))
             }
         }

@@ -88,6 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(bunkMenu)
         let privacy = item("Esconder notch e Bunk em gravações e calls", #selector(toggleCapturePrivacy), ""); privacy.state = UserDefaults.standard.bool(forKey: CapturePrivacy.key) ? .on : .off
         menu.addItem(privacy)
+        let sales = item("Avisar cada venda no notch", #selector(toggleSaleAlerts), ""); sales.state = UserDefaults.standard.bool(forKey: Store.saleAlertKey) ? .on : .off
+        menu.addItem(sales)
         let calls = item("Silêncio em reunião (câmera ou microfone em uso)", #selector(toggleCallQuiet), ""); calls.state = CallWatch.shared.enabled ? .on : .off
         menu.addItem(calls)
         if store.muted { menu.addItem(item("Reativar avisos", #selector(unmute), "")) }
@@ -119,6 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         UserDefaults.standard.set(hidden, forKey: CapturePrivacy.key)
         notch?.applyCapturePrivacy(hidden); bunk?.applyCapturePrivacy(hidden)
     }
+    @objc private func toggleSaleAlerts() { UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: Store.saleAlertKey), forKey: Store.saleAlertKey) }
     @objc private func toggleCallQuiet() { CallWatch.shared.enabled.toggle() }
     @objc private func bunkAllScreens() { bunk?.allowAllScreens() }
     @objc private func toggleBunkScreen(_ sender: NSMenuItem) {

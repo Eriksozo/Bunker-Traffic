@@ -12,6 +12,8 @@ import SwiftUI
     @Published var bubble: String?
     @Published var hovered = false
     @Published var squash: CGFloat = 0
+    /// Lean while airborne (thrown or falling), degrees; back to 0 on landing.
+    @Published var tilt: Double = 0
 }
 
 struct BunkStageView: View {
@@ -34,6 +36,7 @@ struct BunkStageView: View {
             BunkView(mood: stage.mood, size: BunkDesk.bunkSize, look: stage.look, lookY: stage.lookY, feet: true, walking: stage.walking, reaction: stage.reaction)
                 .scaleEffect(x: 1 + 0.16 * stage.squash, y: 1 - 0.24 * stage.squash, anchor: .bottom)
                 .scaleEffect(stage.hovered ? 1.08 : 1, anchor: .bottom)
+                .rotationEffect(.degrees(stage.tilt), anchor: .bottom)
                 .animation(.spring(response: 0.25, dampingFraction: 0.6), value: stage.hovered)
         }
         .padding(.bottom, BunkDesk.footInset)
@@ -60,6 +63,9 @@ struct BunkStageView: View {
     private var currentTarget: AdjustTarget?
     private var lastActivity = Date(), yawned = false
     private var dragStart: NSPoint?, dragOrigin = NSPoint.zero, dragging = false
+    /// Recent drag positions, for the throw speed on release; and the flight in progress after a throw.
+    private var dragSamples: [(p: CGPoint, t: Double)] = []
+    private var flight: BunkMotion.Flight?
     private var clickWork: DispatchWorkItem?, bubbleWork: DispatchWorkItem?, reactionWork: DispatchWorkItem?
     private var monitors: [Any] = []
     private var bag = Set<AnyCancellable>()
@@ -73,6 +79,8 @@ struct BunkStageView: View {
         self.store = store; self.notch = notch
         UserDefaults.standard.register(defaults: [Self.roamKey: true, Self.residentKey: false])
         store.$alert.compactMap { $0 }.receive(on: RunLoop.main).sink { [weak self] alert in self?.handle(alert) }.store(in: &bag)
+        // A sale: a quick celebration where he is, never a walk across the screens.
+        store.$saleTick.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in self?.react(.happy, for: 1.4) }.store(in: &bag)
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.idleCheck() } }
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = true; self?.stopTimer() } }
@@ -101,6 +109,7 @@ struct BunkStageView: View {
     // MARK: - Triggers
 
     private func handle(_ alert: IslandAlert) {
+        if alert.kind == .sale { return }   // celebrated through saleTick, no walk
         lastActivity = Date()
         let text = alert.detail.isEmpty ? alert.title : alert.title + " · " + alert.detail
         // Which campaign this warning is about (loss id = "lo:<account>:<campaign>"; approvals open the list).
@@ -109,8 +118,10 @@ struct BunkStageView: View {
         if target != nil || !roaming { currentTarget = target }
         // A burst becomes one walk: while touring, new attention items join what he is saying.
         if roaming, alert.kind != .manager { lines = RoamPolicy.merge(lines, text); return }
-        consider(alert.kind == .manager ? .manager : .attention(alert.kind), lines: [text])
+        // An order receipt is a short visit (not a tour): happy when the Meta confirmed it, surprised otherwise.
+        consider(alert.kind == .manager || alert.kind == .order ? .manager : .attention(alert.kind), lines: [text])
         if alert.kind == .approval { react(.surprised, for: 1.4) }
+        if alert.kind == .order { react(alert.id.hasSuffix(":confirmed") ? .happy : .surprised, for: 1.6) }
     }
 
     private func idleCheck() {
@@ -266,7 +277,7 @@ struct BunkStageView: View {
 
     private func retime() {
         guard panel != nil, !screenAsleep else { stopTimer(); return }
-        let rate: TimeInterval = !stops.isEmpty || falling || wanderTarget != nil ? 1.0 / 60.0 : stage.mood == .sleeping ? 0.1 : 1.0 / 30.0
+        let rate: TimeInterval = !stops.isEmpty || falling || flight != nil || wanderTarget != nil ? 1.0 / 60.0 : stage.mood == .sleeping ? 0.1 : 1.0 / 30.0
         guard rate != timerRate || timer == nil else { return }
         stopTimer(); timerRate = rate
         let t = Timer(timeInterval: rate, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.frame() } }
@@ -349,13 +360,27 @@ struct BunkStageView: View {
         let floor = WindowPerch.Surface(y: v.minY + RoamPlanner.floorInset, windowID: nil, minX: v.minX + BunkDesk.margin + half, maxX: v.maxX - BunkDesk.margin - half)
         let surface = WindowPerch.surface(x: feet.x, feetY: feet.y, windows: perchWindows, floor: floor, ceiling: v.maxY)
         let dt = CGFloat(timerRate)
+        if var f = flight {
+            // Thrown: integrate the flight; the floor is the highest edge under him right now.
+            let out = BunkMotion.fly(f, floorY: surface.y, minX: floor.minX, maxX: floor.maxX, dt: dt)
+            f = out.flight; feet = f.p; panel?.setFrameOrigin(BunkDesk.origin(feet: feet))
+            stage.tilt = BunkMotion.tilt(vx: f.v.dx, vy: f.v.dy); stage.look = f.v.dx >= 0 ? 1 : -1
+            if out.landed {
+                flight = nil; withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { stage.tilt = 0 }
+                UserDefaults.standard.set([Double(feet.x), Double(feet.y)], forKey: Self.spotKey)
+                land()
+            } else { flight = f }
+            return
+        }
         if feet.y > surface.y + 0.5 {
             // Nothing under him any more (window closed, moved or minimized): fall to the next edge or the floor.
             if !falling { falling = true; fallStartY = feet.y; fallSpeed = 0; wanderTarget = nil; stage.walking = false; retime() }
             let f = WindowPerch.fall(y: feet.y, speed: fallSpeed, floorY: surface.y, dt: dt)
             feet.y = f.y; fallSpeed = f.speed
+            // Off an edge: a little arc forward and a tumble that grows with the fall.
+            if fallStartY - feet.y > 12 { feet.x = min(max(feet.x + stage.look * 70 * dt, floor.minX), floor.maxX); stage.tilt = BunkMotion.tilt(vx: stage.look * 500, vy: -fallSpeed) }
             panel?.setFrameOrigin(BunkDesk.origin(feet: feet))
-            if f.landed { falling = false; if fallStartY - feet.y > 40 { land() } else { retime() } }
+            if f.landed { falling = false; withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { stage.tilt = 0 }; if fallStartY - feet.y > 40 { land() } else { retime() } }
             return
         }
         if feet.y < surface.y - 0.5 && surface.y - feet.y < 14 { feet.y = surface.y; panel?.setFrameOrigin(BunkDesk.origin(feet: feet)) }
@@ -402,7 +427,7 @@ struct BunkStageView: View {
 
     private func addMonitors() {
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            MainActor.assumeIsolated { guard let self, event.window === self.panel else { return }; self.dragStart = NSEvent.mouseLocation; self.dragOrigin = self.panel?.frame.origin ?? .zero }
+            MainActor.assumeIsolated { guard let self, event.window === self.panel else { return }; self.dragStart = NSEvent.mouseLocation; self.dragOrigin = self.panel?.frame.origin ?? .zero; self.dragSamples = []; self.flight = nil; self.stage.tilt = 0 }
             return event
         } as Any)
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .leftMouseDragged) { [weak self] event in
@@ -414,6 +439,7 @@ struct BunkStageView: View {
                 // Only allowed screens: dragging onto another one keeps him at the edge of the nearest allowed screen.
                 if let v = self.nearestAllowed(to: m)?.visibleFrame { f = BunkDesk.clamp(feet: f, visible: v) }
                 self.feet = f; p.setFrameOrigin(BunkDesk.origin(feet: f))
+                self.dragSamples.append((f, ProcessInfo.processInfo.systemUptime)); if self.dragSamples.count > 10 { self.dragSamples.removeFirst() }
             }
             return event
         } as Any)
@@ -456,6 +482,11 @@ struct BunkStageView: View {
         if notch?.bunkHomeZone.contains(NSEvent.mouseLocation) == true { goHome(); return }
         if roaming { stops = []; finish = nil; roaming = false }
         if resident {
+            // A flick throws him: he flies with the release speed, under gravity, and lands where he falls.
+            let v = BunkMotion.throwVelocity(dragSamples); dragSamples = []
+            if (v.dx * v.dx + v.dy * v.dy).squareRoot() > 350 && !A11y.reduceMotion {
+                flight = BunkMotion.Flight(p: feet, v: v); react(.surprised, for: 0.6); retime(); return
+            }
             UserDefaults.standard.set([Double(feet.x), Double(feet.y)], forKey: Self.spotKey)
             react(.happy, for: 0.6); settle()
         } else {

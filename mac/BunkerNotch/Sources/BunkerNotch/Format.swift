@@ -66,6 +66,15 @@ enum Format {
         default: return "ritmo N/D"
         }
     }
+    /// Bunk's warning for one project's pace, or nil.
+    static func paceWarning(_ p: Summary.Pace) -> (title: String, detail: String)? {
+        let name = p.name ?? "Projeto"
+        switch p.alert {
+        case "early": return ("Orçamento de \(name) acaba às " + clock(p.exhaustsAt), paceBase(p) + " · no ritmo atual")
+        case "under": return ("\(name) gastando abaixo do ritmo", pace(p) + " · " + paceBase(p))
+        default: return nil
+        }
+    }
     static func paceTone(_ p: Summary.Pace?) -> Tone {
         switch p?.status { case "exhausts", "spent": return .warn; case "under": return .neutral; case "on": return .good; default: return .neutral }
     }
@@ -132,6 +141,17 @@ enum Format {
         default: return "Limite diário: leitura da Meta indisponível agora."
         }
     }
+    /// "Reduzir · US$ 120,00 → US$ 90,00/dia" or "Pausar · ativa → pausada".
+    static func orderChange(_ o: Summary.OrderReceipt) -> String {
+        if o.action == "status" { return "Pausar · " + statusName(o.before?.status) + " → " + statusName(o.after?.status) }
+        let b = o.before?.dailyBudget, a = o.after?.dailyBudget
+        let verb = (a ?? 0) >= (b ?? 0) ? "Aumentar" : "Reduzir"
+        return verb + " · " + money(b, currency: o.currency) + " → " + money(a, currency: o.currency) + "/dia"
+    }
+    static func orderTone(_ stage: String) -> Tone {
+        switch stage { case "confirmed": return .good; case "failed", "verify", "expired": return .bad; default: return .accent }
+    }
+    static let orderSymbols = ["queued": "clock", "checking": "magnifyingglass", "sent": "paperplane.fill", "confirmed": "checkmark.seal.fill", "verify": "exclamationmark.triangle.fill", "failed": "xmark.octagon.fill", "expired": "hourglass"]
     /// "Pausar" or "100 → 80 USD": the shadow's proposed change, never a command.
     static func shadowChange(_ item: Summary.ShadowItem) -> String {
         if item.action == "status" { return item.after?["status"]?.text == "PAUSED" ? "Pausar" : "Ativar" }

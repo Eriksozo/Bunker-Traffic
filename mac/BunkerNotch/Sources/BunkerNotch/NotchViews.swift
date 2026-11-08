@@ -181,13 +181,13 @@ struct AlertView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
     let alert: IslandAlert
-    var tone: Tone { alert.kind == .approval ? .warn : alert.kind == .loss ? .bad : .accent }
-    var symbol: String { alert.kind == .approval ? "checkmark.seal.fill" : alert.kind == .loss ? "arrow.down.right" : "person.crop.circle.badge.exclamationmark" }
+    var tone: Tone { alert.kind == .sale ? .good : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? .good : .bad) : alert.kind == .approval ? .warn : alert.kind == .loss ? .bad : .accent }
+    var symbol: String { alert.kind == .sale ? "dollarsign.circle.fill" : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? "checkmark.seal.fill" : "exclamationmark.triangle.fill") : alert.kind == .approval ? "checkmark.seal.fill" : alert.kind == .loss ? "arrow.down.right" : "person.crop.circle.badge.exclamationmark" }
     var body: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: notch.geometry.height)
             HStack(alignment: .center, spacing: DS.Space.m) {
-                BunkView(mood: alert.kind == .manager ? .watching : .alert, size: 32)
+                BunkView(mood: alert.kind == .manager ? .watching : alert.kind == .sale || alert.kind == .order && alert.id.hasSuffix(":confirmed") ? .happy : .alert, size: 32)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(alert.title).font(DS.Font.bodyStrong).foregroundStyle(DS.Color.ink).lineLimit(1)
                     Text(alert.detail).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(2).truncationMode(.middle)
@@ -508,6 +508,17 @@ struct NowTab: View {
                     }
                 }
             }
+            if let orders = s.orders, !orders.isEmpty {
+                SectionHeader(title: "Suas ordens · 24h", detail: "Touch ID → executor → Malva → releitura")
+                VStack(spacing: 2) {
+                    ForEach(orders) { o in
+                        ListRow(id: "or:" + o.id, symbol: Format.orderSymbols[o.stage] ?? "circle", tone: Format.orderTone(o.stage),
+                                title: o.campaign ?? "Campanha", subtitle: Format.orderChange(o) + (o.reason.map { " · " + $0 } ?? ""),
+                                tag: Format.queueTag(project: showProject ? o.projectName : nil, account: o.account),
+                                value: o.label ?? o.stage, valueCaption: Format.relative(o.confirmedAt ?? o.sentAt ?? o.at))
+                    }
+                }
+            }
             SectionHeader(title: "O que fazer agora", detail: "\(s.queue.count) de \(s.queueSize) na fila · ordenado por dinheiro em jogo")
             if s.queue.isEmpty { EmptyLine(text: "Nada pedindo ação agora.") }
             VStack(spacing: 2) {
@@ -739,6 +750,12 @@ struct ProjectsTab: View {
                                     if p.losses > 0 { Pill(text: "\(p.losses) perda(s)", tone: .bad) }
                                 }
                                 Text("gasto \(Format.money(p.spend)) · ROI \(Format.ratio(p.roi)) · \(p.changes) mudança(s) em 24h").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                                if let pace = s.pace?.byProject?.first(where: { $0.project == p.id }), pace.status != "nd" {
+                                    HStack(spacing: DS.Space.xs) {
+                                        Pill(text: Format.pace(pace), tone: pace.alert != nil ? .warn : Format.paceTone(pace), icon: pace.alert == "early" ? "hourglass" : pace.alert == "under" ? "tortoise" : "gauge.medium")
+                                        Text(Format.paceBase(pace)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
+                                    }
+                                }
                             }
                             Spacer(minLength: DS.Space.s)
                             VStack(alignment: .trailing, spacing: 2) {

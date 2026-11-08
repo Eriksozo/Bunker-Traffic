@@ -30,6 +30,8 @@ Molas assimétricas (abrir com leve elástico, fechar sem rebote) e a troca de t
 
 Ideias dos pacotes de atenção, leitura e robustez (07/11), todas reescritas aqui sem copiar código: dispensar por assinatura e aviso curto do notchd (Apache-2.0); adiar 30 min/2 h/amanhã do Perch (MIT); silêncio com câmera ou microfone em uso do Repose (MIT); vocabulário de minigráficos do exelban/stats (MIT); ritmo de consumo do ILoveNotch (MIT); abertura por intenção do udeck (Apache-2.0) e do notchi (MIT); cadência de atualização com recuo do codex-pacer (MIT). Projetos GPL (Ice, Ledge, boring.notch) serviram só como referência de ideia.
 
+Vida procedural do Bunk (piscar irregular, olhar com pequenos saltos, antena com mola, achatar e esticar mantendo o volume, arremesso com inércia e tombo em arco): princípios resumidos em rossark0/rossark-motion-skill (MIT). Ideias de MacPenguins (GPL-2) e da família Shimeji (GPL-3) foram usadas só como referência, sem código.
+
 Nenhum ativo de marca do Coucou é usado aqui: o nome "Coucou", o personagem e o nome "Mochi", ícones, sons e mídias pertencem ao autor e não fazem parte deste app.
 
 ## Segurança

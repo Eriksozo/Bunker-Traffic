@@ -537,3 +537,10 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
     4. Não fazer deploy manual concorrente por causa de 503 transitório.
     5. Não trocar para `immediate` nem mexer em permissões.
   - Evidência real: `syncPulse` chegou à versão 3 (01:19:36Z), então o sensor já detectou ajuste real na Malva. Às 01:35:33Z, `watch.projects` estava em 6, `failed` em 0 e `paused` em false.
+- **Seis melhorias pedidas pelo dono ("quero todos, vai fazendo na ordem")** (registro escrito às 2026-11-08 02:15:09 UTC por `date -u`):
+  1. **Ordem direta com leitura ao vivo:** `lib/owner-order-live.mjs`. A rota do Mac lê o cache ao vivo e passa a linha para `recordOwnerChoice(opts.live)`. A proposta guarda `liveTarget`, a pré-conferência compara com ele e `approvedExecutionProposal` dispensa só a idade de 1 hora da análise para essas ordens. Testes: `tests/owner-order-live.test.mjs`.
+  2. **Recibo da ordem:** `lib/owner-orders.mjs` (estado pelo diário do executor: na fila, conferindo, enviada, confirmada, conferir ou não enviada). `orders` vai no resumo do notch. O pulso sobe quando o estágio muda (`orderPulse`). No notch, a seção "Suas ordens" mostra os recibos e há aviso com reação do Bunk.
+  3. **Vendas em tempo real:** `lib/sales-feed.mjs`, `app/api/webhooks/malva/route.ts` e a borda em `cloudflare-auth`. O executor guarda `salesFeed` e mescla na leitura do resumo. Falta o dono cadastrar o segredo e criar o webhook na Malva (passos em `docs/connections.md`).
+  4. **Bunk mais realista:** `BunkMotion.swift` (piscar, saltos do olhar, antena com mola, achatar e esticar, arremesso, tombo), aplicado em `Bunk.swift` e `BunkDesktop.swift`.
+  5. **Menos carga no Supabase:** sinal de mudanças a cada 5 s em vez de 2 s. A consulta duplicada da central virou rede de segurança de 30 s, e o pulso de ajuste pede uma checagem imediata.
+  6. **Ritmo por projeto:** `alert` em `budget-pace` (orçamento acaba antes das 18h ou gasto bem abaixo do ritmo), mostrado na aba Projetos, com aviso do Bunk uma vez por dia.

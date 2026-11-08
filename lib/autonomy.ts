@@ -14,13 +14,14 @@ import {learningCyclePlan,recordLearningReview} from './learning-cycle.mjs';
 import {autonomousWorkPlan} from './autonomous-work.mjs';
 import {requestLiveRefresh} from './owner-applied.mjs';
 
-export function ownerAutonomy(state:any,input:any,ownerId:string){
+/** `opts.live`: the live campaign row the server read for an owner order (never taken from the request). */
+export function ownerAutonomy(state:any,input:any,ownerId:string,opts:{live?:any}={}){
  if(input.op==='reviewBatch')return requestReviewBatch(state,input,ownerId);
  if(['incidentReport','incidentUpdate'].includes(input.op)){const record=recordIncident(state,input,ownerId);invalidateIncidentContext(state,record);return record;}
  if(input.op==='cardReopen')return reopenDecision(state,input,ownerId);
  if(input.op==='cardDecision'){
   const existingIds=new Set((state.ownerChoices||[]).map((c:any)=>c.id));
-  const record=recordOwnerChoice(state,input,ownerId);
+  const record=recordOwnerChoice(state,input,ownerId,Date.now(),opts);
   const replay=existingIds.has(record.id);
   // A reviewed choice is a user-requested analysis. Do not fence an earlier
   // approved execution by queuing a successor before it has been reconciled.

@@ -43,8 +43,10 @@ export function useLiveData(){
   const focus=()=>{if(document.visibilityState==='visible'){void refresh();check();}};
   const visible=()=>{if(document.visibilityState==='visible')focus();else controller.current?.abort();};
   const timer=setInterval(check,SOURCE_WATCH_MS),fallback=setInterval(()=>{if(broken&&document.visibilityState==='visible')void refresh();},30000);
+  // The executor's edit pulse (lib/change-watch.mjs) asks for an immediate signal look.
+  const pulse=()=>{void watch.check();};window.addEventListener('bunker:edit-pulse',pulse);
   window.addEventListener('focus',focus);document.addEventListener('visibilitychange',visible);void refresh();check();
-  return()=>{alive.current=false;watch.dispose();rescue.dispose();if(recovery.current===rescue)recovery.current=null;controller.current?.abort();clearInterval(timer);clearInterval(fallback);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',visible);};
+  return()=>{alive.current=false;watch.dispose();rescue.dispose();if(recovery.current===rescue)recovery.current=null;controller.current?.abort();clearInterval(timer);clearInterval(fallback);window.removeEventListener('bunker:edit-pulse',pulse);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',visible);};
  },[refresh]);
  return {data,error:error||watchError,loading,now,refresh};
 }

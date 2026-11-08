@@ -6,7 +6,8 @@ struct IslandAlert: Equatable, Identifiable {
     let kind: Kind
     let title: String
     let detail: String
-    enum Kind: Equatable { case approval, manager, loss }
+    /// `order`: a receipt of the owner's direct order (confirmed, failed or to verify).
+    enum Kind: Equatable { case approval, manager, loss, order, sale }
 }
 
 /// Pure island behaviour, no AppKit: hover peeks, click/hotkey opens, Escape/outside click folds,

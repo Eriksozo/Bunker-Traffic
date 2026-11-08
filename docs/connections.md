@@ -66,3 +66,23 @@ Nova decisão do proprietário em 07/11/2026 (substitui "Sim, passa pela equipe"
 - A execução continua exclusiva do executor Cloudflare: claim → prepare → submit único → Malva MCP → conferência, com `authorizeCloudDispatch` conferindo o comando. A chave do Mac não aciona provedor diretamente.
 - Ordem direta (`cardDecision` com `ownerOrder:true` dentro do pedido assinado; `ownerDeviceOps` não muda): só pausa, ou orçamento diário de/para, de campanha Meta com leitura completa e recente de hoje, moeda nativa e orçamento CBO próprio. Antes de gravar, o valor atual é comparado com a leitura ao vivo (divergência bloqueia) e passa pela contingência, que inclui o teto diário do projeto quando configurado. É incompatível com `applied` e `approveExact`; recusada se já houver proposta em andamento para a campanha; válida por 60 minutos. Ativação não é oferecida. Parecer da equipe, meta de retorno e teto não configurado aparecem como informação, sem travar.
 - Trocar de Mac ou perder a chave: o app cria outra; registre a nova parte pública no secret (stdin) e a anterior deixa de valer.
+
+## Ordem direta com leitura ao vivo (07/11/2026)
+
+Quando a análise dos quatro períodos tem mais de 1 hora (por exemplo, à noite, fora da agenda de coletas), a ordem direta do dono pode usar a **leitura ao vivo** da campanha, de até 10 minutos, lida pelo servidor no cache `live:<projeto>`. O valor de antes vem dessa leitura (`payload.liveTarget`). Só para essas ordens, o executor dispensa a idade de 1 hora da análise. Continuam valendo:
+- o round válido;
+- a pré-conferência na Malva antes do envio (o valor atual precisa bater com `liveTarget`, ou a ordem é recusada);
+- a contingência, com o teto diário do projeto quando configurado;
+- o envio único e a releitura.
+
+As propostas da equipe seguem a regra de 1 hora. O notch mostra a origem do valor: "valor ao vivo de HH:MM" ou "valor da análise".
+
+## Webhook de vendas da Malva (07/11/2026)
+
+`POST /api/webhooks/malva/<segredo>`. O segredo é o último trecho do caminho, conferido em tempo constante na borda antes de ler o corpo (limite de 64 KB, cabeçalhos de identidade apagados). A venda vira só informação: valor, moeda, produto, campanha (utm), projeto e horário. Dados do comprador nunca entram, e o id do pedido vira um hash curto para não duplicar. Uma venda nunca propõe, aprova nem executa nada. O notch mostra a venda no rodízio e o Bunk comemora; o aviso a cada venda é opcional, no menu.
+
+Configuração, feita pelo dono (o segredo não aparece na tela):
+1. No terminal, na pasta do projeto:
+   `s=$(openssl rand -hex 32); printf %s "$s" | npx wrangler secret put MALVA_WEBHOOK_SECRET --name bunker-traffic; printf %s "https://bunker-traffic.erik-iplou.workers.dev/api/webhooks/malva/$s" | pbcopy; unset s`
+   Cadastrar o segredo cria uma versão nova do Worker: siga o protocolo de publicador único.
+2. Na Malva, em Integrações › Webhooks: crie um webhook no formato Malva para os assuntos de venda paga, colando o endereço que ficou na área de transferência. Faça isso em cada projeto.

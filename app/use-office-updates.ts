@@ -14,7 +14,9 @@ export function useOfficeUpdates(active:boolean,revision:number,saving:boolean,o
   const sync=createCentralSync({getCurrent:()=>latest.current,onUpdate:(data:any)=>latest.current.onUpdate(data),onStatus:setStatus,visible:()=>document.visibilityState==='visible'});
   const check=()=>sync.check();
   const visible=()=>{if(document.visibilityState==='visible')void check();};
-  const timer=setInterval(check,2000);
+  // The source watch (use-live-data) already reads the central revision and raises 'bunker:central-changed';
+  // this slow timer is only a safety net.
+  const timer=setInterval(check,30000);
   window.addEventListener('bunker:central-changed',check);window.addEventListener('focus',check);document.addEventListener('visibilitychange',visible);void check();
   return()=>{sync.dispose();clearInterval(timer);window.removeEventListener('bunker:central-changed',check);window.removeEventListener('focus',check);document.removeEventListener('visibilitychange',visible);};
  },[active]);

@@ -110,7 +110,7 @@ struct OwnerAdjustView: View {
     func decision(_ card: OwnerCards.Card, revision: Int?) -> some View {
         let percent = Double(m.percentText.replacingOccurrences(of: ",", with: "."))
         let needsPercent = m.action == "increase" || m.action == "reduce"
-        let preview = OwnerAdjust.newBudget(card.dailyBudget, action: m.action, percent: percent)
+        let preview = OwnerAdjust.newBudget(card.orderBudget, action: m.action, percent: percent)
         let valid = !m.busy && revision != nil && !m.action.isEmpty && OwnerAdjust.validPercent(m.action, percent)
         let canOrder = valid && OwnerAdjust.canOrder(card, action: m.action)
         let canAsk = valid && OwnerAdjust.allowed(card.intentActions, m.action) && OwnerAdjust.canDecide(card)
@@ -123,9 +123,14 @@ struct OwnerAdjustView: View {
             HStack(spacing: DS.Space.xs) {
                 Pill(text: card.projectName ?? card.project, tone: .tag)
                 if let a = card.account { Pill(text: a, tone: .tag) }
-                Pill(text: Format.statusName(card.status), tone: card.status == "ACTIVE" ? .good : .neutral)
-                Text("diário " + Format.money(card.dailyBudget, currency: card.currency)).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft)
+                Pill(text: Format.statusName(card.orderStatus), tone: card.orderStatus == "ACTIVE" ? .good : .neutral)
+                Text("diário " + Format.money(card.orderBudget, currency: card.currency)).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft)
                 Spacer(minLength: 0)
+                if let line = OwnerAdjust.sourceLine(card) {
+                    Label(line, systemImage: card.orderSource?.kind == "live" ? "dot.radiowaves.left.and.right" : "clock").font(DS.Font.micro)
+                        .foregroundStyle(card.orderSource?.kind == "live" ? DS.Color.good : DS.Color.inkMuted)
+                        .help(card.orderSource?.kind == "live" ? "A ordem usa a leitura ao vivo desta campanha. O executor confere o valor de novo na Malva antes de enviar." : "Sem leitura ao vivo recente: a ordem usa a análise.")
+                }
             }
             periodsStrip(card)
             if let s = card.suggestion {
@@ -180,10 +185,10 @@ struct OwnerAdjustView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Muda na Meta").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                         if m.action == "pause" {
-                            Text(Format.statusName(card.status) + " → pausada").font(DS.Font.stat).foregroundStyle(DS.Color.bad)
+                            Text(Format.statusName(card.orderStatus) + " → pausada").font(DS.Font.stat).foregroundStyle(DS.Color.bad)
                         } else {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(Format.money(card.dailyBudget, currency: card.currency)).font(DS.Font.number).foregroundStyle(DS.Color.inkMuted).strikethrough()
+                                Text(Format.money(card.orderBudget, currency: card.currency)).font(DS.Font.number).foregroundStyle(DS.Color.inkMuted).strikethrough()
                                 Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(DS.Color.inkMuted)
                                 Text(Format.money(preview, currency: card.currency)).font(DS.Font.stat).foregroundStyle(tone.color)
                                 Text("/dia").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
@@ -191,7 +196,7 @@ struct OwnerAdjustView: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    if let b = card.dailyBudget, let a = preview, m.action != "pause" {
+                    if let b = card.orderBudget, let a = preview, m.action != "pause" {
                         Pill(text: (a >= b ? "+" : "−") + Format.money(abs(a - b), currency: card.currency) + "/dia", tone: tone)
                     }
                 }
@@ -272,7 +277,7 @@ struct OwnerAdjustView: View {
         let input = OwnerAdjust.order(card: card, revision: revision, action: m.action, percent: percent, reason: m.reason, clientId: clientId(key))
         let line = OwnerAdjust.orderLine(card, action: m.action, percent: percent)
         await submit(input, prompt: "executar \(line) em \(card.campaign ?? "campanha") (\(card.account ?? card.adAccountId))", key: key,
-                     success: "Ordem autorizada: \(line). O executor Cloudflare aplica uma vez pela Malva em instantes e confere o resultado.")
+                     success: "Ordem autorizada: \(line). O executor aplica uma vez pela Malva em instantes e confere; o recibo aparece em Agora › Suas ordens.")
     }
 
     func sendApplied(_ card: OwnerCards.Card, revision: Int?, percent: Double?) async {
