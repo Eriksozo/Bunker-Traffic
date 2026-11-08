@@ -46,8 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateTitle() {
         let n = store.attention
-        statusItem.button?.title = store.error != nil ? " !" : n > 0 ? " \(n)" : ""
-        statusItem.button?.toolTip = store.error ?? "Bunk · \(n) item(ns) pedem atenção"
+        let title = store.error != nil ? " !" : n > 0 ? " \(n)" : ""
+        let tip = store.error ?? (n == 0 ? "Bunk · nada pede atenção" : "Bunk · " + Format.count(n, "item pede", "itens pedem") + " atenção")
+        // Writing the same title still relayouts the menu bar item.
+        if statusItem.button?.title != title { statusItem.button?.title = title }
+        if statusItem.button?.toolTip != tip { statusItem.button?.toolTip = tip }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

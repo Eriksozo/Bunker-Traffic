@@ -67,6 +67,7 @@ struct CallHysteresis: Equatable {
         UserDefaults.standard.register(defaults: [Self.key: true])
         enabled = UserDefaults.standard.bool(forKey: Self.key)
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.check() } }
+        timer?.tolerance = 1
     }
     private func check() {
         guard enabled else { return }

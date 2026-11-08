@@ -14,6 +14,14 @@ import SwiftUI
     @Published var squash: CGFloat = 0
     /// Lean while airborne (thrown or falling), degrees; back to 0 on landing.
     @Published var tilt: Double = 0
+    /// Gaze follows the pointer; a write with the same value would still redraw, so tiny moves are ignored.
+    func setGaze(_ x: CGFloat, _ y: CGFloat) {
+        if abs(look - x) > 0.03 { look = x }
+        if abs(lookY - y) > 0.03 { lookY = y }
+    }
+    /// Standing still and calm: breathing only, so 10 frames per second are enough (was 30 all day).
+    var resting: Bool { BunkStage.restingMoods.contains(mood) && !walking && reaction == nil && !hovered && bubble == nil && squash == 0 && tilt == 0 }
+    nonisolated static let restingMoods: Set<BunkMood> = [.idle, .watching, .sleeping]
 }
 
 struct BunkStageView: View {
@@ -33,7 +41,7 @@ struct BunkStageView: View {
                     .frame(maxWidth: BunkDesk.panel.width - 16)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
             }
-            BunkView(mood: stage.mood, size: BunkDesk.bunkSize, look: stage.look, lookY: stage.lookY, feet: true, walking: stage.walking, reaction: stage.reaction)
+            BunkView(mood: stage.mood, size: BunkDesk.bunkSize, look: stage.look, lookY: stage.lookY, feet: true, walking: stage.walking, reaction: stage.reaction, resting: stage.resting)
                 .scaleEffect(x: 1 + 0.16 * stage.squash, y: 1 - 0.24 * stage.squash, anchor: .bottom)
                 .scaleEffect(stage.hovered ? 1.08 : 1, anchor: .bottom)
                 .rotationEffect(.degrees(stage.tilt), anchor: .bottom)
@@ -81,7 +89,7 @@ struct BunkStageView: View {
         store.$alert.compactMap { $0 }.receive(on: RunLoop.main).sink { [weak self] alert in self?.handle(alert) }.store(in: &bag)
         // A sale: a quick celebration where he is, never a walk across the screens.
         store.$saleTick.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in self?.react(.happy, for: 1.4) }.store(in: &bag)
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.idleCheck() } }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.idleCheck() } }.tolerance = 10
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = true; self?.stopTimer() } }
         ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.screenAsleep = false; self?.retime() } }
@@ -277,7 +285,7 @@ struct BunkStageView: View {
 
     private func retime() {
         guard panel != nil, !screenAsleep else { stopTimer(); return }
-        let rate: TimeInterval = !stops.isEmpty || falling || flight != nil || wanderTarget != nil ? 1.0 / 60.0 : stage.mood == .sleeping ? 0.1 : 1.0 / 30.0
+        let rate: TimeInterval = !stops.isEmpty || falling || flight != nil || wanderTarget != nil ? 1.0 / 60.0 : stage.mood == .sleeping || stage.resting ? 0.1 : 1.0 / 30.0
         guard rate != timerRate || timer == nil else { return }
         stopTimer(); timerRate = rate
         let t = Timer(timeInterval: rate, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.frame() } }
@@ -288,6 +296,8 @@ struct BunkStageView: View {
 
     private func frame() {
         guard let p = panel else { return }
+        // Rest ↔ activity (hover, bubble, reaction) changes the frame rate; retime() is a no-op when it is unchanged.
+        defer { retime() }
         let mouse = NSEvent.mouseLocation, origin = p.frame.origin
         let local = CGPoint(x: mouse.x - origin.x, y: mouse.y - origin.y)
         let over = BunkDesk.isOverBody(local) || (stage.bubble != nil && BunkDesk.bubble.contains(local))
@@ -299,7 +309,7 @@ struct BunkStageView: View {
 
         if !stops.isEmpty && !dragging {
             if let until = pauseUntil {
-                stage.walking = false; stage.look = gaze.x; stage.lookY = gaze.y
+                if stage.walking { stage.walking = false }; stage.setGaze(gaze.x, gaze.y)
                 if Date() >= until && !hovering { pauseUntil = nil; stage.bubble = nil; stopIndex += 1 }
             } else if stopIndex < stops.count {
                 let target = stops[stopIndex].point
@@ -323,7 +333,7 @@ struct BunkStageView: View {
             return
         }
         // Living on the desktop: follow the pointer with the eyes, doze off when nothing happens.
-        stage.look = gaze.x; stage.lookY = gaze.y
+        stage.setGaze(gaze.x, gaze.y)
         if resident && !dragging && !roaming { perch() }
         let distance = ((mouse.x - center.x) * (mouse.x - center.x) + (mouse.y - center.y) * (mouse.y - center.y)).squareRoot()
         let asleep = !roaming && BunkDesk.shouldSleep(idle: Date().timeIntervalSince(lastActivity), mouseDistance: distance)

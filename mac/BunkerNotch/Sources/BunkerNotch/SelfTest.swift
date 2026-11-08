@@ -123,6 +123,8 @@ enum SelfTest {
         check(receiptLine("100", "80")?.hasPrefix("Reduzir") == true, #line)
         check(receiptLine("100", "120")?.hasPrefix("Aumentar") == true, #line)
         check(receiptLine("null", "80")?.hasPrefix("Orçamento") == true, #line)
+        let panelRect = CGRect(x: 500, y: 1000, width: 600, height: 80)
+        check(NotchHover.near(CGPoint(x: 800, y: 1050), panel: panelRect) && NotchHover.near(CGPoint(x: 460, y: 960), panel: panelRect) && !NotchHover.near(CGPoint(x: 800, y: 500), panel: panelRect), #line)
         check(Format.money(Double.nan) == "N/D" && Format.exactMoney(nil) == "N/D" && Format.compactMoney(.infinity) == "N/D", #line)
     }
 

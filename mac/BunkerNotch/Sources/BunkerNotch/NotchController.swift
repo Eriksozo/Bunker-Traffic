@@ -4,6 +4,11 @@ import SwiftUI
 
 enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", accounts = "Contas", managers = "Gestores", agents = "Agentes", system = "Sistema" }
 
+/// Pointer pre-filter for the global mouse monitor: within 60 pt of the island panel.
+enum NotchHover {
+    static func near(_ p: CGPoint, panel: CGRect) -> Bool { panel.insetBy(dx: -60, dy: -60).contains(p) }
+}
+
 /// Keyboard while the island is open: 1–6 pick a tab, ← → move between tabs (wrapping). Pure, for the self-test.
 enum NotchKeys {
     static func tab(for chars: String?, keyCode: UInt16, current: NotchTab) -> NotchTab? {
@@ -154,7 +159,7 @@ final class NotchController {
         panel.orderFrontRegardless()
         state.onClick = { [weak self] in self?.send(.click) }
         state.onClose = { [weak self] in self?.send(.escape) }
-        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in guard let self, self.fsm.state == .compact else { return }; withAnimation(DS.Motion.quick) { self.state.tick &+= 1 } } }
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in guard let self, self.fsm.state == .compact else { return }; withAnimation(DS.Motion.quick) { self.state.tick &+= 1 } } }.tolerance = 0.5
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.relocate(force: true) }
         }
@@ -175,14 +180,15 @@ final class NotchController {
         store.$alert.compactMap { $0 }.receive(on: RunLoop.main).sink { [weak self] alert in self?.enqueue(alert) }.store(in: &bag)
         HotKey.register { [weak self] in self?.send(.toggle) }
         // Mouse moves anywhere (no Accessibility permission for mouse events): the island reacts without polling.
+        // Every mouse move on the Mac lands here (tens per second): only moves that can matter reach track().
         monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
-            Task { @MainActor in self?.track() }
+            MainActor.assumeIsolated { self?.trackIfRelevant() }
         } as Any)
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             self?.track(); return event
         } as Any)
         // Slow safety net (screen changes, follow-the-mouse relocation, a missed event).
-        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.track() } }
+        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.track() } }.tolerance = 0.5
     }
 
     func toggle() { send(.toggle) }
@@ -286,6 +292,15 @@ final class NotchController {
 
     /// Mouse in panel coordinates (AppKit origin bottom-left) against the current island rect.
     /// Entering needs intention (HoverIntent); leaving uses a slightly wider margin.
+    /// Near the island, while it is in use, or (follow-the-mouse) on another screen: otherwise a move cannot change
+    /// anything and is ignored. HoverIntent stays correct: speed is only measured once the pointer is near.
+    private func trackIfRelevant() {
+        if wasInside || fsm.state != .compact || dwellWork != nil { track(); return }
+        let mouse = NSEvent.mouseLocation
+        if NotchHover.near(mouse, panel: panel.frame) { track(); return }
+        if display == .followMouse, let s = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }), s.frame != panel.screen?.frame { track() }
+    }
+
     private func track() {
         if display == .followMouse, !fsm.isOpen { relocate() }
         let mouse = NSEvent.mouseLocation, frame = panel.frame
@@ -295,7 +310,7 @@ final class NotchController {
         let inside = wasInside ? island.insetBy(dx: -HoverIntent.leaveMargin, dy: -HoverIntent.leaveMargin).contains(local) : over
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
         if wasInside && !inside {
-            wasInside = false; intent.reset(); dwellWork?.cancel()
+            wasInside = false; intent.reset(); dwellWork?.cancel(); dwellWork = nil
             send(.mouseLeft); updatePoll(); return
         }
         guard !wasInside else { return }
@@ -303,15 +318,15 @@ final class NotchController {
         if fsm.state != .compact && fsm.state != .peek, over { wasInside = true; send(.mouseEntered); updatePoll(); return }
         switch intent.feed(mouse, at: Date(), inside: over, atTopEdge: mouse.y >= frame.maxY - 2) {
         case .enter:
-            dwellWork?.cancel()
+            dwellWork?.cancel(); dwellWork = nil
             wasInside = true; send(.mouseEntered); updatePoll()
         case .wait(let seconds):
-            dwellWork?.cancel()
+            dwellWork?.cancel(); dwellWork = nil
             let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.track() } }
             dwellWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.01, execute: work)
         case .none:
-            dwellWork?.cancel()
+            dwellWork?.cancel(); dwellWork = nil
         }
     }
 }

@@ -62,7 +62,7 @@ enum BunkBrain {
         }
         if let sh = s.shadow, sh.total > 0 {
             let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
-            out.append(Topic(text: "Na sombra, hoje eu teria agido \(would) vez(es)\(first > 0 ? ", \(first) antes do gestor" : ""). Ainda não executo nada."))
+            out.append(Topic(text: "Na sombra, hoje eu teria agido \(would == 1 ? "1 vez" : "\(would) vezes")\(first > 0 ? ", \(first) antes do gestor" : ""). Ainda não executo nada."))
         }
         out.append(Topic(text: "ROAS hoje \(Format.ratio(s.today.today?.roas)), ontem \(Format.ratio(s.today.yesterday?.roas))."))
         if let p = s.pace, p.status != "nd" { out.append(Topic(text: "Ritmo do orçamento: \(Format.pace(p)) (\(Format.paceBase(p))).")) }
@@ -86,11 +86,13 @@ struct BunkView: View {
     var reaction: BunkReaction? = nil
     /// False freezes the drawing (no frames): used while nothing needs attention.
     var active = true
+    /// Calm and still (desktop Bunk breathing): 10 frames per second instead of 30.
+    var resting = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // Animation gate: frames only when there is something to watch; asleep at 10 fps.
-        TimelineView(.animation(minimumInterval: mood == .sleeping ? 0.1 : 1.0 / 30.0, paused: reduceMotion || !active)) { timeline in
+        TimelineView(.animation(minimumInterval: mood == .sleeping || resting ? 0.1 : 1.0 / 30.0, paused: reduceMotion || !active)) { timeline in
             let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
             Canvas { ctx, canvas in draw(ctx, canvas, t) }
         }

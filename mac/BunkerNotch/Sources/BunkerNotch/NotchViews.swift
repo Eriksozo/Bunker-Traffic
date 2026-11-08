@@ -96,6 +96,9 @@ struct CollapsedView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
     var body: some View {
+        // One computation per redraw (it used to run three times: text, colour and change detection).
+        let items = tickerItems
+        let current: UrgencyTicker.Item? = items.isEmpty ? nil : items[notch.tick % items.count]
         HStack(spacing: 0) {
             HStack(spacing: 6) {
                 BunkAvatar(size: 20, interactive: false)
@@ -105,15 +108,14 @@ struct CollapsedView: View {
                 if store.muted { Image(systemName: "moon.fill").font(.system(size: 9)).foregroundStyle(DS.Color.inkMuted).help("Avisos silenciados") }
             }.frame(width: NotchState.earWidth)
             Spacer(minLength: notch.geometry.width)
-            let current = ticker
             Text(current?.text ?? (store.preparing ? "preparando" : "…")).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit()
                 .foregroundStyle(current.map { $0.tone == .neutral ? DS.Color.inkSoft : $0.tone.color } ?? DS.Color.inkSoft)
                 .lineLimit(1).minimumScaleFactor(0.7).frame(width: NotchState.earWidth - 14).padding(.trailing, 14)
                 .id(notch.tick).transition(.blurFade)
         }
         // A newly urgent item (approval, loss, account at its limit) is shown at once.
-        .onChange(of: tickerItems.map(\.key)) { old, new in
-            if let i = UrgencyTicker.focus(previousKeys: Set(old), items: tickerItems) { withAnimation(DS.Motion.quick) { notch.tick = i } }
+        .onChange(of: items.map(\.key)) { old, new in
+            if let i = UrgencyTicker.focus(previousKeys: Set(old), items: items) { withAnimation(DS.Motion.quick) { notch.tick = i } }
         }
         .frame(height: notch.geometry.height)
         .contentShape(Rectangle())
@@ -130,10 +132,6 @@ struct CollapsedView: View {
             return "\(who) \(icon) \(Format.relative(e.at).replacingOccurrences(of: "há ", with: ""))"
         }
         return UrgencyTicker.items(store.summary, recentChange: change, ledger: store.ledger, staleMinutes: staleMinutes(store))
-    }
-    var ticker: UrgencyTicker.Item? {
-        let items = tickerItems
-        return items.isEmpty ? nil : items[notch.tick % items.count]
     }
 }
 

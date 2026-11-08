@@ -88,13 +88,16 @@ final class Store: ObservableObject {
         }
         pathMonitor.start(queue: DispatchQueue(label: "bunker.network"))
         pulseTimer = Timer.scheduledTimer(withTimeInterval: Store.pulseSeconds, repeats: true) { [weak self] _ in Task { @MainActor in await self?.checkPulse() } }
+        // Tolerance lets macOS group wake-ups (energy); none of these needs to the exact second.
+        pulseTimer?.tolerance = 1
         CallWatch.shared.$inCall.removeDuplicates().dropFirst().receive(on: RunLoop.main).sink { [weak self] inCall in if !inCall { self?.releaseHeld() } }.store(in: &bag)
     }
 
     static let pulseSeconds: TimeInterval = 8
     /// A tiny read (served by the executor object, no central): only the counter and the newest edit.
     func checkPulse() async {
-        guard !asleep, !loading, let token = Credential.current() else { return }
+        // Offline (two failed reads in a row): no pulse every 8 s; the network monitor reads again when it comes back.
+        guard !asleep, !loading, failures < 2, let token = Credential.current() else { return }
         var request = URLRequest(url: Store.base.appendingPathComponent("api/companion/pulse"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         guard let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200,
@@ -116,6 +119,7 @@ final class Store: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: RefreshPolicy.interval(open: islandOpen, failures: failures), repeats: false) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
         }
+        timer?.tolerance = 5
     }
 
     /// Attention count shown on the collapsed notch and the menu bar.
@@ -156,7 +160,9 @@ final class Store: ObservableObject {
                 return
             }
             preparing = false
-            let next = try JSONDecoder().decode(Summary.self, from: data)
+            // Decode off the main thread: the island keeps drawing while a large summary is parsed.
+            let next = try await Task.detached(priority: .userInitiated) { try JSONDecoder().decode(Summary.self, from: data) }.value
+            guard generation == refreshGeneration, asked == project else { return }
             notifyNew(next)
             summary = next
             error = nil
