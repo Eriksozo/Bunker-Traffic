@@ -537,6 +537,25 @@ struct NowTab: View {
                     }
                 }
             }
+            if let f = s.first24h, f.counts.firstDay + f.counts.secondDay + f.counts.scheduled > 0 {
+                SectionHeader(title: "Primeiras 24h", detail: "\(f.counts.firstDay) no 1º dia · \(f.counts.secondDay) no 2º · \(f.counts.scheduled) programada(s) · teto \(Format.money(f.ceiling ?? 110)) com até 1 IC")
+                VStack(spacing: 2) {
+                    ForEach(f.items.prefix(6)) { item in
+                        ListRow(id: "f24:" + item.id, symbol: item.level == "sold" ? "checkmark.seal.fill" : item.level == "over" || item.level == "pause" ? "exclamationmark.octagon.fill" : "clock.badge",
+                                tone: Format.first24hTone(item.level),
+                                title: item.campaign ?? "Campanha",
+                                subtitle: Format.first24hLine(item),
+                                tag: Format.queueTag(project: showProject ? item.projectName : nil, account: item.account),
+                                value: Format.money(item.spend), valueCaption: Format.first24hLevel(item.level))
+                    }
+                    ForEach(f.scheduled.prefix(3)) { item in
+                        ListRow(id: "f24s:" + item.id, symbol: "calendar", tone: .neutral,
+                                title: item.campaign ?? "Campanha",
+                                subtitle: "Programada · começa \(item.startsOn ?? "em breve")",
+                                tag: Format.queueTag(project: showProject ? item.project : nil, account: item.account))
+                    }
+                }
+            }
             if let sh = s.shadow, sh.total > 0 {
                 let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
                 SectionHeader(title: "Sombra do Bunk · hoje", detail: "\(would) executaria · \(first) antes do gestor · não executa nada")

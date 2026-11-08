@@ -544,3 +544,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   4. **Bunk mais realista:** `BunkMotion.swift` (piscar, saltos do olhar, antena com mola, achatar e esticar, arremesso, tombo), aplicado em `Bunk.swift` e `BunkDesktop.swift`.
   5. **Menos carga no Supabase:** sinal de mudanças a cada 5 s em vez de 2 s. A consulta duplicada da central virou rede de segurança de 30 s, e o pulso de ajuste pede uma checagem imediata.
   6. **Ritmo por projeto:** `alert` em `budget-pace` (orçamento acaba antes das 18h ou gasto bem abaixo do ritmo), mostrado na aba Projetos, com aviso do Bunk uma vez por dia.
+- **Primeiras 24h de campanhas novas** (registro escrito às 2026-11-08 02:27:05 UTC por `date -u`). Pedido do dono: campanhas programadas de um dia para o outro e testes precisam de atenção própria nas primeiras 24h. Protocolo: `docs/first-24h-protocol.md`.
+  - Causa do erro visto no notch: a regra da sombra "Pausar campanha sem entrega" só reconhecia datas de hoje e ontem. Campanhas `08/11 - ...` (programadas para amanhã) apareciam como pausáveis. Corrigido.
+  - A Malva não envia `startAt` nem `deliveryStartedAt` (0 de 1.949 linhas no cache de 07/11). Identificação por data no nome + histórico de gasto: `lib/first-24h.mjs` (`newCampaignStage`: programada, 1º dia, 2º dia).
+  - Teto do dono: sem venda e com 0–1 IC, não gastar R$110. Alerta a partir de 70%, a sombra registra pausa a partir de 90% (R$99), e "estourado" a partir de 100%. Com 2+ IC continua o limiar privado do projeto. A política privada pode reduzir o teto, nunca subir.
+  - A regra `test-no-sale` da sombra agora vale para toda campanha nova, não só `[TESTE]`. O id foi mantido para não quebrar a revisão da sombra. O executor grava `first24h` (painel por projeto) e o resumo do notch ganhou o bloco "Primeiras 24h". O acompanhamento ganhou o sinal `first-24h`.
+  - Continua só sombra: nada é executado sem proposta aprovada pelo dono.

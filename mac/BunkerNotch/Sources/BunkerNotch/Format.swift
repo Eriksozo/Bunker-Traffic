@@ -167,6 +167,28 @@ enum Format {
     }
     private static func number(_ n: Double) -> String { n.rounded() == n ? String(Int(n)) : String(format: "%.2f", n) }
     /// Same campaign name runs in several ad accounts; the account always shows so rows stay distinguishable.
+    /// Where a new campaign stands against its first-24h ceiling.
+    static func first24hLevel(_ level: String?) -> String {
+        switch level {
+        case "over": return "teto estourado"
+        case "pause": return "pausaria"
+        case "alert": return "perto do teto"
+        case "sold": return "com venda"
+        case "waiting": return "sem entrega"
+        default: return "acompanhar"
+        }
+    }
+    static func first24hTone(_ level: String?) -> Tone {
+        switch level { case "over", "pause": return .bad; case "alert": return .warn; case "sold": return .good; default: return .neutral }
+    }
+    /// "1º dia · 1 IC · teto R$ 110,00"
+    static func first24hLine(_ item: Summary.First24hItem) -> String {
+        let stage = item.stage == "second-day" ? "2º dia" : "1º dia"
+        if item.awaitingDelivery == true { return stage + " · aguardando entrega" }
+        let ic = item.checkouts.map { "\($0) IC" } ?? "IC N/D"
+        let cap = item.level == "sold" ? "" : item.limit.map { " · teto " + money($0) } ?? ""
+        return stage + " · " + ic + cap
+    }
     static func queueTag(project: String?, account: String?) -> String? {
         let parts = [project, account].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")

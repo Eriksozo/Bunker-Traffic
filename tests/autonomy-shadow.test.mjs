@@ -30,7 +30,9 @@ test('Zero checkouts uses the lower threshold; a sale or a missing threshold nev
  assert.equal(run(state({today:[noIc]})).decisions[0]?.wouldExecute,true);
  const sold=row('t4','07/11 - [TESTE] D',m(400,297,1,1,6));
  assert.equal(run(state({today:[sold]})).decisions.some(x=>x.rule==='test-no-sale'),false);
- const blocked=run(state({today:[row('t5','07/11 - [TESTE] E',m(500))]}),{params:{}}).decisions[0];
+ // Without a private policy, 0 IC still meets the owner's general ceiling (R$110); 2+ IC needs the project threshold.
+ assert.equal(run(state({today:[row('t5','07/11 - [TESTE] E',m(500))]}),{params:{}}).decisions[0].wouldExecute,true);
+ const blocked=run(state({today:[row('t5b','07/11 - [TESTE] E2',m(500,0,0,0,3))]}),{params:{}}).decisions[0];
  assert.equal(blocked.wouldExecute,false);assert.match(blocked.blockedBy[0],/Limiar/);
 });
 test('Second-day test counts as no-sale only when yesterday also sold nothing',()=>{
@@ -81,7 +83,7 @@ test('No delivery after midday with verified empty closed windows is an organiza
  const r=row('n1','20/10 - [CBO] - [TESTE] OLD',m(0));
  const d=run(state({today:[r]})).decisions.find(x=>x.rule==='no-delivery');
  assert.equal(d.after.status,'PAUSED');assert.match(d.limitations.join(' '),/programada/);
- for(const name of ['07/11 - [CBO] - [AVATAR] NOVA','06/11 - [CBO] - [PRE-ESCALA] ONTEM'])assert.equal(run(state({today:[row('n2',name,m(0))]})).decisions.some(x=>x.rule==='no-delivery'),false,name);
+ for(const name of ['07/11 - [CBO] - [AVATAR] NOVA','06/11 - [CBO] - [PRE-ESCALA] ONTEM','08/11 - [CBO] - [LEAN] - [PRE] - [1-3-3]','08/11 - [ABO] - [LEAN] - [COSTCAP] - [1-3-1]','10/11 - [CBO] - [TESTE] PROGRAMADA'])assert.equal(run(state({today:[row('n2',name,m(0))]})).decisions.some(x=>x.rule==='no-delivery'),false,name);
 });
 test('Warmup, paused objects and disabled accounts are never evaluated; the state is not mutated',()=>{
  const rows=[row('w1','07/11 [ENGAJAMENTO] [TESTE]',m(300)),row('w2','07/11 [TESTE] P',m(300),{status:'PAUSED',effectiveStatus:'PAUSED'}),row('w3','07/11 [TESTE] Q',m(300),{accountStatus:{active:false}})];
@@ -97,4 +99,34 @@ test('Merging keeps the first instant; outcomes show whether a manager acted lat
  const [o]=shadowOutcomes(second,events);assert.equal(o.manager.actor,'Gestor Y');assert.equal(o.manager.minutesAfter,40);
  const summary=shadowSummary([o],{day:'2026-11-07'});assert.equal(summary.byRule['test-no-sale'].bunkerFirst,1);assert.equal(summary.byRule['test-no-sale'].wouldExecute,1);
  assert.equal(shadowOutcomes(second,[{...events[0],adAccountId:'other'}])[0].manager,null,'another account is another object');
+});
+
+test('New campaigns (not only [TESTE]) in the first 24h: 0–1 IC and no sale pause from 90% of the R$110 ceiling',()=>{
+ const pre=row('f1','07/11 - [CBO] - [LEAN] - [PRE] - [1-3-3]',m(100,0,0,0,1)),early=row('f2','07/11 - [CBO] - [PRE] B',m(80,0,0,0,0));
+ const out=run(state({today:[pre,early]}),{params:{}}),d=out.decisions.filter(x=>x.rule==='test-no-sale');
+ assert.deepEqual(d.map(x=>x.objectId),['f1']);assert.equal(d[0].wouldExecute,true);assert.equal(d[0].newCampaign.stage,'first-day');
+ assert.match(d[0].reason,/Teto R\$110/);assert.match(d[0].reason,/1 IC/);
+ const over=run(state({today:[row('f3','07/11 - [CBO] - [PRE] C',m(130,0,0,0,0))]}),{params:{}}).decisions[0];
+ assert.match(over.reason,/ultrapassado/);
+ // The private policy may lower the ceiling, never raise it above the owner's R$110.
+ assert.equal(run(state({today:[row('f4','07/11 - [CBO] - [PRE] D',m(95,0,0,0,0))]}),{params:{first24hLowIcLimit:300}}).decisions.length,0);
+ assert.equal(run(state({today:[row('f5','07/11 - [CBO] - [PRE] E',m(75,0,0,0,0))]}),{params:{first24hLowIcLimit:80}}).decisions[0]?.rule,'test-no-sale');
+ // A sale or an older campaign (earlier spend) never enters this rule.
+ assert.equal(run(state({today:[row('f6','07/11 - [CBO] - [PRE] F',m(150,297,1,1,1))]})).decisions.some(x=>x.rule==='test-no-sale'),false);
+ const old=row('f7','07/11 - [CBO] - [PRE] G',m(150,0,0,0,0)),h=row('f7','07/11 - [CBO] - [PRE] G',m(400,0,0,0,2));
+ assert.equal(run(state({today:[old],closed:{'7d':[h]}})).decisions.some(x=>x.rule==='test-no-sale'),false);
+});
+test('Second day counts the spend since launch: yesterday plus today against the ceiling',()=>{
+ const t=row('s1','06/11 - [CBO] - [PRE] H',m(40,0,0,0,1)),y=row('s1','06/11 - [CBO] - [PRE] H',m(70,0,0,0,0));
+ const d=run(state({today:[t],closed:{yesterday:[y],'3d':[y],'7d':[y]}}),{params:{}}).decisions.find(x=>x.rule==='test-no-sale');
+ assert.equal(d.launchDay,1);assert.match(d.reason,/2º dia/);assert.match(d.reason,/R\$110 /);
+});
+test('First-24h board: scheduled for tomorrow, first day by level, older campaigns out',async()=>{
+ const {first24hWatch,first24hSummary}=await import('../lib/autonomy-shadow.mjs');
+ const rows=[row('b1','08/11 - [CBO] - [LEAN] - [PRE] - [1-3-3]',m(0)),row('b2','07/11 - [CBO] - [PRE] X',m(100,0,0,0,0)),row('b3','07/11 - [CBO] - [TESTE] Y',m(60,0,0,0,1)),row('b4','07/11 - [CBO] - [TESTE] Z',m(200,297,1,1,4)),row('b5','20/10 - [CBO] - [ESCALA] W',m(500,900,2,2,9)),row('b6','07/11 - [ENGAJAMENTO]',m(50))];
+ const b=first24hWatch(state({today:rows}),{project:'p',params:{},now});
+ assert.deepEqual(b.items.map(i=>[i.objectId,i.stage,i.level]),[['b2','first-day','pause'],['b3','first-day','watch'],['b4','first-day','sold'],['b1','scheduled','scheduled']]);
+ assert.equal(b.items.find(i=>i.objectId==='b1').startsOn,'08/11');
+ assert.deepEqual(b.counts,{scheduled:1,firstDay:3,secondDay:0,attention:1});
+ const s=first24hSummary([b]);assert.equal(s.ceiling,110);assert.equal(s.scheduled[0].startsOn,'08/11');assert.equal(s.items[0].objectId,'b2');
 });

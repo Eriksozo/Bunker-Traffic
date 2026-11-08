@@ -59,6 +59,10 @@ test('Actual spend outranks idle unanalysed archive without claiming a new creat
 });
 test('Fresh first-day no-sale spend stays visible even when the four-period analysis is stale',()=>{
  const {state,feed,snapshot}=setup();Object.assign(snapshot.rows[0],{name:'03/11 - [TESTE] NEW',frontOrders:0,orders:0,revenueNet:0});state.snapshots.forEach(s=>{s.fetchedAt=stamp(-3600001);if(s.period!=='today')Object.assign(s.rows[0],{spend:0,frontOrders:0,orders:0,revenueNet:0});});
+ snapshot.rows[0].spend=50;// below 70% of the R$110 ceiling: the plain new-test signal
  const p=campaignWatchPlan(state,feed,now);assert.ok(kinds(p).includes('new-test-risk'),JSON.stringify(p));assert.ok(kinds(p).includes('reread'));assert.equal(p.signals.find(s=>s.kind==='new-test-risk').canExecute,false);
- snapshot.lastSyncAt=stamp(-901000);assert.equal(kinds(campaignWatchPlan(state,feed,now)).includes('new-test-risk'),false);
+ assert.equal(p.projects[0].newCampaigns.firstDay,1);
+ snapshot.rows[0].spend=100;// at 90% of the ceiling the first-24h signal replaces it
+ const q=campaignWatchPlan(state,feed,now);assert.ok(kinds(q).includes('first-24h'));assert.equal(kinds(q).includes('new-test-risk'),false);assert.equal(q.signals.find(s=>s.kind==='first-24h').canExecute,false);
+ snapshot.lastSyncAt=stamp(-901000);assert.equal(kinds(campaignWatchPlan(state,feed,now)).some(k=>k==='new-test-risk'||k==='first-24h'),false);
 });

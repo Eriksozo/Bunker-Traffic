@@ -14,9 +14,9 @@ Decisão do proprietário em 07/11/2026, depois do estudo das ações de um gest
 
 Código: `lib/autonomy-shadow.mjs`. Limiares por projeto ficam na configuração privada `AUTONOMY_SHADOW_POLICY` (secret do Worker), nunca no repositório. Projeto sem configuração não é avaliado.
 
-1. **Pausar teste novo sem venda** (1º–2º dia): sem front, sem pedidos e sem receita, gasto acima do limiar do projeto (limiar menor quando não há IC). No 2º dia, também sem venda na véspera.
+1. **Pausar campanha nova sem venda** (primeiras 24h e 2º dia; testes e programadas de um dia para o outro): sem front, sem pedidos e sem receita desde o início. Com 0–1 IC vale o teto geral do proprietário de R$110 (pausa a partir de R$99, alerta a partir de R$77); com 2+ IC, o limiar privado do projeto. Detalhes em `first-24h-protocol.md`.
 2. **Reduzir 20% em dia ruim**: campanha com ROI de 3 dias ≥ 1,3, a partir das 10h, gasto relevante e ROI do dia < 0,7 ou zero pedidos. Orçamento diário próprio (CBO). ESCALA/COST-CAP/BID-CAP ficam só como sugestão.
-3. **Pausar campanha sem entrega** (organização): sem gasto verificado nos últimos 3 dias e sem impressão hoje, depois das 12h.
+3. **Pausar campanha sem entrega** (organização): sem gasto verificado nos últimos 3 dias e sem impressão hoje, depois das 12h; nunca para campanha nova ou datada de ontem em diante (programada).
 4. **Aumentar por vendas desde a meia-noite**: a partir das 9h, ≥ 3 pedidos com ≥ 2 front, ROI parcial ≥ 2,5 e gasto relevante; +30%, ou +50% com histórico de 3 dias forte. Sem teto do proprietário por objeto/conta, o aumento nunca executaria.
 
 Bloqueios comuns: fonte de hoje com mais de 30 minutos, conta ou campanha inativa, aquecimento/engajamento, edição de outro gestor nas últimas 2h. Limitações declaradas em cada registro: pedidos pendentes e vendas em hora sem gasto não são verificados pela fonte de campanhas.

@@ -1,5 +1,7 @@
 # Protocolo de lançamento de testes Meta
 
+Teto e acompanhamento das primeiras 24h de qualquer campanha nova (inclusive programadas): `first-24h-protocol.md`.
+
 Objetivo: não deixar testes novos com gasto e sem aquisição fora do acompanhamento por uma espera automática de 24h. Este protocolo muda triagem e prioridade; não concede autonomia financeira nem altera a cadência.
 
 ## Identificar sem adivinhar

@@ -86,6 +86,23 @@ struct Summary: Decodable, Equatable {
         let wouldExecute: Bool?; let blockedBy: [String]?; let manager: ShadowManager?
     }
     struct Shadow: Decodable, Equatable { let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem] }
+    /// New campaigns in their first 24h (lib/first-24h.mjs): scheduled, first day and 2nd day against the owner's ceiling.
+    let first24h: First24h?
+    struct First24hCounts: Decodable, Equatable { let scheduled: Int; let firstDay: Int; let secondDay: Int; let attention: Int }
+    struct First24hItem: Decodable, Equatable, Identifiable {
+        var id: String { [adAccountId ?? "", objectId ?? "", campaign ?? ""].joined(separator: "|") }
+        let projectName: String?; let account: String?; let adAccountId: String?; let objectId: String?; let campaign: String?
+        /// first-day · second-day
+        let stage: String?; let stageLabel: String?
+        /// waiting · watch · alert · pause · over · sold
+        let level: String?
+        let spend: Double?; let checkouts: Int?; let limit: Double?; let pauseAt: Double?; let reason: String?; let awaitingDelivery: Bool?
+    }
+    struct First24hScheduled: Decodable, Equatable, Identifiable {
+        var id: String { [project ?? "", account ?? "", campaign ?? ""].joined(separator: "|") }
+        let campaign: String?; let project: String?; let account: String?; let startsOn: String?
+    }
+    struct First24h: Decodable, Equatable { let ceiling: Double?; let counts: First24hCounts; let items: [First24hItem]; let scheduled: [First24hScheduled] }
     /// Ad-account panel (lib/account-limits.mjs). Limit and today's spend are in the account currency.
     let accounts: Accounts?
     struct AccountCounts: Decodable, Equatable { let total: Int; let active: Int; let running: Int; let disabled: Int; let nearLimit: Int; let withLimit: Int }

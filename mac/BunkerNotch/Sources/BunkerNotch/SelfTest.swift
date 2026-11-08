@@ -71,6 +71,12 @@ enum SelfTest {
             check(Format.shadowChange(sh.recent[1]) == "-20% · 100 → 80 USD", #line)
             check(Format.shadowOutcome(sh.recent[1]) == "bloqueada", #line)
         } else { check(false, #line) }
+        let f24JSON = #"{"ceiling":110,"counts":{"scheduled":1,"firstDay":2,"secondDay":0,"attention":1},"items":[{"projectName":"P","account":"A","adAccountId":"a","objectId":"1","campaign":"07/11 - [PRE]","stage":"first-day","stageLabel":"Primeiras 24h","level":"pause","spend":100,"checkouts":1,"limit":110,"pauseAt":99,"reason":"x","awaitingDelivery":false},{"campaign":"07/11 - [TESTE]","stage":"first-day","level":"sold","spend":80,"checkouts":3,"limit":null}],"scheduled":[{"campaign":"08/11 - [PRE]","project":"P","account":"A","startsOn":"08/11"}]}"#
+        if let f = try? JSONDecoder().decode(Summary.First24h.self, from: Data(f24JSON.utf8)) {
+            check(Format.first24hLevel(f.items[0].level) == "pausaria", #line)
+            check(Format.first24hLine(f.items[1]) == "1º dia · 3 IC", #line)
+            check(f.scheduled[0].startsOn == "08/11", #line)
+        } else { check(false, #line) }
         check(Format.who(s.activity.recent[1]) == "Pausas · autor não informado", #line)
     }
 

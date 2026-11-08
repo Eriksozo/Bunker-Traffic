@@ -57,6 +57,9 @@ enum BunkBrain {
             out.append(Topic(text: "De olho: \(loss.campaign ?? "uma campanha")\(account) está −\(Format.money(loss.amount)) \(loss.period == "today" ? "hoje" : "em 3 dias").", target: lossTarget(loss)))
         }
         if let a = s.accounts, a.counts.nearLimit > 0, !ledger.isQuiet(key: AttentionLedger.limitKey) { out.append(Topic(text: "\(a.counts.nearLimit) conta(s) perto do limite diário da Meta.")) }
+        if let f = s.first24h, f.counts.attention > 0 {
+            out.append(Topic(text: "\(f.counts.attention) campanha(s) nova(s) perto do teto de \(Format.money(f.ceiling ?? 110)) sem venda nas primeiras 24h."))
+        }
         if let sh = s.shadow, sh.total > 0 {
             let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
             out.append(Topic(text: "Na sombra, hoje eu teria agido \(would) vez(es)\(first > 0 ? ", \(first) antes do gestor" : ""). Ainda não executo nada."))

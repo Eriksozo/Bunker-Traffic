@@ -19,7 +19,7 @@ import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
-import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy} from '../lib/autonomy-shadow.mjs';
+import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy,first24hWatch,first24hSummary} from '../lib/autonomy-shadow.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
@@ -102,6 +102,16 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   return merged;
  }
  /**
+  * "Primeiras 24h" board (docs/first-24h-protocol.md): scheduled and new campaigns of every configured project and
+  * where each stands against the owner's ceiling. Reuses this pulse's reads; stored here, never in the central.
+  */
+ private async storeFirst24h(state:any){
+  if(!state||state.paused)return;
+  let policy:any={};try{policy=JSON.parse(this.env.AUTONOMY_SHADOW_POLICY||'{}');}catch{policy={};}
+  const now=Date.now(),boards=Object.keys(state.config||{}).map(project=>first24hWatch(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,params:policy?.projects?.[project]||{},now})).filter(Boolean);
+  await this.ctx.storage.put('first24h',{at:new Date(now).toISOString(),boards});
+ }
+ /**
   * Ad-account panel (docs/connections.md): Malva accounts per configured project plus the daily spending
   * limit Meta reports, read with a dedicated read-only token. Every 30 minutes; stored here, not in the central.
   */
@@ -155,12 +165,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  /** Mac companion summaries built from the central state this pulse already read; served from this object, never re-reading the central. */
  private async storeCompanion(state:any,shadow:any[]=[]){
   if(!state)return;
-  const shadowDay=(await this.ctx.storage.get<any>('shadowStatus'))?.day||undefined,accountsPanel=await this.ctx.storage.get<any>('accountsPanel');
+  const shadowDay=(await this.ctx.storage.get<any>('shadowStatus'))?.day||undefined,accountsPanel=await this.ctx.storage.get<any>('accountsPanel'),first24h=(await this.ctx.storage.get<any>('first24h'))?.boards||[];
   const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
    rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
   const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},board=projectBoard(withAuthors,now);
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any}),shadow:shadowSummary(shadow,{project,day:shadowDay}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any}),shadow:shadowSummary(shadow,{project,day:shadowDay}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
  }
  private async assertEnabled(){if(!(await this.setting()).enabled){const error:any=new Error('CLOUD_EXECUTOR_PAUSED');error.code='CLOUD_EXECUTOR_PAUSED';throw error;}}
@@ -185,8 +195,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   if(input.action==='shadow'){
    const status=await this.ctx.storage.get<any>('shadowStatus'),all=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
    const day=typeof input.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.day)?input.day:status?.day;
-   const entries=all.filter((e:any)=>!day||e.day===day).sort((a:any,b:any)=>Date.parse(a.firstAt)-Date.parse(b.firstAt)).slice(0,300).map((e:any)=>({rule:e.rule,project:e.projectName,account:e.accountName,adAccountId:e.adAccountId,objectId:e.objectId,campaign:e.name,action:e.action,before:e.before,after:e.after,reason:e.reason,launchDay:e.launchDay,metrics:e.metrics,firstAt:e.firstAt,firstWouldExecuteAt:e.firstWouldExecuteAt,lastAt:e.lastAt,blockedBy:e.blockedBy,manager:e.manager}));
-   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries});
+   const entries=all.filter((e:any)=>!day||e.day===day).sort((a:any,b:any)=>Date.parse(a.firstAt)-Date.parse(b.firstAt)).slice(0,300).map((e:any)=>({rule:e.rule,project:e.projectName,account:e.accountName,adAccountId:e.adAccountId,objectId:e.objectId,campaign:e.name,action:e.action,before:e.before,after:e.after,reason:e.reason,launchDay:e.launchDay,newCampaign:e.newCampaign||null,metrics:e.metrics,firstAt:e.firstAt,firstWouldExecuteAt:e.firstWouldExecuteAt,lastAt:e.lastAt,blockedBy:e.blockedBy,manager:e.manager}));
+   const first24h=await this.ctx.storage.get<any>('first24h');
+   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null});
   }
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse');return Response.json({...runtime,attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
@@ -240,6 +251,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    if(liveState&&(await this.setting()).enabled)await this.syncAccounts(liveState).catch(()=>{});
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
    const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
+   // The first-24h board is a reading aid: a failure keeps the last board and never affects the executor.
+   if(liveState)await this.storeFirst24h(liveState).catch(()=>{});
    if(liveState)await this.storeCompanion(liveState,shadow).catch(()=>{});
    await this.bumpPulse();
    // A receipt that changed stage (order queued, sent, confirmed or failed) reaches the notch without waiting.
