@@ -46,6 +46,15 @@ enum Format {
         if a.rounded() >= 1_000 { return sign + symbol + " " + one(shown(a / 1_000)) + " mil" }
         return sign + symbol + " " + String(format: "%.0f", a)
     }
+    /// Signed balance: "+R$ 1,5 mil", "−R$ 1,1 mil", "N/D".
+    static func balance(_ w: Summary.BalanceWindow?) -> String {
+        guard let w, w.value.isFinite else { return "N/D" }
+        return (w.value > 0 ? "+" : "") + compactMoney(w.value)
+    }
+    static func balanceTone(_ w: Summary.BalanceWindow?) -> Tone { guard let w else { return .neutral }; return w.value < 0 ? .bad : w.value > 0 ? .good : .neutral }
+    static func balanceVerdict(_ v: String?) -> (text: String, tone: Tone)? {
+        switch v { case "recovers": return ("hoje negativo · histórico positivo", .warn); case "negative": return ("negativo também com 7d", .bad); default: return nil }
+    }
     static func ratio(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "N/D" }
         return String(format: "%.2fx", value).replacingOccurrences(of: ".", with: ",")

@@ -505,6 +505,8 @@ struct ListRow: View {
     let title: String; let subtitle: String; var tag: String? = nil
     var value: String? = nil; var valueCaption: String? = nil
     var action: (() -> Void)? = nil
+    /// Optional third line (the balance strip of the queue).
+    var footer: AnyView? = nil
     var body: some View {
         let hovered = notch.hovered == id
         let row = HStack(alignment: .center, spacing: DS.Space.m) {
@@ -515,6 +517,7 @@ struct ListRow: View {
                     if let tag { Pill(text: tag, tone: .tag) }
                     Text(subtitle).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
                 }
+                if let footer { footer }
             }
             Spacer(minLength: DS.Space.s)
             if let value {
@@ -530,6 +533,29 @@ struct ListRow: View {
         .contentShape(Rectangle())
         .onHover { inside in withAnimation(DS.Motion.quick) { if inside { notch.hovered = id } else if notch.hovered == id { notch.hovered = nil } } }
         if let action { Button(action: action) { row }.buttonStyle(.plain) } else { row }
+    }
+}
+
+/// Today stays the headline in red; this strip shows yesterday, 3d, 7d and 7d + hoje so the manager sees whether
+/// the history covers today's loss before deciding. Missing windows read N/D.
+struct BalanceStrip: View {
+    let balance: Summary.Balance
+    var body: some View {
+        HStack(spacing: DS.Space.xs) {
+            if let v = Format.balanceVerdict(balance.verdict) {
+                Text(v.text).font(DS.Font.microStrong).foregroundStyle(v.tone.color)
+                    .padding(.horizontal, 6).padding(.vertical, 1).overlay(Capsule().stroke(v.tone.color.opacity(0.6), lineWidth: 0.8))
+            }
+            part("ontem", balance.yesterday); part("3d", balance.d3); part("7d", balance.d7)
+            Text("7d+hoje " + Format.balance(balance.with7d)).font(DS.Font.microStrong).foregroundStyle(Format.balanceTone(balance.with7d).color)
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Saldo: hoje \(Format.balance(balance.today)), ontem \(Format.balance(balance.yesterday)), 3 dias \(Format.balance(balance.d3)), 7 dias \(Format.balance(balance.d7)), 7 dias mais hoje \(Format.balance(balance.with7d))")
+        .help("Saldo por período (resultado, ou receita menos mídia sem custos). 7 dias termina ontem; 7d+hoje soma dias diferentes.")
+    }
+    private func part(_ label: String, _ w: Summary.BalanceWindow?) -> some View {
+        Text(label + " " + Format.balance(w)).font(DS.Font.micro).foregroundStyle(w == nil ? DS.Color.inkMuted : Format.balanceTone(w).color.opacity(0.9))
     }
 }
 
@@ -584,7 +610,8 @@ struct NowTab: View {
                             tag: Format.queueTag(project: showProject ? q.project : nil, account: q.account),
                             value: (loss ? "−" : "+") + Format.money(q.amount),
                             valueCaption: loss ? (q.basis == "result" ? (q.period == "today" ? "prejuízo hoje" : "prejuízo em 3 dias") : "receita abaixo da mídia") : "resultado em 3 dias",
-                            action: { withAnimation(DS.Motion.quick) { notch.selected = q } })
+                            action: { withAnimation(DS.Motion.quick) { notch.selected = q } },
+                            footer: q.balance.flatMap { $0.hasAny ? AnyView(BalanceStrip(balance: $0)) : nil })
                         .opacity(quiet ? 0.55 : 1)
                     if loss || quiet { QuietMenu(key: AttentionLedger.key(q), item: q, compact: true) }
                     }
@@ -897,6 +924,7 @@ struct CampaignDetailView: View {
                                     // "sem gasto" already says the spend; only what stays unknown is listed.
                                     Text("vendas N/D").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                                 } else {
+                                    if let b = item.balance?.window(key) { Text("saldo " + Format.balance(b)).font(DS.Font.microStrong).foregroundStyle(Format.balanceTone(b).color) }
                                     Text("ROI " + Format.ratio(w?.roi)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                                     Text("gasto " + Format.compactMoney(w?.spend)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                                     Text("front \(w?.frontOrders.map { String(Int($0)) } ?? "N/D")").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
@@ -905,6 +933,16 @@ struct CampaignDetailView: View {
                         }
                     }
                     .fixedSize(horizontal: false, vertical: true)
+                    if let b = item.balance, b.with7d != nil || b.verdict != nil {
+                        HStack(spacing: DS.Space.s) {
+                            Image(systemName: b.verdict == "recovers" ? "exclamationmark.triangle.fill" : "sum").foregroundStyle((Format.balanceVerdict(b.verdict)?.tone ?? .neutral).color)
+                            Text("7 dias + hoje: " + Format.balance(b.with7d)).font(DS.Font.bodyStrong).foregroundStyle(Format.balanceTone(b.with7d).color)
+                            if let v = Format.balanceVerdict(b.verdict) { Text("· " + v.text).font(DS.Font.caption).foregroundStyle(v.tone.color) }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(DS.Space.m).card()
+                        .help("Hoje continua em destaque; a soma mostra se o histórico cobre o dia. A decisão é do gestor.")
+                    }
                     if let reason = item.detail?.reason {
                         SectionHeader(title: "Sinal", detail: item.decision)
                         Text(reason).font(DS.Font.body).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true)

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dailyComparison,actionQueue,sortCampaigns,matchesStatus,campaignColumns,rememberedChoice,pausedAfterAnalysis} from '../lib/daily-brief.mjs';
+import {dailyComparison,actionQueue,sortCampaigns,matchesStatus,campaignColumns,rememberedChoice,pausedAfterAnalysis,campaignBalance} from '../lib/daily-brief.mjs';
 import {sum} from '../lib/analysis.mjs';
 
 const metrics=(spend,revenueNet,front=1)=>({spend,revenue:revenueNet,revenueNet,adCosts:0,productCost:0,saleTax:0,frontOrders:front,orders:front,checkouts:front*2,impressions:1000,linkClicks:20,refundedRevenue:0});
@@ -79,4 +79,22 @@ test('A campaign paused after the analysis leaves the queue; older, foreign or r
  const live=pausedAfterAnalysis(list,{liveRows:[{projectId:'p',adAccountId:'act',externalId:'b',status:'PAUSED',effectiveStatus:'PAUSED',fetchedAt:'2026-11-07T19:10:00Z'}]});
  assert.deepEqual([...live],[JSON.stringify(['p','act','b'])]);
  assert.equal(pausedAfterAnalysis(list,{liveRows:[{projectId:'p',adAccountId:'act',externalId:'b',effectiveStatus:'PAUSED',fetchedAt:'2026-11-07T18:00:00Z'}]}).size,0,'an older live reading does not override');
+});
+
+test('a loss today is shown with yesterday, 3d and 7d; 7d + hoje adds disjoint days and says if history covers it',()=>{
+ const id='lean',w=m=>row(id,m);
+ const c={id,row:row(id,{deliveryStartedAt:'2026-10-01T00:00:00Z'}),windows:{today:w(metrics(1906,823)),yesterday:w(metrics(900,2400)),'3d':w(metrics(2500,6000)),'7d':w(metrics(4400,11000))},recent:null,week:null,tone:'amber',decision:'Acompanhar'};
+ const b=campaignBalance(c);
+ assert.deepEqual(b.today,{basis:'result',value:-1083});assert.equal(b.yesterday.value,1500);assert.equal(b['3d'].value,3500);assert.equal(b['7d'].value,6600);
+ assert.deepEqual(b.with7d,{basis:'result',value:5517});assert.equal(b.with3d.value,2417);assert.equal(b.verdict,'recovers');
+ const q=actionQueue([c]);assert.equal(q.items[0].kind,'loss');assert.equal(q.items[0].period,'today');assert.equal(q.items[0].amount,1083,'today stays the headline');
+ assert.equal(q.items[0].balance.verdict,'recovers');
+ const bad=campaignBalance({...c,windows:{...c.windows,'7d':w(metrics(4400,4000))}});assert.equal(bad.with7d.value,-1483);assert.equal(bad.verdict,'negative');
+});
+test('balance never mixes bases nor invents a missing window',()=>{
+ const id='mix',w=m=>row(id,m),noCost={...metrics(500,300)};noCost.productCost=null;
+ const b=campaignBalance({id,row:row(id,{}),windows:{today:w(metrics(200,100)),'7d':w(noCost)}});
+ assert.equal(b['7d'].basis,'revenue');assert.equal(b.with7d,null,'result + revenue is not a sum');assert.equal(b.verdict,null);
+ assert.equal(b.yesterday,null);assert.equal(b['3d'],null);assert.equal(b.with3d,null);
+ assert.deepEqual(campaignBalance({id,row:row(id,{}),windows:{}}),{today:null,yesterday:null,'3d':null,'7d':null,with7d:null,with3d:null,verdict:null});
 });

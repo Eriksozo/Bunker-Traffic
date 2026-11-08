@@ -39,6 +39,17 @@ import SwiftUI
             .environment(\.colorScheme, .dark)
             if !write(scene, to: dir.appendingPathComponent(name + ".png")) { failures += 1 }
         }
+        // The queue rows alone (the open panel is fixed height): today in red, the balance strip under it.
+        let rows = VStack(spacing: 2) {
+            ForEach(summary.queue) { q in
+                let l = q.kind == "loss"
+                ListRow(id: "q:" + q.id, symbol: l ? "arrow.down.right" : "arrow.up.right", tone: l ? .bad : .good, title: q.campaign ?? "Campanha",
+                        subtitle: "\(q.period == "today" ? "Hoje" : "3 dias"): gasto \(Format.money(q.spend)) · ROAS \(Format.ratio(q.roas)) · 7d \(Format.ratio(q.roas7d))",
+                        tag: q.account, value: (l ? "−" : "+") + Format.money(q.amount), valueCaption: l ? (q.period == "today" ? "prejuízo hoje" : "prejuízo em 3 dias") : "resultado em 3 dias",
+                        footer: q.balance.flatMap { $0.hasAny ? AnyView(BalanceStrip(balance: $0)) : nil })
+            }
+        }.padding(DS.Space.m).frame(width: 760).background(Color.black).environmentObject(NotchState(geometry: geometry)).environment(\.colorScheme, .dark)
+        if !write(rows, to: dir.appendingPathComponent("14-fila-saldo.png")) { failures += 1 }
         print(failures == 0 ? "Notch salvo em \(dir.path)" : "\(failures) imagem(ns) falharam")
         return failures == 0 ? 0 : 1
     }
@@ -117,8 +128,9 @@ import SwiftUI
                    {"id":"o2","project":"p1","projectName":"Alfa","campaign":"[CBO] - [TESTE] - Criativo C","account":"Conta Exemplo 01","action":"status","currency":"BRL","before":{"dailyBudget":null,"status":"ACTIVE"},"after":{"dailyBudget":null,"status":"PAUSED"},"stage":"sent","label":"Enviada à Meta · aguardando releitura","reason":null,"source":"analysis","at":"\(ago(1))","sentAt":"\(ago(0.5))","confirmedAt":null}],
          "sales":{"recent":[{"amount":297,"currency":"BRL","product":"Curso X","campaign":"07/11 - JOHN","project":"p1","at":"\(ago(1))"}],"lastHour":3},
          "queue":[
+          {"kind":"loss","campaign":"05/11 - [CBO] - [TESTE] - Criativo D","account":"Conta Exemplo 01","project":"Alfa","adAccountId":"a1","campaignId":"c4","decision":"Revisar perda","period":"today","basis":"result","amount":1083,"spend":1906,"roas":0.47,"roas7d":2.5,"balance":{"today":{"basis":"result","value":-1083},"yesterday":{"basis":"result","value":1500},"3d":{"basis":"result","value":3500},"7d":{"basis":"result","value":6600},"with7d":{"basis":"result","value":5517},"with3d":{"basis":"result","value":2417},"verdict":"recovers"},"detail":\(detail("Hoje abaixo do equilíbrio; 3 e 7 dias positivos.", false))},
           {"kind":"loss","campaign":"07/11 - [CBO] - [TESTE] - Criativo C","account":"Conta Exemplo 01","project":"Alfa","adAccountId":"a1","campaignId":"c1","decision":"Revisar teste novo sem vendas","period":"today","basis":"result","amount":412,"spend":412,"roas":0,"roas7d":null,"detail":\(detail("Teste novo com gasto e sem vendas hoje. Conferir início real, checkout e filhos antes de decidir.", true))},
-          {"kind":"loss","campaign":"[ABO] - [ESCALA] - Criativo A - Público amplo","account":"Conta Exemplo 02","project":"Beta","adAccountId":"a2","campaignId":"c2","decision":"Revisar perda","period":"3d","basis":"result","amount":1860,"spend":5320,"roas":0.65,"roas7d":0.78,"detail":\(detail("Abaixo do equilíbrio em 3 e 7 dias.", false))},
+          {"kind":"loss","campaign":"[ABO] - [ESCALA] - Criativo A - Público amplo","account":"Conta Exemplo 02","project":"Beta","adAccountId":"a2","campaignId":"c2","decision":"Revisar perda","period":"3d","basis":"result","amount":1860,"spend":5320,"roas":0.65,"roas7d":0.78,"balance":{"today":{"basis":"result","value":-240},"yesterday":{"basis":"result","value":-610},"3d":{"basis":"result","value":-1860},"7d":{"basis":"result","value":-2900},"with7d":{"basis":"result","value":-3140},"with3d":{"basis":"result","value":-2100},"verdict":"negative"},"detail":\(detail("Abaixo do equilíbrio em 3 e 7 dias.", false))},
           {"kind":"gain","campaign":"[CBO] - [ESCALA] - Criativo B","account":"Conta Exemplo 03","project":"Gama","adAccountId":"a3","campaignId":"c3","decision":"Candidato à escala","period":"3d","basis":"result","amount":3240,"spend":4100,"roas":1.79,"roas7d":1.92,"detail":\(detail("Retorno consistente em 3 e 7 dias.", false))}
          ],"queueSize":27,
          "board":[

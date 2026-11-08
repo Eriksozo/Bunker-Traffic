@@ -24,6 +24,15 @@ function Delta({value,higherIsBetter,label}:{value:number|null;higherIsBetter:bo
  return <span className={'brief-delta '+(good===null?'is-neutral':good?'is-good':'is-bad')}><Icon size={13} aria-hidden="true"/>{percent(value)} {label}</span>;
 }
 
+const signed=(w:any)=>w?(w.value>0?'+':w.value<0?'−':'')+money(Math.abs(w.value)):'N/D';
+/** Today stays the headline; the other windows and 7d + hoje show whether the history covers today's loss. */
+function BalanceLine({b}:{b:any}){
+ if(!b||!['yesterday','3d','7d'].some(k=>b[k]))return null; // a brand-new test (today only) has no history to show
+ const part=(label:string,w:any)=><span className={'brief-balance-part '+(!w?'is-neutral':w.value<0?'is-bad':'is-good')}>{label} {signed(w)}</span>;
+ const verdict=b.verdict==='recovers'?<span className="brief-balance-verdict is-warn">Hoje negativo · histórico positivo</span>:b.verdict==='negative'?<span className="brief-balance-verdict is-bad">Negativo também com 7 dias</span>:null;
+ return <small className="brief-balance">{verdict}{part('hoje',b.today)}{part('ontem',b.yesterday)}{part('3d',b['3d'])}{part('7d',b['7d'])}<strong className={!b.with7d?'is-neutral':b.with7d.value<0?'is-bad':'is-good'}>7d + hoje {signed(b.with7d)}</strong></small>;
+}
+
 function stakeText(item:any){
  if(item.kind==='opportunity')return `${money(item.amount)} de ${item.basis==='result'?'resultado':'receita acima da mídia'} em 3 dias`;
  const when=item.period==='today'?'hoje':'em 3 dias';
@@ -52,7 +61,7 @@ export default function DailyBrief({state,project,candidates,showProject,onOpen,
   <div className="panel-title"><div><h3>O que fazer agora</h3><p className="hint">{queue.items.length?`Até ${queue.items.length} de ${queue.considered} campanhas ativas, ordenadas pelo dinheiro em jogo. Expanda para manter, aumentar, reduzir ou pausar aqui mesmo.`:'Nenhuma campanha ativa com perda lida ou oportunidade clara agora.'}{queue.priorityTests>0&&` ${queue.priorityTests} testes novos sem vendas têm revisão prioritária, sem esperar 24h.`}{queue.pausedSinceAnalysis>0&&` ${queue.pausedSinceAnalysis} pausadas depois da análise saíram da lista.`}{queue.protectedTests>0&&` ${queue.protectedTests} testes jovens seguem em observação; maturação não suspende o acompanhamento.`}</p></div></div>
   {queue.items.map((item:any)=>{const c=item.candidate,loss=item.kind==='loss',target={project:c.row.projectId,adAccountId:c.row.adAccountId,objectId:c.row.externalId},key=JSON.stringify(target),open=expanded===key;return <div className={'brief-action-item'+(open?' is-open':'')} key={key}><Button type="button" className="priority-row brief-item" onClick={()=>setExpanded(open?null:key)} aria-expanded={open} aria-controls={open?`brief-decision-${encodeURIComponent(key)}`:undefined} aria-label={`${open?'Recolher':'Expandir'} decisão de ${c.row.name}`}>
    <span className={'priority-icon '+(loss?'red':'green')}>{loss?<ArrowDownRight size={17}/>:<ArrowUpRight size={17}/>}</span>
-   <span className="priority-copy"><strong>{c.row.name}</strong><small>{showProject&&`${c.row.projectName} · `}{c.row.accountName} · {item.testLaunch?.priority?'Teste novo sem vendas · prioridade':c.decision}</small><small className="brief-why">{loss?(item.period==='today'?'Hoje':'Últimos 3 dias'):'Últimos 3 dias'}: gasto {money(item.spend)} · ROAS {ratio(item.roas)} · 7 dias {ratio(item.comparison)}</small></span>
+   <span className="priority-copy"><strong>{c.row.name}</strong><small>{showProject&&`${c.row.projectName} · `}{c.row.accountName} · {item.testLaunch?.priority?'Teste novo sem vendas · prioridade':c.decision}</small><small className="brief-why">{loss?(item.period==='today'?'Hoje':'Últimos 3 dias'):'Últimos 3 dias'}: gasto {money(item.spend)} · ROAS {ratio(item.roas)} · 7 dias {ratio(item.comparison)}</small><BalanceLine b={item.balance}/></span>
    <span className={'priority-metric brief-stake '+(loss?'is-bad':'is-good')}>{loss?'Revisar':'Oportunidade'}<small>{stakeText(item)}</small></span>
    {open?<ChevronDown size={16}/>:<ChevronRight size={16}/>}
   </Button>{open&&<div className="brief-inline-decision" id={`brief-decision-${encodeURIComponent(key)}`}>

@@ -22,6 +22,17 @@ struct Summary: Decodable, Equatable {
         let adAccountId: String?; let campaignId: String?; let decision: String?
         let period: String?; let basis: String?; let amount: Double?; let spend: Double?; let roas: Double?; let roas7d: Double?
         let detail: Detail?
+        /// Balance per window (result, or revenue minus media) and 7d + hoje; absent from older executors.
+        var balance: Balance? = nil
+    }
+    struct BalanceWindow: Decodable, Equatable { let basis: String; let value: Double }
+    struct Balance: Decodable, Equatable {
+        let today: BalanceWindow?; let yesterday: BalanceWindow?; let d3: BalanceWindow?; let d7: BalanceWindow?
+        let with7d: BalanceWindow?; let with3d: BalanceWindow?; let verdict: String?
+        enum CodingKeys: String, CodingKey { case today, yesterday, d3 = "3d", d7 = "7d", with7d, with3d, verdict }
+        func window(_ key: String) -> BalanceWindow? { switch key { case "today": return today; case "yesterday": return yesterday; case "3d": return d3; case "7d": return d7; default: return nil } }
+        /// The strip only earns its place with some history: a brand-new test (today only) shows none.
+        var hasAny: Bool { yesterday != nil || d3 != nil || d7 != nil }
     }
     struct Window: Decodable, Equatable { let spend: Double?; let roas: Double?; let roi: Double?; let frontOrders: Double?; let cpaFront: Double?; let noSpend: Bool? }
     struct Detail: Decodable, Equatable {

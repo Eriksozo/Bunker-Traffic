@@ -10,6 +10,14 @@
 .brief-delta.is-bad{color:var(--danger,#f07178);border-color:var(--danger-line,#f0717855)}
 .brief-delta.is-neutral{color:var(--ink-muted,#b8afc8)}
 .brief-item .brief-why{color:var(--ink-muted,#b8afc8)}
+.brief-item .brief-balance{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:2px;font-size:11px}
+.brief-balance-part.is-good,.brief-balance strong.is-good{color:var(--success,#35c99b)}
+.brief-balance-part.is-bad,.brief-balance strong.is-bad{color:var(--danger,#f07178)}
+.brief-balance-part.is-neutral,.brief-balance strong.is-neutral{color:var(--ink-muted,#b8afc8)}
+.brief-balance strong{font-weight:600}
+.brief-balance-verdict{padding:1px 7px;border-radius:999px;border:1px solid currentColor;font-weight:600}
+.brief-balance-verdict.is-warn{color:var(--warning,#e6b450)}
+.brief-balance-verdict.is-bad{color:var(--danger,#f07178)}
 .brief-stake.is-bad{color:var(--danger,#f07178)}
 .brief-stake.is-good{color:var(--success,#35c99b)}
 .brief-stake small{color:var(--ink-muted,#b8afc8);white-space:normal;max-width:220px;margin-left:auto}

@@ -175,6 +175,12 @@ enum SelfTest {
         check(q?.detail?.windows["today"]??.roas == 0.5, #line)
         check(q?.detail?.windows["yesterday"] ?? nil == nil, #line)
         check(q?.detail?.malvaObjectId == "m1", #line)
+        check(q?.balance == nil, #line)
+        let withBalance = json.replacingOccurrences(of: #""roas7d":1.2,"#, with: #""roas7d":1.2,"balance":{"today":{"basis":"result","value":-1083},"yesterday":null,"3d":{"basis":"result","value":3500},"7d":{"basis":"result","value":6600},"with7d":{"basis":"result","value":5517},"with3d":null,"verdict":"recovers"},"#)
+        let b = (try? JSONDecoder().decode(Summary.QueueItem.self, from: Data(withBalance.utf8)))?.balance
+        check(b?.d7?.value == 6600 && b?.window("3d")?.value == 3500 && b?.yesterday == nil && b?.verdict == "recovers", #line)
+        check(Format.balance(b?.with7d) == "+R$ 5,5 mil" && Format.balance(b?.today) == "−R$ 1,1 mil" && Format.balance(nil) == "N/D", #line)
+        check(Format.balanceVerdict("recovers")?.tone == .warn && Format.balanceVerdict(nil) == nil, #line)
     }
 
     private static func testIslandStateMachine() {
