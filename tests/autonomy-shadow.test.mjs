@@ -130,3 +130,13 @@ test('First-24h board: scheduled for tomorrow, first day by level, older campaig
  assert.deepEqual(b.counts,{scheduled:1,firstDay:3,secondDay:0,attention:1});
  const s=first24hSummary([b]);assert.equal(s.ceiling,110);assert.equal(s.scheduled[0].startsOn,'08/11');assert.equal(s.items[0].objectId,'b2');
 });
+test('After midnight, before the new analysis: only the first-24h rule runs on the live cut, without stale windows',async()=>{
+ const {first24hWatch}=await import('../lib/autonomy-shadow.mjs');
+ const s=state({today:[]});s.snapshots[0].from='2026-11-06T03:00:00.000Z';// analysis still on the previous day
+ const fresh=row('m1','07/11 - [CBO] - [PRE] MEIA-NOITE',m(100,0,0,0,0)),old=row('m2','01/11 - [CBO] - [AVATAR] VELHA',m(800,150,1,1,10),{dailyBudget:500});
+ const liveItem={projectId:'p',snapshot:{...s.snapshots[0],from:'2026-11-07T03:00:00.000Z',fetchedAt:iso(now-60000),lastSyncAt:iso(now-120000),rows:[fresh,old]}};
+ const out=run(s,{liveItem});
+ assert.equal(out.source.kind,'live-only');assert.deepEqual(out.decisions.map(d=>[d.objectId,d.rule]),[['m1','test-no-sale']]);
+ const b=first24hWatch(s,{project:'p',liveItem,params:{},now});assert.equal(b.aligned,false);assert.deepEqual(b.items.map(i=>[i.objectId,i.level]),[['m1','pause']]);
+ assert.equal(run(s).decisions.length,0,'without a fresh live cut nothing is evaluated');
+});
