@@ -18,7 +18,7 @@ test('Reads by id in chunks of 50 with GET and the token only in the header; IC 
  const calls=[];const ids=Array.from({length:60},(_,i)=>String(120000000+i));
  const fetchImpl=async(url,init)=>{calls.push({url,init});const q=new URL(url).searchParams.get('ids').split(',');return {ok:true,status:200,json:async()=>Object.fromEntries(q.map(id=>[id,{...node(id),...ins(10,[{action_type:'initiate_checkout',value:'2'},{action_type:'offsite_conversion.fb_pixel_initiate_checkout',value:'2'},{action_type:'omni_purchase',value:'1'}])}]))};};
  const r=await readMetaCampaigns(fetchImpl,'tok-fake',ids);
- assert.equal(calls.length,2);assert.equal(r.items.length,60);
+ assert.equal(calls.length,3,'one probe plus two chunks');assert.equal(r.items.length,60);
  for(const c of calls){assert.equal(c.init.method,'GET');assert.equal(c.init.headers.Authorization,'Bearer tok-fake');assert.doesNotMatch(c.url,/tok-fake/);}
  assert.deepEqual([r.items[0].checkouts,r.items[0].purchases,r.items[0].spend,r.items[0].currency],[2,1,10,'USD']);
 });
@@ -68,8 +68,19 @@ test('One id the token cannot see is isolated by halving; the rest of the batch 
  const ids=Array.from({length:10},(_,i)=>String(120000000+i));
  const r=await readMetaCampaigns(fetchImpl,'t',ids);
  assert.deepEqual(r.skipped,[bad]);assert.equal(r.items.length,9);assert.deepEqual(r.errors,['META_100_33']);assert.ok(calls<=9,String(calls));
- // A systematic refusal stops at the request budget instead of spending hundreds of calls.
- const all=await readMetaCampaigns(async()=>({ok:false,status:400,json:async()=>({error:{code:100}})}),'t',Array.from({length:200},(_,i)=>String(130000000+i)));
- assert.equal(all.requests,metaLivePolicy.maxRequests);assert.ok(all.errors.includes('META_REQUEST_BUDGET'));
+ // Many refused ids still stop at the request budget instead of spending hundreds of calls.
+ const many=await readMetaCampaigns(async u=>{const q=new URL(u).searchParams.get('ids').split(',');return q.length===1&&q[0].endsWith('0')?{ok:true,status:200,json:async()=>({[q[0]]:node(q[0])})}:{ok:false,status:400,json:async()=>({error:{code:100}})};},'t',Array.from({length:200},(_,i)=>String(130000000+i)));
+ assert.ok(many.requests<=metaLivePolicy.maxRequests+3);assert.ok(many.errors.includes('META_REQUEST_BUDGET'));
  assert.deepEqual(metaLiveCandidates([{snapshot:{rows:[{externalId:'1000002',name:'08/11 X',level:'campaign',status:'ACTIVE'}]}}],{now:Date.parse('2026-11-08T02:00:00Z'),exclude:new Set(['1000002'])}),[]);
+});
+test('A refusal of the request itself is detected by a probe: basic fields still read, nothing is skipped',async()=>{
+ const ids=Array.from({length:120},(_,i)=>String(140000000+i));
+ const fetchImpl=async url=>{const p=new URL(url).searchParams,q=p.get('ids').split(',');
+  if(p.get('fields').includes('insights'))return {ok:false,status:400,json:async()=>({error:{code:100,type:'OAuthException',message:'Tried accessing nonexisting field (insights) on node 140000001'}})};
+  return {ok:true,status:200,json:async()=>Object.fromEntries(q.map(id=>[id,node(id)]))};};
+ const r=await readMetaCampaigns(fetchImpl,'t',ids);
+ assert.equal(r.items.length,120);assert.deepEqual(r.skipped,[]);assert.equal(r.fields,'basic');assert.ok(r.errors.includes('META_INSIGHTS_REJECTED'));
+ assert.match(r.diagnostic.message,/node #/);assert.doesNotMatch(r.diagnostic.message,/140000001/);assert.ok(r.requests<=6,String(r.requests));
+ const none=await readMetaCampaigns(async()=>({ok:false,status:400,json:async()=>({error:{code:100,message:'Unsupported get request'}})}),'t',ids);
+ assert.equal(none.fields,'none');assert.deepEqual(none.skipped,[]);assert.equal(none.requests,3);
 });
