@@ -99,7 +99,8 @@ struct CollapsedView: View {
         HStack(spacing: 0) {
             HStack(spacing: 6) {
                 BunkAvatar(size: 20, interactive: false)
-                if store.attention > 0 { Pill(text: "\(store.attention)", tone: .warn) }
+                // The bell says what the number counts: items that still need the owner (approvals and losses).
+                if store.attention > 0 { Pill(text: "\(store.attention)", tone: .warn, icon: "bell.fill") }
                 else if let s = store.summary, !store.muted { MiniBars(values: s.today.roasTrend, height: 11, barWidth: 3) }
                 if store.muted { Image(systemName: "moon.fill").font(.system(size: 9)).foregroundStyle(DS.Color.inkMuted).help("Avisos silenciados") }
             }.frame(width: NotchState.earWidth)
@@ -107,7 +108,7 @@ struct CollapsedView: View {
             let current = ticker
             Text(current?.text ?? (store.preparing ? "preparando" : "…")).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit()
                 .foregroundStyle(current.map { $0.tone == .neutral ? DS.Color.inkSoft : $0.tone.color } ?? DS.Color.inkSoft)
-                .lineLimit(1).minimumScaleFactor(0.75).frame(width: NotchState.earWidth - 8)
+                .lineLimit(1).minimumScaleFactor(0.7).frame(width: NotchState.earWidth - 14).padding(.trailing, 14)
                 .id(notch.tick).transition(.blurFade)
         }
         // A newly urgent item (approval, loss, account at its limit) is shown at once.
@@ -118,7 +119,7 @@ struct CollapsedView: View {
         .contentShape(Rectangle())
         .onTapGesture { notch.onClick() }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Bunk: \(store.attention) itens pedem atenção")
+        .accessibilityLabel("Bunk: " + (store.attention == 0 ? "nada pede atenção" : Format.count(store.attention, "item pede", "itens pedem") + " atenção"))
         .accessibilityAddTraits(.isButton)
     }
     /// Rotates every 5 s, most urgent first (UrgencyTicker): approvals, top loss, accounts at the limit; then ROAS, spend, latest change.
@@ -159,20 +160,28 @@ struct PeekView: View {
         if store.preparing { return "Resumo em preparação pelo executor…" }
         if let e = store.error { return e }
         guard let s = store.summary else { return "Lendo o Bunker…" }
-        let losses = s.queue.filter { $0.kind == "loss" }.count
-        var parts = ["ROAS hoje \(Format.ratio(s.today.today?.roas))"]
-        if let p = s.pace, p.status != "nd" { parts.append(Format.pace(p)) }
-        if s.approvals.count > 0 { parts.insert("\(s.approvals.count) aguardando você", at: 0) }
-        if losses > 0 { parts.append("\(losses) perda(s)") }
-        let changes = s.activity.summary.values.reduce(0) { $0 + $1.count }
-        parts.append("\(changes) mudança(s) em \(s.activity.hours)h")
-        return parts.joined(separator: " · ")
+        return PeekLine.text(s)
     }
     /// How old the reading is ("dados há 2 min"); the click hint shows while there is no reading yet.
     var age: String {
         guard let at = store.lastFetch else { return "clique ou \(HotKey.label)" }
         let r = Format.relative(at)
         return r == "agora" ? "dados de agora" : "dados " + r
+    }
+}
+
+/// The hover line, most urgent first: what waits for the owner, money being lost, then the day's numbers.
+enum PeekLine {
+    static func text(_ s: Summary) -> String {
+        var parts: [String] = []
+        if s.approvals.count > 0 { parts.append("\(s.approvals.count) aguardando você") }
+        let losses = s.queue.filter { $0.kind == "loss" }.count
+        if losses > 0 { parts.append(Format.count(losses, "perda", "perdas")) }
+        parts.append("ROAS hoje \(Format.ratio(s.today.today?.roas))")
+        if let p = s.pace, p.status != "nd" { parts.append(Format.pace(p)) }
+        let changes = s.activity.summary.values.reduce(0) { $0 + $1.count }
+        parts.append(Format.count(changes, "mudança", "mudanças") + " em \(s.activity.hours)h")
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -344,15 +353,16 @@ struct KPIStrip: View {
     let s: Summary
     var body: some View {
         HStack(spacing: DS.Space.s) {
-            StatTile(label: "ROAS hoje", value: Format.ratio(s.today.today?.roas), base: "ontem \(Format.ratio(s.today.yesterday?.roas)) · 7d \(Format.ratio(s.today.week?.roas))", delta: s.today.deltas["roas"], higherIsBetter: true, spark: s.today.roasTrend)
-            StatTile(label: "ROI hoje", value: Format.ratio(s.today.today?.roi), base: "ontem \(Format.ratio(s.today.yesterday?.roi)) · 7d \(Format.ratio(s.today.week?.roi))", delta: s.today.deltas["roi"], higherIsBetter: true)
-            StatTile(label: "CPA front hoje", value: Format.money(s.today.today?.cpaFront), base: "ontem \(Format.money(s.today.yesterday?.cpaFront)) · 7d \(Format.money(s.today.week?.cpaFront))", delta: s.today.deltas["cpaFront"], higherIsBetter: false)
+            StatTile(label: "ROAS hoje", value: Format.ratio(s.today.today?.roas), yesterday: Format.ratio(s.today.yesterday?.roas), week: Format.ratio(s.today.week?.roas), delta: s.today.deltas["roas"], higherIsBetter: true, spark: s.today.roasTrend)
+            StatTile(label: "ROI hoje", value: Format.ratio(s.today.today?.roi), yesterday: Format.ratio(s.today.yesterday?.roi), week: Format.ratio(s.today.week?.roi), delta: s.today.deltas["roi"], higherIsBetter: true)
+            StatTile(label: "CPA front hoje", value: Format.money(s.today.today?.cpaFront), yesterday: Format.money(s.today.yesterday?.cpaFront), week: Format.money(s.today.week?.cpaFront), delta: s.today.deltas["cpaFront"], higherIsBetter: false)
             PaceTile(pace: s.pace)
         }
+        // Same height for the four tiles, whatever wraps inside one of them.
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-/// Today's spend pace against the active daily budgets: on pace, runs out at HH:MM, leftover, or N/D.
 struct PaceTile: View {
     let pace: Summary.Pace?
     var body: some View {
@@ -361,15 +371,17 @@ struct PaceTile: View {
             Text(Format.pace(pace).replacingOccurrences(of: "ritmo ", with: "")).font(DS.Font.stat).foregroundStyle(pace?.status == "nd" || pace == nil ? DS.Color.inkMuted : Format.paceTone(pace).color == DS.Color.inkMuted ? DS.Color.ink : Format.paceTone(pace).color)
                 .lineLimit(1).minimumScaleFactor(0.6)
             if let e = pace?.elapsedPct, pace?.status != "nd" { Pill(text: "\(Int(e))% do dia", tone: .neutral) } else { Pill(text: "N/D") }
-            Text(Format.paceBase(pace)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.85)
+            Text(Format.paceTileBase(pace)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(2).minimumScaleFactor(0.85).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+        .padding(DS.Space.m).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).card()
         .help("Projeção simples: gasto de hoje no ritmo atual contra os orçamentos diários ativos. Não é previsão de vendas nem proposta.")
     }
 }
 
+/// One KPI: today's value, then each comparison on its own line with its change right beside it
+/// ("ontem 1,31x  ↑8%"), so a change is never read without the period it compares to.
 struct StatTile: View {
-    let label: String; let value: String; let base: String; let delta: Summary.Delta?; let higherIsBetter: Bool
+    let label: String; let value: String; let yesterday: String; let week: String; let delta: Summary.Delta?; let higherIsBetter: Bool
     var spark: [Double?]? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -379,22 +391,40 @@ struct StatTile: View {
                 if let spark { MiniBars(values: spark, height: 12, barWidth: 3.5) }
             }
             Text(value).font(DS.Font.stat).lineLimit(1).minimumScaleFactor(0.8)
-            // Four tiles share the row: full labels when they fit, whole percents with "1d"/"7d" otherwise.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: DS.Space.xs) { pill(delta?.yesterday, "ontem"); pill(delta?.week, "7d") }
-                HStack(spacing: DS.Space.xs) { pill(delta?.yesterday, "1d", whole: true); pill(delta?.week, "7d", whole: true) }
-                // Same order as the base line below (ontem · 7d).
-                HStack(spacing: DS.Space.xs) { pill(delta?.yesterday, "", whole: true); pill(delta?.week, "", whole: true) }
+            VStack(alignment: .leading, spacing: 2) {
+                compare("ontem", yesterday, delta?.yesterday)
+                compare("7d", week, delta?.week)
             }
-            Text(base).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.85)
         }
-        .padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+        .padding(DS.Space.m).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).card()
+        .accessibilityElement(children: .combine)
     }
-    func pill(_ value: Double?, _ label: String, whole: Bool = false) -> some View {
-        guard let value else { return Pill(text: label.isEmpty ? "N/D" : "N/D \(label)") }
-        let flat = abs(value) < 0.05
-        return Pill(text: label.isEmpty ? Format.percent((value * 100).rounded()) : "\(Format.percent(whole ? (value * 100).rounded() : value * 100)) \(label)", tone: flat ? .neutral : (value > 0) == higherIsBetter ? .good : .bad,
-                    icon: flat ? nil : value > 0 ? "arrow.up" : "arrow.down")
+    func compare(_ period: String, _ base: String, _ change: Double?) -> some View {
+        HStack(spacing: 4) {
+            Text(period).foregroundStyle(DS.Color.inkMuted)
+            Text(base).foregroundStyle(DS.Color.inkSoft).monospacedDigit()
+            Spacer(minLength: 2)
+            DeltaText(change: change, higherIsBetter: higherIsBetter)
+        }
+        .font(DS.Font.micro).lineLimit(1).minimumScaleFactor(0.8)
+    }
+}
+
+/// "↑8%" in green when the move is good, red when bad, grey when flat (under 5%) or N/D.
+struct DeltaText: View {
+    let change: Double?; let higherIsBetter: Bool
+    var body: some View {
+        if let change, change.isFinite {
+            let flat = abs(change) < 0.05, good = (change > 0) == higherIsBetter
+            HStack(spacing: 1) {
+                if !flat { Image(systemName: change > 0 ? "arrow.up" : "arrow.down").font(.system(size: 7.5, weight: .bold)) }
+                Text(Format.percent((change * 100).rounded(), signed: false)).font(DS.Font.microStrong).monospacedDigit()
+            }
+            .foregroundStyle(flat ? DS.Color.inkMuted : good ? DS.Color.good : DS.Color.bad)
+            .accessibilityLabel((change > 0 ? "subiu " : "caiu ") + Format.percent((change * 100).rounded(), signed: false))
+        } else {
+            Text("N/D").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+        }
     }
 }
 
@@ -417,6 +447,8 @@ struct TabBar: View {
                     .background(selected ? DS.Color.surfaceSelected : .clear, in: Capsule())
                     .contentShape(Capsule())
                 }.buttonStyle(.plain)
+                .help("\(tab.rawValue) · tecla \((NotchTab.allCases.firstIndex(of: tab) ?? 0) + 1) (← → trocam de aba)")
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
             Spacer(minLength: 0)
         }
@@ -497,7 +529,7 @@ struct NowTab: View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             if s.approvals.count > 0 {
                 HStack(spacing: DS.Space.s) {
-                    SectionHeader(title: "Aguardando você", detail: "\(s.approvals.count) proposta(s) exata(s) · aprovar com Touch ID")
+                    SectionHeader(title: "Aguardando você", detail: Format.count(s.approvals.count, "proposta exata", "propostas exatas") + " · aprovar com Touch ID")
                     QuietMenu(key: AttentionLedger.approvalsKey, compact: true)
                 }
                 VStack(spacing: 2) {
@@ -538,7 +570,7 @@ struct NowTab: View {
                 }
             }
             if let f = s.first24h, f.counts.firstDay + f.counts.secondDay + f.counts.scheduled > 0 {
-                SectionHeader(title: "Primeiras 24h", detail: "\(f.counts.firstDay) no 1º dia · \(f.counts.secondDay) no 2º · \(f.counts.scheduled) programada(s) · teto \(Format.money(f.ceiling ?? 110)) com até 1 IC")
+                SectionHeader(title: "Primeiras 24h", detail: "\(f.counts.firstDay) no 1º dia · \(f.counts.secondDay) no 2º · \(Format.count(f.counts.scheduled, "programada", "programadas")) · teto \(Format.money(f.ceiling ?? 110)) com até 1 IC")
                 VStack(spacing: 2) {
                     ForEach(f.items.prefix(6)) { item in
                         ListRow(id: "f24:" + item.id, symbol: item.level == "sold" ? "checkmark.seal.fill" : item.level == "over" || item.level == "pause" ? "exclamationmark.octagon.fill" : "clock.badge",
@@ -586,7 +618,7 @@ struct ManagersTab: View {
                 ForEach(keys, id: \.self) { key in box(key) }
             }
             let list = s.activity.recent.filter { notch.activityFilter == nil || $0.action == notch.activityFilter }
-            SectionHeader(title: notch.activityFilter.map { (Format.actionLabels[$0] ?? $0) + " recentes" } ?? "Mais recentes", detail: "\(list.count) registro(s) no resumo")
+            SectionHeader(title: notch.activityFilter.map { (Format.actionLabels[$0] ?? $0) + " recentes" } ?? "Mais recentes", detail: Format.count(list.count, "registro", "registros") + " no resumo")
             if list.isEmpty { EmptyLine(text: "Nenhuma mudança neste filtro.") }
             VStack(spacing: 2) {
                 ForEach(list) { e in
@@ -692,7 +724,7 @@ struct SystemTab: View {
                 HStack(spacing: DS.Space.s) {
                     StatusDot(tone: !e.enabled || e.paused ? .warn : e.recentFailures > 0 ? .warn : .good)
                     Text(e.paused ? "Pausado" : e.enabled ? "Ativo" : "Desligado").font(DS.Font.bodyStrong)
-                    Pill(text: "\(e.recentFailures) falha(s) na última hora", tone: e.recentFailures > 0 ? .warn : .neutral)
+                    Pill(text: (e.recentFailures == 0 ? "nenhuma falha" : Format.count(e.recentFailures, "falha", "falhas")) + " na última hora", tone: e.recentFailures > 0 ? .warn : .neutral)
                     Spacer()
                     Text("último pulso " + Format.relative(e.lastPulseAt)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 }.padding(DS.Space.m).card()
@@ -705,19 +737,18 @@ struct SystemTab: View {
             }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
             SectionHeader(title: "Avisos", detail: store.muted ? "silenciados até " + Format.stamp(Format.isoFull.string(from: store.mutedUntil!)) : "ativos no notch e no macOS")
             HStack(spacing: DS.Space.s) {
-                if store.muted { Button("Reativar avisos") { store.unmute() } }
+                if store.muted { ActionButton(title: "Reativar avisos", icon: "bell", leadingIcon: true, prominent: true, help: "Volta a mostrar avisos no notch e no macOS.") { store.unmute() } }
                 else {
-                    Button("Silenciar 1 hora") { store.mute(hours: 1) }
-                    Button("Até amanhã às 8h") { store.muteUntilTomorrow() }
+                    ActionButton(title: "Silenciar 1 hora", icon: "moon", leadingIcon: true, help: "Pausa avisos e notificações por uma hora; as listas continuam atualizando.") { store.mute(hours: 1) }
+                    ActionButton(title: "Até amanhã às 8h", icon: "moon.zzz", leadingIcon: true, help: "Pausa avisos até amanhã às 8h.") { store.muteUntilTomorrow() }
                 }
-            }.buttonStyle(.bordered).controlSize(.small)
+            }
             CallQuietRow()
             let quieted = store.ledger.dismissed.count + store.ledger.snoozed.values.filter { $0 > Date().timeIntervalSince1970 }.count
             if quieted > 0 {
                 HStack(spacing: DS.Space.s) {
-                    Text("\(quieted) item(ns) dispensado(s) ou adiado(s)").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
-                    Button("Voltar a avisar tudo") { for k in Array(store.ledger.dismissed.keys) + Array(store.ledger.snoozed.keys) { store.restore(k) } }
-                        .buttonStyle(.bordered).controlSize(.small)
+                    Text(Format.count(quieted, "item dispensado ou adiado", "itens dispensados ou adiados")).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                    ActionButton(title: "Voltar a avisar tudo", icon: "bell.badge", leadingIcon: true, help: "Desfaz os itens dispensados e adiados.") { store.restoreAll() }
                 }
             }
             Text(s.notice).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
@@ -766,9 +797,9 @@ struct ProjectsTab: View {
                                     Text(p.name).font(DS.Font.bodyStrong)
                                     if selected { Pill(text: "em foco", tone: .accent) }
                                     if p.approvals > 0 { Pill(text: "\(p.approvals) para aprovar", tone: .warn) }
-                                    if p.losses > 0 { Pill(text: "\(p.losses) perda(s)", tone: .bad) }
+                                    if p.losses > 0 { Pill(text: Format.count(p.losses, "perda", "perdas"), tone: .bad) }
                                 }
-                                Text("gasto \(Format.money(p.spend)) · ROI \(Format.ratio(p.roi)) · \(p.changes) mudança(s) em 24h").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                                Text("gasto \(Format.money(p.spend)) · ROI \(Format.ratio(p.roi)) · \(Format.count(p.changes, "mudança", "mudanças")) em 24h").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                                 if let pace = s.pace?.byProject?.first(where: { $0.project == p.id }), pace.status != "nd" {
                                     HStack(spacing: DS.Space.xs) {
                                         Pill(text: Format.pace(pace), tone: pace.alert != nil ? .warn : Format.paceTone(pace), icon: pace.alert == "early" ? "hourglass" : pace.alert == "under" ? "tortoise" : "gauge.medium")
@@ -842,7 +873,7 @@ struct CampaignDetailView: View {
                                     Text(Format.ratio(w?.roas)).font(DS.Font.stat).foregroundStyle((w?.roi ?? 1) >= 1 ? DS.Color.ink : DS.Color.bad)
                                 }
                                 if w?.noSpend == true {
-                                    Text("gasto " + Format.compactMoney(w?.spend)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                                    // "sem gasto" already says the spend; only what stays unknown is listed.
                                     Text("vendas N/D").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                                 } else {
                                     Text("ROI " + Format.ratio(w?.roi)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
@@ -866,7 +897,7 @@ struct CampaignDetailView: View {
                                     value: Format.relative(e.at), valueCaption: Format.stamp(e.at))
                         }
                     }
-                    Text("Ajustar aqui: sua escolha vai para a equipe e a proposta exata volta para você aprovar com Touch ID.").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                    Text("Ajustar aqui: execute sua ordem com Touch ID (o executor aplica uma vez pela Malva e confere) ou peça à equipe uma proposta exata.").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 }.padding(.bottom, DS.Space.l)
             }
         }
@@ -898,7 +929,7 @@ struct AdjustView: View {
                     Text("Entre uma vez: peça o link de acesso abaixo, depois copie o link do e-mail (clique com o botão direito › Copiar link) e cole aqui.")
                         .font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: DS.Space.s) {
-                        TextField("Cole aqui o link do e-mail do Bunker", text: $notch.pastedLink).textFieldStyle(.roundedBorder).controlSize(.small)
+                        TextField("Cole aqui o link do e-mail do Bunker", text: $notch.pastedLink).textFieldStyle(.island)
                         Button("Entrar") {
                             if let url = WebScope.signInLink(notch.pastedLink) { notch.webTarget = url; notch.pastedLink = "" }
                         }.controlSize(.small).disabled(WebScope.signInLink(notch.pastedLink) == nil)

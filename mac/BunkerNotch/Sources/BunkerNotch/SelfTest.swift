@@ -60,7 +60,7 @@ enum SelfTest {
         check(BunkBrain.lines(nil, error: nil, preparing: true) == ["Estou montando o resumo. Volto em 1 a 2 minutos."], #line)
         let accRow = Summary.AccountRow(accountId: "1", name: "CA 1", group: "FB Flix", status: "active", statusLabel: "Ativa", runningLabel: "Rodando · John", currency: "USD", dailyLimit: 321.06, todaySpend: 290, usedPct: 90.3, balance: 10, alerts: ["Perto do limite diário"])
         check(Format.accountUse(accRow) == "90%", #line)
-        check(Format.accountLimit(accRow) == "$ 290,00 de $ 321,06", #line)
+        check(Format.accountLimit(accRow).replacingOccurrences(of: "\u{00A0}", with: " ") == "US$ 290,00 de US$ 321,06", #line)
         let noLimit = Summary.AccountRow(accountId: "2", name: nil, group: nil, status: "active", statusLabel: nil, runningLabel: nil, currency: nil, dailyLimit: nil, todaySpend: nil, usedPct: nil, balance: nil, alerts: nil)
         check(Format.accountLimit(noLimit) == "limite N/D" && Format.accountUse(noLimit) == "N/D", #line)
         check(NotchTab.allCases[2] == .accounts, #line)
@@ -88,6 +88,24 @@ enum SelfTest {
         check(Format.ratio(2.144) == "2,14x", #line)
         check(Format.percent(-30) == "−30%", #line)
         check(Format.percent(42.86) == "+42,9%", #line)
+        // Notch batteries 2026-11-08: separators, US$, unit boundaries, plurals.
+        let nb = "\u{00A0}"
+        check(Format.exactMoney(1780, currency: "BRL").replacingOccurrences(of: nb, with: " ") == "R$ 1.780,00", #line)
+        check(Format.exactMoney(180, currency: "usd").replacingOccurrences(of: nb, with: " ") == "US$ 180,00", #line)
+        check(Format.money(120, currency: "USD").replacingOccurrences(of: nb, with: " ") == "US$ 120,00", #line)
+        check(Format.money(32_000).replacingOccurrences(of: nb, with: " ") == "R$ 32.000", #line)
+        check(Format.compactMoney(999.6) == "R$ 1,0 mil", #line)
+        check(Format.compactMoney(999.4) == "R$ 999", #line)
+        check(Format.compactMoney(999_960) == "R$ 1,0 mi", #line)
+        check(Format.compactMoney(9_960) == "R$ 10 mil", #line)
+        check(Format.compactMoney(-1_500, currency: "USD") == "−US$ 1,5 mil", #line)
+        check(Format.count(1, "perda", "perdas") == "1 perda" && Format.count(0, "perda", "perdas") == "0 perdas" && Format.count(3, "perda", "perdas") == "3 perdas", #line)
+        check(NotchKeys.tab(for: "3", keyCode: 20, current: .now) == .accounts && NotchKeys.tab(for: nil, keyCode: 123, current: .now) == .system && NotchKeys.tab(for: nil, keyCode: 124, current: .system) == .now, #line)
+        check(NotchKeys.tab(for: "7", keyCode: 26, current: .now) == nil && NotchKeys.tab(for: "a", keyCode: 0, current: .now) == nil, #line)
+        check(OwnerAdjust.parsePercent(" 20% ") == 20 && OwnerAdjust.parsePercent("12,5") == 12.5 && OwnerAdjust.parsePercent("1e2") == nil && OwnerAdjust.parsePercent("") == nil && OwnerAdjust.parsePercent("1.2.3") == nil, #line)
+        check(OwnerAdjust.percentProblem("reduce", 0.001, current: 100) != nil && OwnerAdjust.percentProblem("reduce", 100, current: 100) != nil && OwnerAdjust.percentProblem("increase", 1001, current: 100) != nil, #line)
+        check(OwnerAdjust.percentProblem("reduce", 20, current: 100) == nil && OwnerAdjust.percentProblem("pause", nil, current: 100) == nil && OwnerAdjust.percentProblem("increase", nil, current: 100) != nil, #line)
+        check(Format.money(Double.nan) == "N/D" && Format.exactMoney(nil) == "N/D" && Format.compactMoney(.infinity) == "N/D", #line)
     }
 
     private static func testCredentialShape() {

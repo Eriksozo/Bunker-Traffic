@@ -55,7 +55,7 @@ extension SelfTest {
         // Pace wording, with N/D for anything missing.
         expectA(Format.pace(s.pace) == "esgota 15:40", #line)   // 19:40 UTC = 15:40 in Boa Vista
         expectA(Format.pace(nil) == "ritmo N/D", #line)
-        expectA(Format.paceBase(s.pace) == "gasto R$ 600 de R$ 1,0 mil · 3 camp. · 1 sem orçamento", #line)
+        expectA(Format.paceBase(s.pace) == "R$ 600 de R$ 1,0 mil orçados · 3 camp. · 1 sem orçamento", #line)
         expectA(Format.compactMoney(1500, currency: "USD") == "US$ 1,5 mil", #line)
         expectA(s.today.roasTrend.count == 4 && s.today.roasTrend[1] == nil && s.today.roasTrend[3] == 0.8, #line)
 

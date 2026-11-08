@@ -22,7 +22,7 @@ test('summary is read-only, scoped, bounded and carries no secrets or full texts
  assert.equal(out.executor.recentFailures,1);assert.equal(out.executor.secret,undefined);
  assert.ok(out.queue.length<=companionLimits.queue);assert.equal(out.queue[0]?.campaign,'Campanha c1');
  assert.ok(!JSON.stringify(out).includes('x'.repeat(400)));
- assert.match(out.notice,/Somente leitura/);
+ assert.match(out.notice,/^Leitura do Bunker/);assert.match(out.notice,/só com Touch ID/);
 });
 test('all projects scope and unknown project',()=>{
  const out=companionSummary(state(),{now});assert.equal(out.project,'all');assert.equal(out.approvals.count,1);assert.equal(out.executor,null);

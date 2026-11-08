@@ -51,14 +51,14 @@ enum BunkBrain {
         if let error { return [Topic(text: "Não consegui ler o Bunker agora: \(error)")] }
         guard let s else { return [Topic(text: preparing ? "Estou montando o resumo. Volto em 1 a 2 minutos." : "Lendo o Bunker…")] }
         var out: [Topic] = []
-        if s.approvals.count > 0, !ledger.isQuiet(key: AttentionLedger.approvalsKey) { out.append(Topic(text: "\(s.approvals.count) proposta(s) exata(s) esperando você no Bunker.", target: approvalsTarget)) }
+        if s.approvals.count > 0, !ledger.isQuiet(key: AttentionLedger.approvalsKey) { out.append(Topic(text: Format.count(s.approvals.count, "proposta exata esperando", "propostas exatas esperando") + " você no Bunker.", target: approvalsTarget)) }
         if let loss = s.queue.first(where: { $0.kind == "loss" && !ledger.isQuiet($0) }) {
             let account = loss.account.map { " em \($0)" } ?? ""
             out.append(Topic(text: "De olho: \(loss.campaign ?? "uma campanha")\(account) está −\(Format.money(loss.amount)) \(loss.period == "today" ? "hoje" : "em 3 dias").", target: lossTarget(loss)))
         }
-        if let a = s.accounts, a.counts.nearLimit > 0, !ledger.isQuiet(key: AttentionLedger.limitKey) { out.append(Topic(text: "\(a.counts.nearLimit) conta(s) perto do limite diário da Meta.")) }
+        if let a = s.accounts, a.counts.nearLimit > 0, !ledger.isQuiet(key: AttentionLedger.limitKey) { out.append(Topic(text: Format.count(a.counts.nearLimit, "conta", "contas") + " perto do limite diário da Meta.")) }
         if let f = s.first24h, f.counts.attention > 0 {
-            out.append(Topic(text: "\(f.counts.attention) campanha(s) nova(s) perto do teto de \(Format.money(f.ceiling ?? 110)) sem venda nas primeiras 24h."))
+            out.append(Topic(text: Format.count(f.counts.attention, "campanha nova", "campanhas novas") + " perto do teto de \(Format.money(f.ceiling ?? 110)) sem venda nas primeiras 24h."))
         }
         if let sh = s.shadow, sh.total > 0 {
             let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }

@@ -31,7 +31,7 @@ struct OwnerAdjustView: View {
                     if let data = m.data {
                         if data.paused { Banner(text: "Escritório pausado: retome no Bunker para decidir.", tone: .warn) }
                         if !data.approvals.isEmpty {
-                            SectionHeader(title: "Aguardando você", detail: "\(data.approvals.count) proposta(s) exata(s) revisada(s) pela equipe")
+                            SectionHeader(title: "Aguardando você", detail: Format.count(data.approvals.count, "proposta exata revisada", "propostas exatas revisadas") + " pela equipe")
                             ForEach(data.approvals) { p in approvalCard(p, revision: data.revision) }
                         } else if target.campaignId == nil {
                             EmptyLine(text: "Nenhuma proposta aguardando sua aprovação.")
@@ -108,10 +108,11 @@ struct OwnerAdjustView: View {
     }
 
     func decision(_ card: OwnerCards.Card, revision: Int?) -> some View {
-        let percent = Double(m.percentText.replacingOccurrences(of: ",", with: "."))
+        let percent = OwnerAdjust.parsePercent(m.percentText)
         let needsPercent = m.action == "increase" || m.action == "reduce"
         let preview = OwnerAdjust.newBudget(card.orderBudget, action: m.action, percent: percent)
-        let valid = !m.busy && revision != nil && !m.action.isEmpty && OwnerAdjust.validPercent(m.action, percent)
+        let percentProblem = OwnerAdjust.percentProblem(m.action, percent, current: card.orderBudget)
+        let valid = !m.busy && revision != nil && !m.action.isEmpty && OwnerAdjust.validPercent(m.action, percent) && percentProblem == nil
         let canOrder = valid && OwnerAdjust.canOrder(card, action: m.action)
         let canAsk = valid && OwnerAdjust.allowed(card.intentActions, m.action) && OwnerAdjust.canDecide(card)
         let canApplied = valid && OwnerAdjust.allowed(card.intentActions, m.action) && OwnerAdjust.canReportApplied(card, action: m.action)
@@ -172,11 +173,11 @@ struct OwnerAdjustView: View {
                                     .background(on ? DS.Color.surfaceSelected : DS.Color.surface, in: Capsule())
                             }.buttonStyle(.plain)
                         }
-                        TextField("%", text: $m.percentText).textFieldStyle(.roundedBorder).controlSize(.small).frame(width: 54)
+                        TextField("%", text: $m.percentText).textFieldStyle(.island).monospacedDigit().frame(width: 54)
                         Text("%").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                         Spacer(minLength: 0)
                     }
-                    if !OwnerAdjust.validPercent(m.action, percent) { Text("Aumento até 1000%; redução acima de 0 e abaixo de 100%.").font(DS.Font.caption).foregroundStyle(DS.Color.bad) }
+                    if let problem = percentProblem { Text(problem).font(DS.Font.caption).foregroundStyle(DS.Color.bad) }
                 }
             }
             // 2 · Exactly what changes (the same line Touch ID shows).
@@ -204,7 +205,7 @@ struct OwnerAdjustView: View {
                 .background(tone.color.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).stroke(tone.color.opacity(0.25)))
             }
-            TextField("Motivo (opcional)", text: $m.reason).textFieldStyle(.roundedBorder).controlSize(.small)
+            TextField("Motivo (opcional)", text: $m.reason).textFieldStyle(.island)
             // 3 · One primary action: execute when it can run now; otherwise ask the team.
             HStack(spacing: DS.Space.s) {
                 if m.action == "keep" {

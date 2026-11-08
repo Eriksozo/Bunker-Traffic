@@ -4,6 +4,17 @@ import SwiftUI
 
 enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", accounts = "Contas", managers = "Gestores", agents = "Agentes", system = "Sistema" }
 
+/// Keyboard while the island is open: 1–6 pick a tab, ← → move between tabs (wrapping). Pure, for the self-test.
+enum NotchKeys {
+    static func tab(for chars: String?, keyCode: UInt16, current: NotchTab) -> NotchTab? {
+        let all = NotchTab.allCases, i = all.firstIndex(of: current) ?? 0
+        if keyCode == 123 { return all[(i + all.count - 1) % all.count] }
+        if keyCode == 124 { return all[(i + 1) % all.count] }
+        if let chars, let n = Int(chars), (1...all.count).contains(n) { return all[n - 1] }
+        return nil
+    }
+}
+
 /// Island geometry for a screen: the real notch when there is one, otherwise a slim bar under the menu bar centre.
 struct NotchGeometry: Equatable {
     let hasNotch: Bool
@@ -253,8 +264,11 @@ final class NotchController {
             if state.selected != nil { withAnimation(DS.Motion.quick) { state.selected = nil } } else { send(.escape) }
             return true
         }
-        if let chars = event.charactersIgnoringModifiers, let n = Int(chars), (1...NotchTab.allCases.count).contains(n) {
-            withAnimation(DS.Motion.quick) { state.tab = NotchTab.allCases[n - 1] }
+        // Typing in a field (the pasted sign-in link) keeps its digits and arrows.
+        if event.window?.firstResponder is NSText { return false }
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+        if let tab = NotchKeys.tab(for: event.charactersIgnoringModifiers, keyCode: event.keyCode, current: state.tab) {
+            withAnimation(DS.Motion.quick) { state.tab = tab; state.selected = nil }
             return true
         }
         return false

@@ -2,23 +2,48 @@ import Foundation
 
 /// Portuguese formatting shared by the notch and the menu. Missing values render as N/D.
 enum Format {
-    static func money(_ value: Double?, currency: String? = "BRL") -> String {
-        guard let value, value.isFinite else { return "N/D" }
+    // Formatters are expensive to build; the notch formats hundreds of values per render.
+    nonisolated(unsafe) private static var currencyCache: [String: NumberFormatter] = [:]
+    private static let cacheLock = NSLock()
+    private static func currencyFormatter(_ code: String, wholeUnits: Bool) -> NumberFormatter {
+        let key = code + (wholeUnits ? ":0" : ":2")
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        if let f = currencyCache[key] { return f }
         let f = NumberFormatter()
         f.numberStyle = .currency
         f.locale = Locale(identifier: "pt_BR")
-        f.currencyCode = (currency?.count == 3 ? currency : nil) ?? "BRL"
-        f.maximumFractionDigits = abs(value) >= 1000 ? 0 : 2
-        return f.string(from: NSNumber(value: value)) ?? "N/D"
+        f.currencyCode = code
+        // pt_BR prints USD as "US$" already; keep it explicit so accounts and orders read the same.
+        if code == "USD" { f.currencySymbol = "US$" }
+        f.maximumFractionDigits = wholeUnits ? 0 : 2
+        f.minimumFractionDigits = wholeUnits ? 0 : 2
+        currencyCache[key] = f
+        return f
     }
+    static func money(_ value: Double?, currency: String? = "BRL") -> String {
+        guard let value, value.isFinite else { return "N/D" }
+        let code = (currency?.count == 3 ? currency!.uppercased() : nil) ?? "BRL"
+        return currencyFormatter(code, wholeUnits: abs(value) >= 1000).string(from: NSNumber(value: value)) ?? "N/D"
+    }
+    /// Exact amount with cents (account limits, budgets): "R$ 1.780,00", "US$ 180,00".
+    static func exactMoney(_ value: Double?, currency: String? = "BRL") -> String {
+        guard let value, value.isFinite else { return "N/D" }
+        let code = (currency?.count == 3 ? currency!.uppercased() : nil) ?? "BRL"
+        return currencyFormatter(code, wholeUnits: false).string(from: NSNumber(value: value)) ?? "N/D"
+    }
+    /// "1 perda", "2 perdas", "0 propostas": counts read as Portuguese, never "perda(s)".
+    static func count(_ n: Int, _ one: String, _ many: String) -> String { "\(n) " + (n == 1 ? one : many) }
     /// Short money for the resting island: "R$ 870", "R$ 3,2 mil", "R$ 1,4 mi".
     static func compactMoney(_ value: Double?, currency: String? = "BRL") -> String {
         guard let value, value.isFinite else { return "N/D" }
-        let a = abs(value), sign = value < 0 ? "−" : ""
+        let sign = value < 0 ? "−" : ""
         let symbol = { () -> String in switch (currency ?? "BRL").uppercased() { case "BRL": return "R$"; case "USD": return "US$"; case "EUR": return "€"; case let c: return c } }()
         func one(_ v: Double) -> String { String(format: v >= 10 ? "%.0f" : "%.1f", v).replacingOccurrences(of: ".", with: ",") }
-        if a >= 1_000_000 { return sign + symbol + " " + one(a / 1_000_000) + " mi" }
-        if a >= 1_000 { return sign + symbol + " " + one(a / 1_000) + " mil" }
+        // Round to what will be printed before choosing the unit: 999,6 is "R$ 1,0 mil", never "R$ 1000".
+        func shown(_ v: Double) -> Double { v >= 10 ? v.rounded() : (v * 10).rounded() / 10 }
+        let a = abs(value)
+        if shown(a / 1_000_000) >= 1 || shown(a / 1_000) >= 1000 { return sign + symbol + " " + one(shown(a / 1_000_000)) + " mi" }
+        if a.rounded() >= 1_000 { return sign + symbol + " " + one(shown(a / 1_000)) + " mil" }
         return sign + symbol + " " + String(format: "%.0f", a)
     }
     static func ratio(_ value: Double?) -> String {
@@ -38,22 +63,22 @@ enum Format {
         return isoFull.date(from: value) ?? isoPlain.date(from: value)
     }
     /// The Bunker shows times in Boa Vista; keep the same clock in the notch.
-    static func stamp(_ value: String?) -> String {
-        guard let d = date(value) else { return "N/D" }
+    private static func bunkerClock(_ format: String) -> DateFormatter {
         let f = DateFormatter()
         f.locale = Locale(identifier: "pt_BR")
         f.timeZone = TimeZone(identifier: "America/Boa_Vista")
-        f.dateFormat = "dd/MM HH:mm"
-        return f.string(from: d)
+        f.dateFormat = format
+        return f
+    }
+    private static let stampFormatter = bunkerClock("dd/MM HH:mm"), clockFormatter = bunkerClock("HH:mm")
+    static func stamp(_ value: String?) -> String {
+        guard let d = date(value) else { return "N/D" }
+        return stampFormatter.string(from: d)
     }
     /// "15:40" in the Bunker's clock (Boa Vista), for same-day times.
     static func clock(_ value: String?) -> String {
         guard let d = date(value) else { return "N/D" }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "pt_BR")
-        f.timeZone = TimeZone(identifier: "America/Boa_Vista")
-        f.dateFormat = "HH:mm"
-        return f.string(from: d)
+        return clockFormatter.string(from: d)
     }
     /// Short pace line: "no ritmo", "esgota 15:40", "sobra 30%", "orçamento do dia gasto" or "ritmo N/D".
     static func pace(_ p: Summary.Pace?) -> String {
@@ -78,12 +103,19 @@ enum Format {
     static func paceTone(_ p: Summary.Pace?) -> Tone {
         switch p?.status { case "exhausts", "spent": return .warn; case "under": return .neutral; case "on": return .good; default: return .neutral }
     }
-    /// "gasto R$ 820 de R$ 1.500 · 12 campanhas" or the reason it is N/D.
+    /// "R$ 820 de R$ 1.500 orçados · 12 camp." or the reason it is N/D.
     static func paceBase(_ p: Summary.Pace?) -> String {
         guard let p else { return "resumo sem ritmo nesta versão" }
         if p.status == "nd" { return p.reason ?? "sem orçamento diário conhecido" }
         let missing = (p.unknown ?? 0) > 0 ? " · \(p.unknown!) sem orçamento" : ""
-        return "gasto \(compactMoney(p.spend, currency: p.currency)) de \(compactMoney(p.budget, currency: p.currency)) · \(p.known ?? 0) camp.\(missing)"
+        // Not "gasto": the project's total spend shows next to it and differs (campaigns without a budget are left out here).
+        return "\(compactMoney(p.spend, currency: p.currency)) de \(compactMoney(p.budget, currency: p.currency)) orçados · \(p.known ?? 0) camp.\(missing)"
+    }
+    /// Two short lines for the pace tile: "R$ 18 mil de R$ 32 mil" / "14 camp. · 2 sem orçamento".
+    static func paceTileBase(_ p: Summary.Pace?) -> String {
+        guard let p, p.status != "nd" else { return paceBase(p) }
+        let missing = (p.unknown ?? 0) > 0 ? " · \(p.unknown!) sem orçamento" : ""
+        return "\(compactMoney(p.spend, currency: p.currency)) de \(compactMoney(p.budget, currency: p.currency)) orçados\n\(p.known ?? 0) camp.\(missing)"
     }
     /// "agora", "há 5 min", "há 2 h"; older than a day falls back to the full stamp.
     static func relative(_ value: Date?, now: Date = Date()) -> String {
@@ -122,11 +154,7 @@ enum Format {
     }
     static let actionLabels: [String: String] = ["increase": "Aumentos", "reduce": "Reduções", "pause": "Pausas", "activate": "Ativações"]
     static let verbs: [String: String] = ["increase": "aumentou", "reduce": "reduziu", "pause": "pausou", "activate": "ativou"]
-    static func accountMoney(_ n: Double?, _ currency: String?) -> String {
-        guard let n else { return "N/D" }
-        let symbol = currency == "BRL" ? "R$" : (currency == "USD" ? "$" : (currency ?? ""))
-        return "\(symbol) \(String(format: "%.2f", n).replacingOccurrences(of: ".", with: ","))".trimmingCharacters(in: .whitespaces)
-    }
+    static func accountMoney(_ n: Double?, _ currency: String?) -> String { exactMoney(n, currency: currency) }
     static func accountUse(_ r: Summary.AccountRow) -> String {
         guard let p = r.usedPct else { return accountMoney(r.todaySpend, r.currency) }
         return "\(Int(p.rounded()))%"

@@ -23,7 +23,7 @@ enum UrgencyTicker {
         if let loss = s.queue.first(where: { $0.kind == "loss" && !ledger.isQuiet($0, now: now) }) {
             urgent.append(Item(key: "loss:\(loss.id)", text: "↓ \(shortName(loss.campaign)) −\(Format.compactMoney(loss.amount))", tone: .bad, urgent: true))
         }
-        if let n = s.accounts?.counts.nearLimit, n > 0, !ledger.isQuiet(key: AttentionLedger.limitKey, now: now) { urgent.append(Item(key: "limit:\(n)", text: "◔ \(n) conta(s) no limite", tone: .bad, urgent: true)) }
+        if let n = s.accounts?.counts.nearLimit, n > 0, !ledger.isQuiet(key: AttentionLedger.limitKey, now: now) { urgent.append(Item(key: "limit:\(n)", text: "◔ " + Format.count(n, "conta", "contas") + " no limite", tone: .bad, urgent: true)) }
         var calm = [Item(key: "roas", text: "ROAS " + Format.ratio(s.today.today?.roas), tone: .neutral, urgent: false),
                     Item(key: "spend", text: "Gasto " + Format.compactMoney(s.today.today?.spend), tone: .neutral, urgent: false)]
         // The newest sale stays in the rotation for 3 minutes.

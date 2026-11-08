@@ -55,6 +55,21 @@ enum OwnerAdjust {
         switch action { case "increase": return a.increase; case "reduce": return a.reduce; case "pause": return a.pause; case "keep": return a.keep; default: return false }
     }
     /// Same limits as the server: increase up to 1000%, reduce above 0 and below 100%.
+    /// "20", "20%", " 12,5 " → number; anything else nil.
+    static func parsePercent(_ text: String) -> Double? {
+        let t = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: "").replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, t.allSatisfy({ $0.isNumber || $0 == "." }), t.filter({ $0 == "." }).count <= 1 else { return nil }
+        return Double(t)
+    }
+    /// Why the percent cannot be sent, in the owner's words, or nil when it is fine (same rules as the server).
+    static func percentProblem(_ action: String, _ p: Double?, current: Double?) -> String? {
+        guard action == "increase" || action == "reduce" else { return nil }
+        guard let p, p.isFinite, p > 0 else { return "Digite um percentual maior que zero." }
+        if action == "increase", p > 1000 { return "Aumento vai até 1000%." }
+        if action == "reduce", p >= 100 { return "Redução precisa ser menor que 100% (para parar, use Pausar)." }
+        if let current, current > 0, newBudget(current, action: action, percent: p) == (current * 100).rounded() / 100 { return "Esse percentual não muda o orçamento em centavos." }
+        return nil
+    }
     static func validPercent(_ action: String, _ p: Double?) -> Bool {
         guard action == "increase" || action == "reduce" else { return true }
         guard let p, p.isFinite, p > 0 else { return false }

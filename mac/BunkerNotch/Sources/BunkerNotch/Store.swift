@@ -51,6 +51,8 @@ final class Store: ObservableObject {
     func dismiss(_ q: Summary.QueueItem) { ledger.dismiss(q); ledger.save() }
     func snooze(_ key: String, _ choice: AttentionLedger.Snooze) { ledger.snooze(key, until: choice.until(from: Date())); ledger.save() }
     func restore(_ key: String) { ledger.restore(key); ledger.save() }
+    /// Every dismissed and snoozed item back, with one write.
+    func restoreAll() { for k in Array(ledger.dismissed.keys) + Array(ledger.snoozed.keys) { ledger.restore(k) }; ledger.save() }
     func isQuiet(_ q: Summary.QueueItem) -> Bool { ledger.isQuiet(q) }
     var approvalsQuiet: Bool { ledger.isQuiet(key: AttentionLedger.approvalsKey) }
 
@@ -123,16 +125,21 @@ final class Store: ObservableObject {
         guard let token = Credential.importIfNeeded() else {
             error = "Credencial do app não encontrada nas Chaves."; return
         }
+        // Each read carries a generation: a slower answer for a previous project (or an older read) never
+        // overwrites the newer one. Only the newest read updates the state, the failure count and the timer.
+        refreshGeneration &+= 1
+        let generation = refreshGeneration, asked = project
         loading = true
         var ok = false
-        defer { loading = false; failures = ok ? 0 : failures + 1; schedule() }
+        defer { if generation == refreshGeneration { loading = false; failures = ok ? 0 : failures + 1; schedule() } }
         var components = URLComponents(url: Store.base.appendingPathComponent("api/companion"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "project", value: project)]
+        components.queryItems = [URLQueryItem(name: "project", value: asked)]
         var request = URLRequest(url: components.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
+            guard generation == refreshGeneration, asked == project else { return }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
                 if status == 503, summary == nil || preparing { preparing = true; error = nil; ok = true; return }
@@ -148,9 +155,11 @@ final class Store: ObservableObject {
             lastFetch = Date()
             ok = true
         } catch {
+            guard generation == refreshGeneration else { return }
             self.error = "Sem conexão com o Bunker. A última leitura foi mantida."
         }
     }
+    private var refreshGeneration = 0
 
     // MARK: - Owner adjustments (Touch ID). Reads use the read-only credential; every write is signed on this Mac.
 

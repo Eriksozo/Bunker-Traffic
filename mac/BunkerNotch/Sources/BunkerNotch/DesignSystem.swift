@@ -147,3 +147,20 @@ struct ActionButton: View {
         .buttonStyle(.plain).help(help)
     }
 }
+
+/// Text input on the island: same surface, radius and hairline as the cards (the system rounded border reads
+/// as a light box on black). Focus brightens the stroke.
+struct IslandFieldStyle: TextFieldStyle {
+    @FocusState private var focused: Bool
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .textFieldStyle(.plain)
+            .font(DS.Font.body)
+            .foregroundStyle(DS.Color.ink)
+            .focused($focused)
+            .padding(.horizontal, DS.Space.s).padding(.vertical, 6)
+            .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous).stroke(focused ? DS.Color.accent.opacity(0.8) : DS.Color.stroke, lineWidth: 1))
+    }
+}
+extension TextFieldStyle where Self == IslandFieldStyle { static var island: IslandFieldStyle { IslandFieldStyle() } }
