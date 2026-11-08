@@ -19,7 +19,7 @@ import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
-import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy,first24hWatch,first24hSummary} from '../lib/autonomy-shadow.mjs';
+import {evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
@@ -96,7 +96,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now,meta});
    if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;
   }
-  const merged=shadowOutcomes(mergeShadow(prior,decisions,{now,day:day||new Date(now).toISOString().slice(0,10)}),events);
+  // Each decision is graded by the real next day once the closed windows cover it (assertiveness, read-only).
+  const merged=shadowGrades(shadowOutcomes(mergeShadow(prior,decisions,{now,day:day||new Date(now).toISOString().slice(0,10)}),events),state.snapshots);
   const keep=new Set(merged.map((e:any)=>'shadow:'+e.id)),stale=prior.map((e:any)=>'shadow:'+e.id).filter((k:string)=>!keep.has(k));
   const before=new Map(prior.map((e:any)=>[e.id,JSON.stringify(e)]));
   const entries=merged.filter((e:any)=>before.get(e.id)!==JSON.stringify(e)).map((e:any)=>['shadow:'+e.id,e] as [string,any]);
@@ -209,8 +210,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
    rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
-  const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},board=projectBoard(withAuthors,now);
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:shadowDay}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},live:any=this.liveItems||[],board=projectBoard(withAuthors,now,{live:live as never[]});
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[]}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:shadowDay}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
  }
  private async assertEnabled(){if(!(await this.setting()).enabled){const error:any=new Error('CLOUD_EXECUTOR_PAUSED');error.code='CLOUD_EXECUTOR_PAUSED';throw error;}}

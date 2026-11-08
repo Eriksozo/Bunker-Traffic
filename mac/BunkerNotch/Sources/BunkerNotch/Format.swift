@@ -205,6 +205,12 @@ enum Format {
         let pct = b > 0 ? Int(((a - b) / b * 100).rounded()) : 0
         return "\(pct > 0 ? "+" : "")\(pct)% · \(number(b)) → \(number(a)) \(currency)".trimmingCharacters(in: .whitespaces)
     }
+    /// "Placar 7 dias: acertou 9 de 14 (64%) · 3 cortes em vencedores"
+    static func shadowScore(_ sc: Summary.ShadowScorecard) -> String {
+        let pct = sc.graded > 0 ? Int((Double(sc.right) / Double(sc.graded) * 100).rounded()) : 0
+        let cuts = sc.winnersCut > 0 ? " · " + count(sc.winnersCut, "corte em vencedor", "cortes em vencedores") : ""
+        return "Placar \(sc.days ?? 7) dias: acertou \(sc.right) de \(sc.graded) (\(pct)%)" + cuts
+    }
     static func shadowOutcome(_ item: Summary.ShadowItem) -> String {
         if let m = item.manager { let who = m.actor ?? "gestor"; let mins = m.minutesAfter ?? 0; return mins > 0 ? "\(who) fez \(mins) min depois" : "\(who) fez antes" }
         return item.wouldExecute == true ? "executaria" : "bloqueada"

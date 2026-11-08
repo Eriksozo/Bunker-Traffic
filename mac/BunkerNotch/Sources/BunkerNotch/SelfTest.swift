@@ -125,6 +125,11 @@ enum SelfTest {
         check(receiptLine("null", "80")?.hasPrefix("Orçamento") == true, #line)
         let panelRect = CGRect(x: 500, y: 1000, width: 600, height: 80)
         check(NotchHover.near(CGPoint(x: 800, y: 1050), panel: panelRect) && NotchHover.near(CGPoint(x: 460, y: 960), panel: panelRect) && !NotchHover.near(CGPoint(x: 800, y: 500), panel: panelRect), #line)
+        let scJSON = #"{"day":"2026-11-08","total":1,"byRule":{},"recent":[],"scorecard":{"days":7,"graded":14,"right":9,"wrong":5,"winnersCut":3,"stopped":2}}"#
+        if let sh = try? JSONDecoder().decode(Summary.Shadow.self, from: Data(scJSON.utf8)), let sc = sh.scorecard {
+            check(Format.shadowScore(sc) == "Placar 7 dias: acertou 9 de 14 (64%) · 3 cortes em vencedores", #line)
+        } else { check(false, #line) }
+        check((try? JSONDecoder().decode(Summary.Shadow.self, from: Data(#"{"day":null,"total":0,"byRule":{},"recent":[]}"#.utf8)))?.scorecard == nil, #line)
         check(Format.money(Double.nan) == "N/D" && Format.exactMoney(nil) == "N/D" && Format.compactMoney(.infinity) == "N/D", #line)
     }
 

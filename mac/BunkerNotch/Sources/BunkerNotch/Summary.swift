@@ -96,7 +96,12 @@ struct Summary: Decodable, Equatable {
         let before: [String: JSONValue]?; let after: [String: JSONValue]?
         let wouldExecute: Bool?; let blockedBy: [String]?; let manager: ShadowManager?
     }
-    struct Shadow: Decodable, Equatable { let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem] }
+    struct Shadow: Decodable, Equatable {
+        let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem]
+        /// Assertiveness over the retained days (lib/autonomy-shadow.mjs shadowGrades): graded by the real next day.
+        var scorecard: ShadowScorecard? = nil
+    }
+    struct ShadowScorecard: Decodable, Equatable { let days: Int?; let graded: Int; let right: Int; let wrong: Int; let winnersCut: Int; let stopped: Int? }
     /// New campaigns in their first 24h (lib/first-24h.mjs): scheduled, first day and 2nd day against the owner's ceiling.
     let first24h: First24h?
     struct First24hCounts: Decodable, Equatable { let scheduled: Int; let firstDay: Int; let secondDay: Int; let attention: Int }

@@ -116,7 +116,8 @@ test('Context remains a diagnostic on cards and does not create opinions, choice
 });
 
 test('A protected test keeps its delivery safeguard and context never sets a new limit',()=>{
- const state=fixture({row:{name:'[CBO] [TESTE] novo criativo'},config:{dailyCap:null,lossCap:null}}),before=structuredClone(state),signal=candidates(state,project)[0];
+ // A known delivery start inside the test window: with closed-window spend and no start the protection no longer applies (Malva never sends the start).
+ const state=fixture({row:{name:'[CBO] [TESTE] novo criativo',deliveryStartedAt:date(now-3600000)},config:{dailyCap:null,lossCap:null}}),before=structuredClone(state),signal=candidates(state,project)[0];
  assert.equal(signal.decision,'Teste protegido');
  assert.equal(signal.context.kind,'mixed-return');
  assert.equal(signal.context.automaticAction,false);

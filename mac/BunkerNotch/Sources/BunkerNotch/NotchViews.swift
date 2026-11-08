@@ -663,6 +663,11 @@ struct NowTab: View {
             if let sh = s.shadow, sh.total > 0 {
                 let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
                 SectionHeader(title: "Sombra do Bunk · hoje", detail: "\(would) executaria · \(first) antes do gestor · não executa nada")
+                if let sc = sh.scorecard, sc.graded > 0 {
+                    // Did the would-be action fit what happened the next day? (nothing was executed)
+                    Text(Format.shadowScore(sc)).font(DS.Font.caption).foregroundStyle(sc.right * 10 >= sc.graded * 6 ? DS.Color.good : DS.Color.warn)
+                        .help("Cada decisão da sombra é conferida pelo resultado real do dia seguinte: corte acerta se o dia seguinte deu prejuízo; aumento acerta se deu lucro. Campanha que parou não entra.")
+                }
                 VStack(spacing: 2) {
                     ForEach(sh.recent.prefix(5)) { item in
                         ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),
