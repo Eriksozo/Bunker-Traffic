@@ -72,6 +72,12 @@ enum SelfTest {
             check(Format.shadowOutcome(sh.recent[0]) == "Gestor fez 40 min depois", #line)
             check(Format.shadowChange(sh.recent[1]) == "-20% · 100 → 80 USD", #line)
             check(Format.shadowOutcome(sh.recent[1]) == "bloqueada", #line)
+            check(sh.recent[0].owner == nil, #line)
+        } else { check(false, #line) }
+        // The owner's own pause through the Bunker reads as done by the owner, ahead of any manager.
+        let ownJSON = #"{"rule":"test-no-sale","action":"status","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"manager":{"actor":"Gestor","minutesAfter":5},"owner":{"actor":"Bunker · aprovado por você","at":"2026-11-08T14:28:46.000Z","minutesAfter":30}}"#
+        if let own = try? JSONDecoder().decode(Summary.ShadowItem.self, from: Data(ownJSON.utf8)) {
+            check(Format.shadowOutcome(own) == "pausada por você", #line)
         } else { check(false, #line) }
         let f24JSON = #"{"ceiling":110,"counts":{"scheduled":1,"firstDay":2,"secondDay":0,"attention":1},"items":[{"projectName":"P","account":"A","adAccountId":"a","objectId":"1","campaign":"07/11 - [PRE]","stage":"first-day","stageLabel":"Primeiras 24h","level":"pause","spend":100,"checkouts":1,"limit":110,"pauseAt":99,"reason":"x","awaitingDelivery":false},{"campaign":"07/11 - [TESTE]","stage":"first-day","level":"sold","spend":80,"checkouts":3,"limit":null}],"scheduled":[{"campaign":"08/11 - [PRE]","project":"P","account":"A","startsOn":"08/11"}]}"#
         if let f = try? JSONDecoder().decode(Summary.First24h.self, from: Data(f24JSON.utf8)) {

@@ -50,3 +50,19 @@ test('Queue: a Malva cache older than the confirmed pause does not undo it; PAUS
  const q=actionQueue([{id:'c',row:{...rows()[0],status:'PAUSED'},windows:{today:m(100,0)}}]);
  assert.equal(q.considered,0,'status PAUSED with effectiveStatus still ACTIVE stays out of the queue');
 });
+
+test('Shadow: the owner pause sent through the Bunker reads as done by the owner, counters unchanged',async()=>{
+ const {shadowOutcomes,shadowSummary}=await import('../lib/autonomy-shadow.mjs');
+ const entry={id:'x',day:'2026-11-08',rule:'test-no-sale',project:'p',adAccountId:'acc1',objectId:'b2',action:'status',before:{status:'ACTIVE'},after:{status:'PAUSED'},firstAt:iso(now-3600000),firstWouldExecuteAt:iso(now-3600000)};
+ const mine={project:'p',adAccountId:'acc1',objectId:'b2',action:'pause',actor:'Bunker · aprovado por você',at:iso(now-1800000),origin:'bunker'};
+ const [read]=shadowOutcomes([entry],[mine]);
+ assert.equal(read.manager,null,'a Bunker execution is not a manager reaction');
+ assert.equal(read.owner.minutesAfter,30);
+ const s=shadowSummary([read],{day:'2026-11-08'});
+ assert.equal(s.recent[0].owner.minutesAfter,30);
+ assert.equal(s.byRule['test-no-sale'].managerDid,0);assert.equal(s.byRule['test-no-sale'].bunkerFirst,0);
+ // Kept after the event ages out of the rolling window; another object or action does not count.
+ assert.deepEqual(shadowOutcomes([read],[])[0].owner,read.owner);
+ assert.equal(shadowOutcomes([entry],[{...mine,objectId:'other'}])[0].owner,null);
+ assert.equal(shadowOutcomes([entry],[{...mine,action:'reduce'}])[0].owner,null);
+});

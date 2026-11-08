@@ -95,6 +95,8 @@ struct Summary: Decodable, Equatable {
         let action: String?; let reason: String?; let firstAt: String?
         let before: [String: JSONValue]?; let after: [String: JSONValue]?
         let wouldExecute: Bool?; let blockedBy: [String]?; let manager: ShadowManager?
+        /// The same action the owner sent through the Bunker (notch order or approved proposal), when it happened.
+        let owner: ShadowManager?
     }
     struct Shadow: Decodable, Equatable {
         let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem]

@@ -212,6 +212,7 @@ enum Format {
         return "Placar \(sc.days ?? 7) dias: acertou \(sc.right) de \(sc.graded) (\(pct)%)" + cuts
     }
     static func shadowOutcome(_ item: Summary.ShadowItem) -> String {
+        if item.owner != nil { return item.action == "status" ? (item.after?["status"]?.text == "PAUSED" ? "pausada por você" : "ativada por você") : "ajustada por você" }
         if let m = item.manager { let who = m.actor ?? "gestor"; let mins = m.minutesAfter ?? 0; return mins > 0 ? "\(who) fez \(mins) min depois" : "\(who) fez antes" }
         return item.wouldExecute == true ? "executaria" : "bloqueada"
     }

@@ -674,7 +674,7 @@ struct NowTab: View {
                 }
                 VStack(spacing: 2) {
                     ForEach(sh.recent.prefix(5)) { item in
-                        ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),
+                        ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil || item.owner != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),
                                 title: item.campaign ?? "Campanha",
                                 subtitle: Format.shadowChange(item) + " · " + (item.ruleLabel ?? item.rule ?? ""),
                                 tag: Format.queueTag(project: showProject ? item.project : nil, account: item.account),
