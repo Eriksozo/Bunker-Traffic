@@ -287,7 +287,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    if(this.freshChanges.length||ran){await this.storeCompanion(central.state,await this.storedShadow()).catch(()=>{});await this.bumpPulse();this.freshChanges=[];await this.publishOrders(central.state);}
   }
   const liveState=await this.syncLive(reads,true).catch(()=>null);
-  if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.publishOrders(liveState);await this.bumpLive(reads);}
+  // The "Primeiras 24h" board is rebuilt from this read before the notch summary that embeds it (owner report of 08/11:
+  // test campaigns paused from the notch stayed on that board until the next heavy pulse). Pure: no model, no provider.
+  if(liveState){await this.storeFirst24h(liveState).catch(()=>{});await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.publishOrders(liveState);await this.bumpLive(reads);}
  }
  async fetch(request:Request){
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}

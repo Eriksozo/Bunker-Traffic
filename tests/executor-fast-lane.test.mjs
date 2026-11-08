@@ -20,7 +20,7 @@ function executor({steps=[],fastSteps=[],enabled=true,policy={}}={}){
  e.engine=()=>({step:async opts=>{calls.push(opts?.only?'fast:'+opts.only.join('/'):'heavy');if(opts?.skip)assert.deepEqual([...opts.skip],['verify','followUp','execution'],'the heavy pulse leaves order work to the fast lane');return (opts?.only?fastSteps:steps).shift()||{kind:'idle'};}});
  e.watchChanges=async()=>{e.freshChanges=[];return [];};e.read=async()=>({state:{paused:false}});e.storedShadow=async()=>[];
  e.syncLive=async(first=[],only=false)=>{calls.push('live:'+(only?first.join(','):'rotation'));return {paused:false};};
- e.syncAttribution=async()=>calls.push('authors');e.storeCompanion=async()=>calls.push('notch');e.syncAccounts=async()=>{};e.syncMetaLive=async()=>{};e.storeShadow=async()=>[];e.storeFirst24h=async()=>{};
+ e.syncAttribution=async()=>calls.push('authors');e.storeCompanion=async()=>calls.push('notch');e.syncAccounts=async()=>{};e.syncMetaLive=async()=>{};e.storeShadow=async()=>[];e.storeFirst24h=async()=>calls.push('first24h');
  const call=async body=>(await e.fetch(new Request('https://bunker-internal/control',{method:'POST',body:JSON.stringify(body)}))).json();
  return {e,calls,values,alarms,call};
 }
@@ -36,7 +36,7 @@ test('a wake only marks a flag and brings the alarm forward in the same object',
 test('between pulses a woken order runs only order work, then the touched project is reread and the pulse moves',async()=>{
  const {e,calls,values,call}=executor({fastSteps:[{kind:'execution',project:'proj-a',status:'confirmed'}]});values.set('lastHeavyAt',Date.now());
  await call({action:'wake',order:true,projects:['proj-a']});await e.alarm();
- assert.deepEqual(calls,['fast:verify/followUp/execution','fast:verify/followUp/execution','notch','live:proj-a','notch']);
+ assert.deepEqual(calls,['fast:verify/followUp/execution','fast:verify/followUp/execution','notch','live:proj-a','first24h','notch'],'the first-24h board is rebuilt from the reread before the notch summary');
  assert.equal(values.get('wake'),undefined,'the flag is consumed');
  assert.equal(values.get('runtime').history[0].lane,'fast');assert.equal(values.get('runtime').history[0].kind,'execution');
  assert.equal(values.get('syncPulse').last.kind,'live');
@@ -65,7 +65,7 @@ test('central writes of the object never overlap',async()=>{
 test('with nothing new the fast lane rereads only the stalest live project, once per stale window',async()=>{
  const {e,calls}=executor();e.ctx.storage.put('lastHeavyAt',Date.now());
  const old=Date.now()-changeWatch.changeWatchPolicy.liveStaleMs-1000;e.liveReadAt={'proj-new':Date.now(),'proj-old':old};
- await e.alarm();assert.deepEqual(calls,['fast:verify/followUp/execution','live:proj-old','notch'],'the first look also sweeps for orders approved elsewhere');
+ await e.alarm();assert.deepEqual(calls,['fast:verify/followUp/execution','live:proj-old','first24h','notch'],'the first look also sweeps for orders approved elsewhere');
  calls.length=0;e.lastWatchAt=0;await e.alarm();assert.deepEqual(calls,[],'not again until it is stale again, and the order sweep waits a minute');
 });
 test('busy projects never starve a quiet one: the stalest joins the reads of the edited projects',async()=>{
