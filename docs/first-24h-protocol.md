@@ -6,7 +6,7 @@ Código: `lib/first-24h.mjs` (identificação e teto), `lib/autonomy-shadow.mjs`
 
 ## Identificar
 
-A Malva hoje não envia início programado nem início de entrega (`startAt`/`deliveryStartedAt` vazios em todas as campanhas lidas em 07/11). A identificação usa o que existe, nesta ordem:
+A Malva não envia início programado nem início de entrega (`startAt`/`deliveryStartedAt` vazios em todas as campanhas lidas em 07/11). Desde 08/11 a leitura Meta ao vivo (`docs/connections.md`) traz `start_time`/`created_time`: com ela, a contagem das 24h começa no início real (o mais tarde dos dois), e uma campanha renomeada com início antigo não vira nova. Sem leitura Meta recente, vale a dedução pelo nome e pelo histórico:
 
 | Estágio | Quando |
 | --- | --- |
@@ -49,6 +49,7 @@ A regra "Pausar campanha sem entrega" reconhecia só datas de hoje e ontem. Camp
 
 ## Limites declarados
 
-- Sem início real de entrega, "24h" é aproximado pelo dia do primeiro gasto e pela data do nome; uma campanha que começou às 22h de ontem é tratada como 2º dia hoje, com o gasto somado desde o início.
+- Com a leitura Meta, as 24h contam do início programado/criação; a Meta não informa o primeiro instante de entrega, então uma campanha aprovada com atraso tem a contagem antecipada. Sem a leitura Meta, "24h" é aproximado pelo dia do primeiro gasto e pela data do nome.
+- Gasto ao vivo da Meta: só quando a conta está no mesmo dia local do projeto e a taxa de conversão da campanha é conhecida.
 - Sem detalhe por hora e com atribuição que pode atrasar, um IC ou venda pode chegar depois da leitura.
 - Nada aqui muda cadência, fuso, pausa, metas ou limites do executor.

@@ -187,7 +187,8 @@ enum Format {
         if item.awaitingDelivery == true { return stage + " · aguardando entrega" }
         let ic = item.checkouts.map { "\($0) IC" } ?? "IC N/D"
         let cap = item.level == "sold" ? "" : item.limit.map { " · teto " + money($0) } ?? ""
-        return stage + " · " + ic + cap
+        let age = item.ageHours.map { $0 < 1 ? " · há menos de 1h" : " · há \(Int($0))h" } ?? ""
+        return stage + age + " · " + ic + cap + (item.metaLive == true ? " · Meta ao vivo" : "")
     }
     static func queueTag(project: String?, account: String?) -> String? {
         let parts = [project, account].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }

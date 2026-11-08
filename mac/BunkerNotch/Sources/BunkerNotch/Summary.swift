@@ -97,6 +97,8 @@ struct Summary: Decodable, Equatable {
         /// waiting · watch · alert · pause · over · sold
         let level: String?
         let spend: Double?; let checkouts: Int?; let limit: Double?; let pauseAt: Double?; let reason: String?; let awaitingDelivery: Bool?
+        /// Hours since the real start (Meta schedule) when known; `metaLive` = spend/IC read straight from Meta.
+        var ageHours: Double? = nil; var metaLive: Bool? = nil
     }
     struct First24hScheduled: Decodable, Equatable, Identifiable {
         var id: String { [project ?? "", account ?? "", campaign ?? ""].joined(separator: "|") }

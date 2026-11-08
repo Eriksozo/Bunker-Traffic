@@ -75,6 +75,8 @@ enum SelfTest {
         if let f = try? JSONDecoder().decode(Summary.First24h.self, from: Data(f24JSON.utf8)) {
             check(Format.first24hLevel(f.items[0].level) == "pausaria", #line)
             check(Format.first24hLine(f.items[1]) == "1º dia · 3 IC", #line)
+            let aged = Summary.First24hItem(projectName: nil, account: nil, adAccountId: nil, objectId: nil, campaign: "x", stage: "first-day", stageLabel: nil, level: "alert", spend: 80, checkouts: 1, limit: 110, pauseAt: 99, reason: nil, awaitingDelivery: false, ageHours: 5.4, metaLive: true)
+            check(Format.first24hLine(aged) == "1º dia · há 5h · 1 IC · teto " + Format.money(110) + " · Meta ao vivo", #line)
             check(f.scheduled[0].startsOn == "08/11", #line)
         } else { check(false, #line) }
         check(Format.who(s.activity.recent[1]) == "Pausas · autor não informado", #line)

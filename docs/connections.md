@@ -42,6 +42,16 @@ Falha de rede, revisão inválida ou regressiva e sessão expirada não são tra
 
 Em conflito de edição, a interface tenta reler a central e pede que o operador confira os novos valores. A gravação não é reenviada automaticamente. Uma escolha só sai da fila após sua confirmação exata no histórico; uma execução financeira continua exigindo a autorização e a verificação próprias.
 
+## Leitura Meta ao vivo das campanhas novas
+
+Decisão do proprietário em 08/11/2026: o secret `Meta_Acess_Token`, cadastrado por ele no Supabase, alimenta a Edge Function `meta-read` (autenticação de serviço, como `orbita-mcp`). Agentes não leem, imprimem nem copiam o valor.
+
+- Somente `GET` na Graph API (`?ids=…`, até 50 por pedido e 200 por leitura): `status`, `effective_status`, `start_time`, `created_time`, `stop_time` e os insights de hoje (gasto, impressões, IC e compras, pegando o maior entre os tipos de ação equivalentes, sem somar).
+- O executor (`syncMetaLive`) lê a cada 2 minutos só as campanhas datadas de 2 dias atrás até 14 à frente, depois testes e campanhas sem data no nome. Grava `metaLive` no próprio objeto, fora da central e do Supabase.
+- Uso: só a lógica das primeiras 24h (`overlayMetaLive`). O início real decide programada/1º dia/2º dia. O gasto da Meta só substitui o da Malva quando está à frente, no mesmo dia local do projeto, convertido pela taxa da própria campanha. O IC fica com o maior valor entre as duas fontes; compra vista na Meta tira a campanha do teto. Leitura com mais de 10 minutos é ignorada.
+- Pedidos, receita, ROI e as demais regras continuam com a Malva. Erros viram códigos fixos (`META_190`, `META_HTTP_400`…). Falha mantém a última leitura até ela vencer.
+- Ações continuam pela Malva, com proposta aprovada pelo dono.
+
 ## Token de leitura da Meta para o painel de contas
 
 Decisão do proprietário em 07/11/2026: o painel "Contas de anúncio" mostra o limite de gastos diário que a Meta define para cada conta (`adtrust_dsl`), que o Malva não fornece. O executor lê `/me/adaccounts` com um token próprio, **somente leitura** (`ads_read`), no secret `META_ACCOUNTS_TOKEN` do Worker. O token é criado e cadastrado pelo proprietário; agentes não leem, imprimem nem copiam o valor.

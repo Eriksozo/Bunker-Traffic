@@ -20,6 +20,8 @@ import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy,first24hWatch,first24hSummary} from '../lib/autonomy-shadow.mjs';
+import {metaLiveCandidates} from '../lib/first-24h.mjs';
+import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
@@ -85,11 +87,11 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let policy:any={};try{policy=JSON.parse(this.env.AUTONOMY_SHADOW_POLICY||'{}');}catch{policy={};}
   const now=Date.now(),list=await this.ctx.storage.list<any>({prefix:'attr:'}),withAuthors={...state,changeAttributions:usableAttributions([...list.values()])};
   const events=activityLog(withAuthors,{since:now-26*3600000,now});
-  const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
+  const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()],meta=await this.ctx.storage.get<any>('metaLive');
   let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={};
   for(const project of Object.keys(state.config||{})){
    const params=policy?.projects?.[project];if(!params||params.enabled===false)continue;
-   const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now});
+   const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now,meta});
    if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;
   }
   const merged=shadowOutcomes(mergeShadow(prior,decisions,{now,day:day||new Date(now).toISOString().slice(0,10)}),events);
@@ -108,8 +110,29 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async storeFirst24h(state:any){
   if(!state||state.paused)return;
   let policy:any={};try{policy=JSON.parse(this.env.AUTONOMY_SHADOW_POLICY||'{}');}catch{policy={};}
-  const now=Date.now(),boards=Object.keys(state.config||{}).map(project=>first24hWatch(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,params:policy?.projects?.[project]||{},now})).filter(Boolean);
+  const meta=await this.ctx.storage.get<any>('metaLive');
+  const now=Date.now(),boards=Object.keys(state.config||{}).map(project=>first24hWatch(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,params:policy?.projects?.[project]||{},now,meta})).filter(Boolean);
   await this.ctx.storage.put('first24h',{at:new Date(now).toISOString(),boards});
+ }
+ /**
+  * Live Meta read (docs/connections.md): schedule and today's delivery of new/scheduled campaigns, read-only,
+  * through the `meta-read` Edge Function (the token never leaves Supabase). Every 2 minutes; stored here only.
+  * A failure keeps the last read, which expires for the first-24h logic after 10 minutes.
+  */
+ private async syncMetaLive(state:any){
+  if(!state||state.paused)return;
+  const now=Date.now(),prior=await this.ctx.storage.get<any>('metaLive'),last=Math.max(Date.parse(prior?.at||'')||0,Date.parse(prior?.failedAt||'')||0);
+  if(now-last<metaLivePolicy.refreshMs)return;
+  const ids=metaLiveCandidates(this.liveItems||[],{now,limit:metaLivePolicy.maxIds});
+  if(!ids.length){await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:new Date(now).toISOString(),items:{},requested:0,read:0,errors:[]});return;}
+  try{
+   const r:any=await this.db().rpc('metaRead',{ids});
+   const items=Object.fromEntries((Array.isArray(r?.items)?r.items:[]).filter((i:any)=>typeof i?.id==='string').map((i:any)=>[i.id,i]));
+   await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:typeof r?.at==='string'?r.at:new Date(now).toISOString(),items,requested:ids.length,read:Object.keys(items).length,errors:Array.isArray(r?.errors)?r.errors.slice(0,10):[]});
+  }catch(e:any){
+   const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_READ_FAILED';
+   await this.ctx.storage.put('metaLive',{...(prior||{version:metaLivePolicy.version,items:{}}),failedAt:new Date(now).toISOString(),error:code});
+  }
  }
  /**
   * Ad-account panel (docs/connections.md): Malva accounts per configured project plus the daily spending
@@ -196,8 +219,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const status=await this.ctx.storage.get<any>('shadowStatus'),all=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
    const day=typeof input.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.day)?input.day:status?.day;
    const entries=all.filter((e:any)=>!day||e.day===day).sort((a:any,b:any)=>Date.parse(a.firstAt)-Date.parse(b.firstAt)).slice(0,300).map((e:any)=>({rule:e.rule,project:e.projectName,account:e.accountName,adAccountId:e.adAccountId,objectId:e.objectId,campaign:e.name,action:e.action,before:e.before,after:e.after,reason:e.reason,launchDay:e.launchDay,newCampaign:e.newCampaign||null,metrics:e.metrics,firstAt:e.firstAt,firstWouldExecuteAt:e.firstWouldExecuteAt,lastAt:e.lastAt,blockedBy:e.blockedBy,manager:e.manager}));
-   const first24h=await this.ctx.storage.get<any>('first24h');
-   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null});
+   const first24h=await this.ctx.storage.get<any>('first24h'),meta=await this.ctx.storage.get<any>('metaLive');
+   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
   }
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse');return Response.json({...runtime,attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
@@ -249,6 +272,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
    // The account panel is optional: a failure keeps the last panel and never affects the executor.
    if(liveState&&(await this.setting()).enabled)await this.syncAccounts(liveState).catch(()=>{});
+   // The live Meta read is optional: a failure keeps the last read and never affects the executor.
+   if(liveState&&(await this.setting()).enabled)await this.syncMetaLive(liveState).catch(()=>{});
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
    const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    // The first-24h board is a reading aid: a failure keeps the last board and never affects the executor.
