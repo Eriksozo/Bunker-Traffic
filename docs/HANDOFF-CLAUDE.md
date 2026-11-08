@@ -650,3 +650,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Causa:** no 2º dia a regra `test-no-sale` somava ontem + hoje; a venda de ontem deixava a campanha "com venda" o dia todo. A regra de dia ruim exige histórico de 3 dias e não avalia campanhas novas.
 - **Correção:** `launchGuard` em `lib/autonomy-shadow.mjs` (sombra e quadro "Primeiras 24h"): quando a venda é só de antes de hoje e hoje há gasto sem venda, o gasto de hoje é conferido sozinho contra o mesmo teto (R$110 com 0–1 IC; limiar privado do projeto com 2+ IC; sem limiar, registra bloqueado a partir de R$110). Motivo exibido: "vendeu ontem, hoje sem venda". Continua só sombra: nada executa.
 - **Limites:** o limiar de 2+ IC depende de `pauseTestMinSpend` na política privada de cada projeto (não lido aqui); sem ele a decisão aparece bloqueada. Campanha com venda hoje e ROI baixo segue fora das regras; decidir com o dono se vira regra.
+
+## Avisos do Bunk no iPhone (registro escrito às 2026-11-08 17:49:30 UTC por `date -u`)
+
+- **Pedido do dono:** "uma forma de o Bunk conseguir me avisar no meu iphone". Escolhas dele: Pushover; perda, proposta aguardando, ordem confirmada/falhou e ritmo do orçamento.
+- **Mudança:** `lib/phone-alerts.mjs` (novo) e `storeCompanion` em `worker/cloud-executor.ts` enviam esses avisos depois de gravar o resumo do notch, uma execução por vez, com memória `phoneAlerts` no DO. Status em `phone` no `status` do executor. Detalhes e passo a passo em `docs/connections.md` ("Avisos no iPhone pelo Pushover").
+- **Pendente (dono):** instalar o Pushover, criar a aplicação e cadastrar `PUSHOVER_TOKEN` e `PUSHOVER_USER` pelo wrangler. Sem eles o envio fica desligado. Depois: conferir `phone.primed:true` e o primeiro aviso real no iPhone.

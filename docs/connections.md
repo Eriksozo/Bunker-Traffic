@@ -110,3 +110,18 @@ Configuração, feita pelo dono (o segredo não aparece na tela):
    `s=$(openssl rand -hex 32); printf %s "$s" | npx wrangler secret put MALVA_WEBHOOK_SECRET --name bunker-traffic; printf %s "https://bunker-traffic.erik-iplou.workers.dev/api/webhooks/malva/$s/" | pbcopy; unset s`
    Cadastrar o segredo cria uma versão nova do Worker: siga o protocolo de publicador único.
 2. Na Malva, em Integrações › Webhooks de cada projeto Meta: crie um webhook no formato Malva para os assuntos de venda paga, colando o endereço da área de transferência e acrescentando no fim o id desse projeto na Malva. Projeto Kwai fica de fora.
+
+## Avisos no iPhone pelo Pushover (08/11/2026)
+
+Pedido do dono: o Bunk avisar no iPhone, também com o Mac desligado. O executor Cloudflare, logo depois de regravar o resumo do notch (`companion:all`), manda pelo Pushover os mesmos quatro tipos que o notch avisa: perda para revisar, proposta aguardando o dono, ordem direta confirmada/não enviada/a conferir e ritmo do orçamento (uma vez por dia do Bunker, fuso de Boa Vista, por projeto e tipo). Código: `lib/phone-alerts.mjs`, testes em `tests/phone-alerts.test.mjs`. Não cria agendamento novo: roda dentro do pulso que já existe.
+
+- Só aviso: nunca aprova, executa nem leva comando. Tocar abre a interface privada do Bunker, onde as regras de aprovação continuam as mesmas.
+- Primeira leitura só registra o que já existe (nada antigo toca). Perda toca uma vez e de novo só quando cresce 1,5×. No máximo 5 mensagens por leitura; o resto vai na seguinte. Falha 429/5xx/rede fica pendente para a próxima leitura; recusa 4xx (token ou usuário errado) não é repetida.
+- Vendas e ajustes de gestores não vão para o iPhone (escolha do dono). O "Silenciar avisos" do Mac não vale aqui: use o silêncio/horário de descanso do próprio app Pushover.
+- O texto (projeto, campanha, valores) passa pelos servidores do Pushover. Nenhum dado do comprador entra.
+- Desligado sem os dois segredos `PUSHOVER_TOKEN` (token da aplicação) e `PUSHOVER_USER` (user key). Conferência: `GET /api/executor` (ou o status MCP) devolve `phone` com `configured`, `primed`, `sent`, `lastSentAt` e `lastError`, sem os valores.
+
+Configuração, feita pelo dono (o valor só é digitado no prompt oculto do wrangler, nunca no chat):
+1. Instalar o app Pushover no iPhone e entrar; a "User Key" aparece na tela inicial de pushover.net.
+2. Em pushover.net › "Create an Application/API Token", criar a aplicação "Bunker" e copiar o "API Token".
+3. Na pasta do projeto: `npx wrangler secret put PUSHOVER_TOKEN --name bunker-traffic` e depois `npx wrangler secret put PUSHOVER_USER --name bunker-traffic`. Cada segredo cria uma versão nova do Worker: siga o protocolo de publicador único.
