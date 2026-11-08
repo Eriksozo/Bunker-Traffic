@@ -30,3 +30,11 @@ test('Context reduction regenerates memory references and rejects references fro
  const c={project:'p',role:'traffic',campaigns:[],config:{notes:'y'.repeat(7000)},agentMemory:{role:'traffic',episodes:[0,1,2].map(i=>({messageId:'episode-'+i,project:'p',agentId:'traffic',reflection:{lesson:'x'.repeat(9000)}}))}};
  let calls=0;const packets=[];await assert.rejects(runCloudAnalyst({run:async(_m,r)=>{calls++;packets.push(JSON.parse(r.messages[1].content));if(calls===1)throw Error('maximum context length');const out=output();out.reflection.citations=[];out.memoryReview={reference:'M2',stance:'inconclusive',reason:'Não havia dados novos.',evidenceIndices:[]};return {response:out};}},'traffic',c),e=>e.code==='CLOUD_MEMORY_REVIEW_SCOPE');assert.equal(calls,2);assert.equal(packets[0].memoryReviewRequirements.options.length,3);assert.equal(packets[1].memoryReviewRequirements.options.length,1);assert.equal(c.agentMemory.episodes.length,3);
 });
+
+test('each refused confrontation says why with a fixed label, never text',()=>{
+ const label=(mutate,c=fixture(),numeric=true)=>{const out=output();mutate(out,c);try{validateMemoryReview(out,c,numeric);return null;}catch(e){assert.equal(e.code,'CLOUD_MEMORY_REVIEW_EVIDENCE');return e.memoryReviewFailure;}};
+ assert.deepEqual(label(o=>o.memoryReview.evidenceIndices=[5]),{reason:'index_invalid',index:0});
+ assert.deepEqual(label(o=>o.memoryReview.evidenceIndices=[0,0]),{reason:'duplicate_reference',index:1});
+ assert.deepEqual(label(o=>o.memoryReview.evidenceIndices=[]),{reason:'numeric_evidence_required'});
+ assert.deepEqual(label((o,c)=>{c.campaigns=[];o.reflection.citations=[];o.memoryReview.evidenceIndices=[];},fixture(),false),{reason:'inconclusive_required'});
+});
