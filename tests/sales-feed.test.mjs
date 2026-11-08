@@ -78,3 +78,26 @@ test('Codex review: dedupe is per project + order id', async () => {
  assert.equal(addSale(list,{amount:1,project:'proj-aaaa',orderRef:'r'}).added,false);
  assert.equal(addSale(list,{amount:1,project:'proj-bbbb',orderRef:'r'}).added,true);
 });
+
+test('Codex review 2: explicit negatives and contradictions win, from the envelope or from data', () => {
+ assert.equal(normalizeSale({topic:'order.paid',data:{amount:10,status:'rejected',orderId:'o'}}),null,'paid topic + rejected status');
+ assert.equal(normalizeSale({topic:'order.not_approved',data:{amount:10,orderId:'o'}}),null,'negated positive token');
+ for(const v of ['not_approved','nao_aprovado','unconfirmed','incomplete','disapproved','desaprovado','nao_pago','reprovado','rejeitado','denied','error','invalid','blocked','on_hold','reversed','partially_paid','order.payment_failed'])
+  assert.equal(paymentEvidence({topic:'order.paid',data:{status:v}}).paid,false,v);
+ assert.equal(paymentEvidence({topic:'order.not_approved'}).paid,false);
+ assert.equal(paymentEvidence({status:'rejected',data:{status:'paid'}}).paid,false,'envelope negative wins over data positive');
+ assert.equal(paymentEvidence({topic:'order.paid',data:{payment:{paid:false}}}).paid,false);
+ assert.equal(paymentEvidence({topic:'order.paid',data:{order:{status:'refused'}}}).paid,false);
+ assert.equal(paymentEvidence({topic:'sale',data:{type:'refund'}}).paid,false);
+ for(const v of ['paid','approved','order.approved','aprovado','pago','completed','concluido','confirmed','confirmado'])assert.equal(paymentEvidence({topic:v}).paid,true,v);
+});
+test('Codex review 2: projects in the envelope and in data must agree', () => {
+ const split=normalizeSale({topic:'order.paid',projectId:'project-B',data:{amount:10,orderId:'o',projectId:'project-A'}});
+ assert.equal(split.project,'ambiguous');assert.equal(bindSale(split,'project-A').error,'projeto ambíguo no pedido');
+ const envOnly=normalizeSale({topic:'order.paid',project:{id:'project-B'},data:{amount:10,orderId:'o'}});
+ assert.equal(bindSale(envOnly,'project-A').error,'projeto do pedido diferente do endereço');
+ const nested=normalizeSale({topic:'order.paid',data:{amount:10,orderId:'o',projectId:'project-A',order:{projectId:'project-C'}}});
+ assert.equal(nested.project,'ambiguous');
+ const same=normalizeSale({topic:'order.paid',projectId:'project-A',data:{amount:10,orderId:'o',project:{id:'project-A'}}});
+ assert.equal(bindSale(same,'project-A').sale.project,'project-A','the same id twice is not ambiguous');
+});
