@@ -62,3 +62,13 @@ test('The report shows in the activity log and asks the executor to re-read the 
  assert.deepEqual(pendingLiveRefresh(s,{}),[project]);
  assert.deepEqual(pendingLiveRefresh(s,{[project]:date(now+2000)}),[],'served once a newer live read succeeded');
 });
+
+test('A Malva reading whose origin synced before the report cannot call it divergent', () => {
+ const s=fixture(),r=report(s);
+ reread(s,{dailyBudget:150});const t=s.snapshots.find(x=>x.period==='today');
+ t.lastSyncAt=new Date(Date.parse(r.appliedAt)-60000).toISOString();
+ assert.equal(ownerAppliedVerification(s,r).status,'A conferir','origin not yet synced: still the old value');
+ t.lastSyncAt=null;assert.equal(ownerAppliedVerification(s,r).status,'A conferir','unknown sync stays N/D');
+ t.lastSyncAt=new Date(Date.parse(r.appliedAt)+1000).toISOString();assert.equal(ownerAppliedVerification(s,r).status,'Divergente');
+ t.lastSyncAt=null;t.rows=t.rows.map(x=>({...x,status:'PAUSED'}));assert.equal(ownerAppliedVerification(s,r).status,'Conferida','a match proves itself even without the sync clock');
+});

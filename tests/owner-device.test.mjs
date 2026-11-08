@@ -67,3 +67,20 @@ test('cards view lists only proposals waiting for the owner, scoped to the reque
  assert.equal(view.approvals[0].projectName,'John');assert.equal(view.approvals[0].after.status,'PAUSED');assert.equal(view.approvals[0].before.dailyBudget,null);
  assert.equal(companionCards(state,{project:'other'}).approvals.length,0);
 });
+test('signature envelope probes: future clock, bad padding, wrong lengths and malformed inputs all get fixed codes',async()=>{
+ const d=await device();
+ const codes=async body=>{try{await verifyOwnerDeviceRequest(body,d.publicKey);return 'ok';}catch(e){return e.code||'UNCODED:'+e.name;}};
+ assert.equal(await codes(await envelope(d,decision,{iat:Date.now()+121000})),'OWNER_DEVICE_EXPIRED','a clock far ahead is refused too');
+ assert.equal(await codes(await envelope(d,decision,{iat:Date.now()+60000})),'ok','small skew accepted');
+ assert.equal(await codes(await envelope(d,decision,{iat:1.5})),'OWNER_DEVICE_FORMAT');
+ const good=JSON.parse(await envelope(d,decision));
+ assert.equal(await codes(JSON.stringify({...good,sig:'A'})),'OWNER_DEVICE_FORMAT','invalid base64 length never escapes uncoded');
+ assert.equal(await codes(JSON.stringify({...good,sig:Buffer.alloc(65).toString('base64')})),'OWNER_DEVICE_SIGNATURE');
+ assert.equal(await codes(JSON.stringify({...good,payload:'not base64!'})),'OWNER_DEVICE_FORMAT');
+ assert.equal(await codes(JSON.stringify({...good,v:2})),'OWNER_DEVICE_FORMAT');
+ assert.equal(await codes('[]'),'OWNER_DEVICE_FORMAT');assert.equal(await codes('null'),'OWNER_DEVICE_FORMAT');
+ for(const clientId of ['short','has space here','x'.repeat(151),42])assert.equal(await codes(await envelope(d,{...decision,clientId})),'OWNER_DEVICE_FORMAT',String(clientId));
+ assert.equal(await codes(await envelope(d,[decision])),'OWNER_DEVICE_OP','an array is not one owner input');
+ const raw=Buffer.from(d.publicKey,'base64');raw[0]=2;
+ try{await verifyOwnerDeviceRequest(await envelope(d,decision),raw.toString('base64'));assert.fail('compressed key accepted');}catch(e){assert.equal(e.code,'OWNER_DEVICE_UNCONFIGURED');}
+});

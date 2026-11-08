@@ -101,3 +101,17 @@ test('Codex review 2: projects in the envelope and in data must agree', () => {
  const same=normalizeSale({topic:'order.paid',projectId:'project-A',data:{amount:10,orderId:'o',project:{id:'project-A'}}});
  assert.equal(bindSale(same,'project-A').sale.project,'project-A','the same id twice is not ambiguous');
 });
+
+test('Adversarial payloads: numeric order ids, non-ISO currency, ambiguous text amounts, future payment time', () => {
+ const t=Date.parse('2026-11-08T12:00:00Z');
+ const s=normalizeSale({topic:'order.paid',data:{amount:97,orderId:123456,currency:'reais',paidAt:'2099-01-01T00:00:00Z'}},t);
+ assert.equal(s.orderRef,'123456','numeric id kept as text');assert.equal(s.currency,null,'currency must be ISO 4217');
+ assert.equal(s.at,new Date(t).toISOString(),'future payment time is not trusted');
+ assert.equal(normalizeSale({topic:'order.paid',data:{amount:1,orderId:-1}},t).orderRef,null);
+ assert.equal(normalizeSale({topic:'order.paid',data:{amount:1,orderId:1.5}},t).orderRef,null);
+ assert.equal(normalizeSale({topic:'order.paid',data:{amount:1,currency:'usd',orderId:'o'}},t).currency,'USD');
+ for(const amount of ['1.297','1.297,00','1,297.00','R$ 297','1e3','',' ','297,0001','-10'])assert.equal(normalizeSale({topic:'order.paid',data:{amount,orderId:'o'}},t),null,JSON.stringify(amount));
+ for(const [amount,want] of [['297',297],['297,00',297],['49.9',49.9],[' 12,5 ',12.5],[1297,1297]])assert.equal(normalizeSale({topic:'order.paid',data:{amount,orderId:'o'}},t).amount,want,String(amount));
+ assert.equal(normalizeSale({topic:'order.paid',data:{amount:2e7,orderId:'o'}},t),null,'absurd amount refused');
+ assert.equal(normalizeSale({topic:'order.paid',data:{amount:10,orderId:'o',paidAt:'2026-11-08T12:04:00Z'}},t).at,'2026-11-08T12:04:00.000Z','small skew kept');
+});

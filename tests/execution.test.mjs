@@ -172,3 +172,28 @@ test('A newly disabled account cannot receive an increase or activation in prefl
  prepareExecution(f.state,{id:e.id,claimId:e.claimId,executionRef:e.executionRef,clientId:'contain',observation:f.observation(now,{accountStatus:{active:false}})},now);
  assert.equal(e.command.arguments.status,'PAUSED');
 });
+
+test('Fuzz: random interleavings of two executors never grant more than one dispatch per proposal',()=>{
+ let seed=20261108;const rnd=()=>{seed=(seed*1103515245+12345)%2147483648;return seed/2147483648;},pickOne=a=>a[Math.floor(rnd()*a.length)];
+ let totalGranted=0;
+ for(let run=0;run<250;run++){
+  const f=fixture(rnd()<0.5?'budget':'status',{validForMs:1800000});let t=now,granted=0,dispatched=false;const leases=[];
+  for(let step=0;step<40;step++){
+   t+=Math.floor(rnd()*5)*30000;const ref=pickOne(['exec-A','exec-B']),cid=ref+':'+Math.floor(rnd()*6),lease=pickOne(leases.length?leases:[null]);
+   const obs=f.observation(t-Math.floor(rnd()*3)*1000,rnd()<0.15?{dailyBudget:pickOne([100,150,120])}:{});
+   const op=pickOne(['claim','claim','prepare','prepare','submit','submit','fail','confirm']);
+   try{
+    if(op==='claim'){const e=claimExecution(f.state,{...f.args,executionRef:ref,clientId:cid},t);leases.push({id:e.id,claimId:e.claimId,executionRef:e.executionRef});}
+    else if(op==='prepare'&&lease)prepareExecution(f.state,{...lease,clientId:cid,observation:obs},t);
+    else if(op==='submit'&&lease){const r=submitExecution(f.state,{...lease,clientId:cid},t);if(r.dispatchGranted===true){granted++;dispatched=true;}}
+    else if(op==='fail'&&lease)failExecution(f.state,{...lease,clientId:cid,reason:'fuzz failure'},t);
+    else if(op==='confirm'&&lease)confirmExecution(f.state,{id:lease.id,executionRef:'verify-'+ref,clientId:cid,observation:obs},t);
+   }catch{}
+   const e=f.state.executions?.[0];
+   assert.ok((f.state.executions||[]).length<=1,'one journal entry per proposal');
+   if(dispatched){assert.ok(e.submittedAt,'dispatch is persisted');assert.ok(!['Reservada','Preparada','Falhou'].includes(e.status),'never back before dispatch: '+e.status);}
+  }
+  assert.ok(granted<=1,'run '+run+' granted '+granted);totalGranted+=granted;
+ }
+ assert.ok(totalGranted>20,'the fuzz really reached dispatch ('+totalGranted+')');
+});
