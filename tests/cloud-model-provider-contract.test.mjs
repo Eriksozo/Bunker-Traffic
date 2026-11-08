@@ -43,3 +43,11 @@ test('Connectivity cannot succeed through reasoning, truncation, another model e
  let calls=0;for(const response of failures)await assert.rejects(checkCloudModel({run:async()=>{calls++;return response;}}),e=>e.code==='CLOUD_AI_INVALID');
  assert.equal(calls,failures.length);
 });
+
+test('the retry after a cut keeps the token cap, adds only OpenAI-recommended sampling and still satisfies the contract',async()=>{
+ let captured;await runCloudAnalyst({run:async(model,request)=>{captured={model,request};return envelope();}},'traffic',{campaigns:[]},'wide',{retryAfter:'output_truncated'});
+ assert.deepEqual(sdkErrors(captured.model,captured.request),[]);
+ assert.equal(captured.request.max_tokens,4400,'never a larger cap');assert.equal(captured.request.temperature,1);assert.equal(captured.request.top_p,1);
+ let legacy;await runCloudAnalyst({run:async(model,request)=>{legacy=request;return {response:value};}},'traffic',{campaigns:[]},'legacy',{retryAfter:'output_truncated'});
+ assert.equal(legacy.temperature,0.1);assert.equal(legacy.top_p,undefined,'policies without truncationRetry keep their sampling');
+});

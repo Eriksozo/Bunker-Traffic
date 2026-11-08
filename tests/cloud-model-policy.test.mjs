@@ -38,3 +38,17 @@ test('a reply to a teammate question gets the stage output cap; other non-stage 
  await runCloudAnalyst({run:async(_m,r)=>{request=r;return envelope(reply);}},'ops',{project:'p',campaigns:[],receivedQuestion:{id:'m1',fromAgent:'traffic',text:'Qual o risco?'}},'wide');
  assert.equal(request.max_tokens,6400);
 });
+
+test('only the retry right after a cut changes sampling, never the cap; other failures and policies keep the base',async()=>{
+ const {cloudGenerationParams}=await import('../lib/cloud-analysis.mjs');
+ const wide=cloudModelPolicy('wide'),legacy=cloudModelPolicy('legacy'),stage={campaignReviewPolicy:{}};
+ assert.deepEqual(cloudGenerationParams(wide,stage),{maxTokens:6400,temperature:0.1,topP:null,adjustment:null});
+ assert.deepEqual(cloudGenerationParams(wide,stage,'output_truncated'),{maxTokens:6400,temperature:1,topP:1,adjustment:'after_output_truncated'});
+ for(const other of ['invalid_final_json','invalid_schema','foreign',null])assert.equal(cloudGenerationParams(wide,stage,other).adjustment,null,String(other));
+ assert.deepEqual(cloudGenerationParams(legacy,stage,'output_truncated'),{maxTokens:3200,temperature:0.1,topP:null,adjustment:null});
+ assert.equal(cloudGenerationParams(wide,{},'output_truncated').maxTokens,4400);
+ // The failure of a retried attempt records the sampling that was actually sent.
+ const {runCloudAnalyst}=await import('../lib/cloud-analysis.mjs');
+ await assert.rejects(runCloudAnalyst({run:async()=>({choices:[{finish_reason:'length',message:{role:'assistant',content:''}}]})},'traffic',{campaigns:[]},'wide',{retryAfter:'output_truncated'}),e=>e.modelFailure.maxTokens===4400&&e.modelFailure.temperature===1&&e.modelFailure.adjustment==='after_output_truncated');
+ await assert.rejects(runCloudAnalyst({run:async()=>({choices:[{finish_reason:'stop',message:{role:'assistant',content:'{'}}]})},'traffic',{campaigns:[]},'wide'),e=>e.modelFailure.temperature===0.1&&e.modelFailure.adjustment===undefined);
+});

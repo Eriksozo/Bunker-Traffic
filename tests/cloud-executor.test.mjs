@@ -288,7 +288,7 @@ test('A model format failure returns only its own safe diagnosis to the next eli
  const f=fixture();f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];f.state.executions=[];
  for(const cut of f.state.snapshots)for(const r of cut.rows){r.spend=100;r.revenueNet=200;r.frontOrders=2;}
  const round=ensureCollaboration(f.state,f.state.jobs[0]),store=memory(f),packets=[];let calls=0;
- const ai={run:async(_m,request)=>{calls++;const b=JSON.parse(request.messages[1].content),r=b.reflectionRequirements;packets.push(b.context);
+ const sampling=[];const ai={run:async(_m,request)=>{calls++;sampling.push({t:request.temperature,p:request.top_p,m:request.max_tokens});const b=JSON.parse(request.messages[1].content),r=b.reflectionRequirements;packets.push(b.context);
  if(calls===1)return {choices:[{finish_reason:'length',message:{role:'assistant',content:'private partial output',reasoning_content:'private reasoning'}}],usage:{completion_tokens:6400,total_tokens:9999}};
  assert.match(request.messages[0].content,/output_truncated.*TODOS os alvos/);
  return {choices:[{finish_reason:'stop',message:{role:'assistant',content:JSON.stringify({campaignReadings:mockCampaignReadings(b.context),decision:'Observar',reason:'Conferir aquisição',nextStep:'Comparar novas vendas',text:'Uma campanha priorizada nesta unidade.',reflection:{lesson:'Validar números da origem.',uncertainty:'Efeito não medido.',nextCheck:'Comparar períodos.',citations:r.examples.slice(0,1),peerChecks:r.requiredPeerRoles.map(role=>({messageId:r.peerConclusions.find(p=>p.role===role).messageId,stance:'inconclusive',reason:'Sem resultado novo.'}))},suggestions:[],question:null})}}]};}};
@@ -298,6 +298,11 @@ test('A model format failure returns only its own safe diagnosis to the next eli
  await store.write(s=>{s.cloudAttemptFailures.foreign={...failure,roundId:'other',code:'FOREIGN_ROUND'};s.cloudAttemptFailures.otherRole={...failure,agentId:'budget',code:'FOREIGN_ROLE'};s.cloudAttemptFailures.review={...failure,proposalId:'another-proposal',at:iso(Date.now()+1000),code:'FOREIGN_REVIEW'};});
  assert.equal((await engine.step()).kind,'stage');assert.equal(packets[1].validationFeedback.code,'CLOUD_AI_INVALID');assert.deepEqual(packets[1].validationFeedback.modelFailure,failure.modelFailure);assert.equal(store.state.collaborationMessages.filter(m=>m.kind==='conclusion').length,1);
  assert.equal((await engine.step()).kind,'stage');assert.equal(packets[2].validationFeedback,undefined);assert.equal(store.state.proposals.length,0);assert.equal(store.state.executions.length,0);assert.equal(calls,3);
+ // The retry right after the cut used OpenAI's gpt-oss sampling with the same cap; the next role is back to the base.
+ assert.deepEqual(sampling,[{t:0.1,p:undefined,m:6400},{t:1,p:1,m:6400},{t:0.1,p:undefined,m:6400}]);
+ const retried=store.state.collaborationMessages.find(m=>m.kind==='conclusion'&&m.fromAgent==='traffic');assert.equal(retried.generationProfile.adjustment,'after_output_truncated');assert.equal(retried.generationProfile.temperature,1);assert.equal(retried.generationProfile.maxTokens,6400);
+ assert.equal(packets[1].retryAfter,undefined,'the sampling signal never enters the model packet');
+ assert.equal(failure.modelFailure.maxTokens,6400);assert.equal(failure.modelFailure.temperature,0.1);assert.equal(failure.modelFailure.contentPresent,true);
 });
 
 
