@@ -34,6 +34,18 @@ enum Credential {
         token.range(of: "^[A-Za-z0-9_-]{43,128}$", options: .regularExpression) != nil
     }
 
+    /// The credential for requests, read from the Keychain once and kept in memory (the 8 s pulse used to query the
+    /// Keychain every time). `forget()` after a 401 so a rotated credential is read again.
+    nonisolated(unsafe) private static var cached: String?
+    private static let lock = NSLock()
+    static func current() -> String? {
+        lock.lock(); defer { lock.unlock() }
+        if let cached { return cached }
+        cached = importIfNeeded()
+        return cached
+    }
+    static func forget() { lock.lock(); cached = nil; lock.unlock() }
+
     /// Import the private file once: only a regular file owned by this user with mode 600/400.
     static func importIfNeeded() -> String? {
         if let existing = read(), valid(existing) { return existing }

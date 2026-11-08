@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import Network
 import UserNotifications
 
 /// Polls the read-only summary (every minute while the island is open, every two at rest, slower after
@@ -80,6 +81,12 @@ final class Store: ObservableObject {
         }
         dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.setAsleep(true) } }
         dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.setAsleep(false) } }
+        // Network back after a failed read: read now instead of waiting for the backoff (up to 15 min).
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor in guard let self, self.failures > 0, !self.asleep, !self.loading else { return }; await self.refresh() }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "bunker.network"))
         pulseTimer = Timer.scheduledTimer(withTimeInterval: Store.pulseSeconds, repeats: true) { [weak self] _ in Task { @MainActor in await self?.checkPulse() } }
         CallWatch.shared.$inCall.removeDuplicates().dropFirst().receive(on: RunLoop.main).sink { [weak self] inCall in if !inCall { self?.releaseHeld() } }.store(in: &bag)
     }
@@ -87,7 +94,7 @@ final class Store: ObservableObject {
     static let pulseSeconds: TimeInterval = 8
     /// A tiny read (served by the executor object, no central): only the counter and the newest edit.
     func checkPulse() async {
-        guard !asleep, !loading, let token = Credential.importIfNeeded() else { return }
+        guard !asleep, !loading, let token = Credential.current() else { return }
         var request = URLRequest(url: Store.base.appendingPathComponent("api/companion/pulse"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         guard let (data, response) = try? await URLSession.shared.data(for: request), (response as? HTTPURLResponse)?.statusCode == 200,
@@ -122,7 +129,7 @@ final class Store: ObservableObject {
     func showPreview(_ s: Summary) { summary = s; lastFetch = Date().addingTimeInterval(-40); error = nil; preparing = false }
 
     func refresh() async {
-        guard let token = Credential.importIfNeeded() else {
+        guard let token = Credential.current() else {
             error = "Credencial do app não encontrada nas Chaves."; return
         }
         // Each read carries a generation: a slower answer for a previous project (or an older read) never
@@ -143,6 +150,7 @@ final class Store: ObservableObject {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
                 if status == 503, summary == nil || preparing { preparing = true; error = nil; ok = true; return }
+                if status == 401 { Credential.forget() }
                 error = status == 401 ? "Credencial recusada pelo Bunker." : status == 404 ? "Projeto não encontrado." : "Bunker indisponível (\(status)). A última leitura foi mantida."
                 if status == 404 { project = "all" }
                 return
@@ -154,12 +162,17 @@ final class Store: ObservableObject {
             error = nil
             lastFetch = Date()
             ok = true
+        } catch is DecodingError {
+            guard generation == refreshGeneration else { return }
+            // The Bunker answered but this app version cannot read it: a network message would send the owner the wrong way.
+            self.error = "O Bunker mandou um resumo que esta versão do app não lê. A última leitura foi mantida; atualize o app."
         } catch {
             guard generation == refreshGeneration else { return }
-            self.error = "Sem conexão com o Bunker. A última leitura foi mantida."
+            self.error = (error as? URLError)?.code == .timedOut ? "O Bunker demorou a responder. A última leitura foi mantida." : "Sem conexão com o Bunker. A última leitura foi mantida."
         }
     }
     private var refreshGeneration = 0
+    private let pathMonitor = NWPathMonitor()
 
     // MARK: - Owner adjustments (Touch ID). Reads use the read-only credential; every write is signed on this Mac.
 
@@ -168,7 +181,7 @@ final class Store: ObservableObject {
 
     /// Cards and proposals waiting for the owner, for one campaign or the whole project.
     func fetchCards(_ target: AdjustTarget) async -> CardsResult {
-        guard let token = Credential.importIfNeeded() else { return .failed("Credencial do app não encontrada nas Chaves.") }
+        guard let token = Credential.current() else { return .failed("Credencial do app não encontrada nas Chaves.") }
         var components = URLComponents(url: Store.base.appendingPathComponent("api/companion/cards"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "project", value: target.project ?? project)]
             + (target.adAccountId.map { [URLQueryItem(name: "account", value: $0)] } ?? [])
@@ -251,7 +264,8 @@ final class Store: ObservableObject {
         }
         if approvalsQuiet { fresh.removeAll { $0.3 == .approval } }
         // Pace warnings, once a day per project and kind (runs out before 18:00, or far below pace).
-        let day = String((s.generatedAt).prefix(10))
+        // The Bunker's day (Boa Vista), not UTC: at 21:00 in Brazil the UTC date flips and the same warning would ring again.
+        let day = Format.bunkerDay(s.generatedAt)
         for p in (s.pace?.byProject ?? []) where p.alert != nil {
             let key = "pace:" + (p.project ?? "") + ":" + (p.alert ?? "") + ":" + day
             guard !seen.contains(key), let w = Format.paceWarning(p) else { continue }
@@ -278,11 +292,25 @@ final class Store: ObservableObject {
             let title = o.stage == "confirmed" ? "Ordem confirmada na Meta" : o.stage == "failed" ? "Ordem não enviada" : "Ordem enviada: conferir na Meta"
             fresh.append((key, title, (o.campaign ?? "Campanha") + " · " + Format.orderChange(o) + (o.reason.map { " · " + $0 } ?? ""), .order))
         }
-        defer { primed = true }
+        defer { primed = true; Store.trimSeen(&seen, keep: fresh.map(\.0) + Store.presentKeys(s, day: day)) }
         guard primed, !muted else { return }
         // In a call: hold them (newest three) until it ends.
         if CallWatch.shared.inCall { held = Array((held + fresh).suffix(3)); return }
         deliver(fresh)
+    }
+
+    /// Every alert key the current summary would produce: kept when the memory of seen alerts is trimmed.
+    nonisolated static func presentKeys(_ s: Summary, day: String) -> [String] {
+        s.approvals.items.map { "ap:" + $0.id } + s.activity.recent.map(changeKey) + s.queue.filter { $0.kind == "loss" }.map { "lo:" + $0.id }
+            + (s.pace?.byProject ?? []).compactMap { p in p.alert.map { "pace:" + (p.project ?? "") + ":" + $0 + ":" + day } }
+            + (s.sales?.recent ?? []).map { "sa:" + $0.at + ":" + String($0.amount) } + (s.orders ?? []).map { "or:" + $0.id + ":" + $0.stage }
+    }
+    /// Seen alerts stay bounded over days of uptime: past the limit only what the summary still shows is kept
+    /// (anything older cannot come back in the summary, so it cannot ring twice).
+    nonisolated static let seenLimit = 2000
+    nonisolated static func trimSeen(_ seen: inout Set<String>, keep: [String]) {
+        guard seen.count > seenLimit else { return }
+        seen = Set(keep).intersection(seen)
     }
 
     private func releaseHeld() {

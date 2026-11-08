@@ -105,6 +105,24 @@ enum SelfTest {
         check(OwnerAdjust.parsePercent(" 20% ") == 20 && OwnerAdjust.parsePercent("12,5") == 12.5 && OwnerAdjust.parsePercent("1e2") == nil && OwnerAdjust.parsePercent("") == nil && OwnerAdjust.parsePercent("1.2.3") == nil, #line)
         check(OwnerAdjust.percentProblem("reduce", 0.001, current: 100) != nil && OwnerAdjust.percentProblem("reduce", 100, current: 100) != nil && OwnerAdjust.percentProblem("increase", 1001, current: 100) != nil, #line)
         check(OwnerAdjust.percentProblem("reduce", 20, current: 100) == nil && OwnerAdjust.percentProblem("pause", nil, current: 100) == nil && OwnerAdjust.percentProblem("increase", nil, current: 100) != nil, #line)
+        // Section-tolerant decode: a broken accessory section never hides the rest of the reading.
+        let broken = #"{"generatedAt":"2026-11-08T05:00:00.000Z","project":"all","projectName":"Todos","projects":[{"id":"p","name":"P"},{"id":7}],"paused":false,"analysisAt":null,"today":{"today":{"roas":1.2},"deltas":{"roas":null}},"queue":[{"kind":"loss","campaign":"C"},{"campaign":"sem kind"}],"queueSize":2,"approvals":{"items":[{"id":"a"}]},"activity":{"hours":24,"summary":{"pause":null,"reduce":{"count":2,"actors":{"Ana":null},"unknown":0}},"recent":[{"action":"pause"},{"x":1}]},"agents":null,"executor":{"enabled":true,"paused":false,"recentFailures":null},"notice":null,"accounts":{"rows":[]},"orders":[{"id":"o","stage":"sent"},{"id":"bad"}],"board":"oops"}"#
+        if let b = try? JSONDecoder().decode(Summary.self, from: Data(broken.utf8)) {
+            check(b.projects.count == 1 && b.queue.count == 1 && b.approvals.count == 1 && b.activity.summary.keys.sorted() == ["reduce"] && b.activity.recent.count == 1, #line)
+            check(b.executor?.recentFailures == 0 && b.accounts == nil && b.board == nil && b.agents.recent.isEmpty && b.notice == "" && b.today.deltas.isEmpty, #line)
+        } else { check(false, #line) }
+        check(Format.bunkerDay("2026-11-09T01:30:00.000Z") == "2026-11-08" && Format.bunkerDay("2026-11-09T05:00:00Z") == "2026-11-09" && Format.bunkerDay("x") == "x", #line)
+        var seenSet = Set((0..<2500).map { "k\($0)" }); Store.trimSeen(&seenSet, keep: ["k1", "k2", "novo"])
+        check(seenSet == ["k1", "k2"], #line)
+        var small: Set<String> = ["a"]; Store.trimSeen(&small, keep: []); check(small == ["a"], #line)
+        func receiptLine(_ b: String, _ a: String) -> String? {
+            let json = #"{"id":"o","stage":"sent","action":"budget","currency":"BRL","before":{"dailyBudget":"# + b + #"},"after":{"dailyBudget":"# + a + "}}"
+            guard let r = try? JSONDecoder().decode(Summary.OrderReceipt.self, from: Data(json.utf8)) else { return nil }
+            return Format.orderChange(r)
+        }
+        check(receiptLine("100", "80")?.hasPrefix("Reduzir") == true, #line)
+        check(receiptLine("100", "120")?.hasPrefix("Aumentar") == true, #line)
+        check(receiptLine("null", "80")?.hasPrefix("Orçamento") == true, #line)
         check(Format.money(Double.nan) == "N/D" && Format.exactMoney(nil) == "N/D" && Format.compactMoney(.infinity) == "N/D", #line)
     }
 

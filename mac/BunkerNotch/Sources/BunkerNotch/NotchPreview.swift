@@ -86,6 +86,12 @@ import SwiftUI
 
     /// Fictional names and values only: this file is in a public repository.
     static func fixture() -> Summary? {
+        let json = fixtureJSON()
+        do { return try JSONDecoder().decode(Summary.self, from: Data(json.utf8)) }
+        catch { FileHandle.standardError.write(Data("\(error)\n".utf8)); return nil }
+    }
+    /// The fictional summary as JSON (also written by `--dump-preview file` for contract fuzzing).
+    static func fixtureJSON() -> String {
         func window(_ spend: Double, _ roas: Double?, _ front: Double?) -> String {
             "{\"spend\":\(spend),\"roas\":\(roas.map { String($0) } ?? "null"),\"roi\":\(roas.map { String($0 * 0.9) } ?? "null"),\"frontOrders\":\(front.map { String($0) } ?? "null"),\"cpaFront\":null}"
         }
@@ -133,7 +139,6 @@ import SwiftUI
                    {"accountId":"ac3","name":"Conta Exemplo 04","group":"Gama","status":"disabled","statusLabel":"Desativada","runningLabel":"parada","currency":"BRL","dailyLimit":null,"todaySpend":0,"usedPct":null,"balance":null,"alerts":["conta desativada"]}]}
         }
         """
-        do { return try JSONDecoder().decode(Summary.self, from: Data(json.utf8)) }
-        catch { FileHandle.standardError.write(Data("\(error)\n".utf8)); return nil }
+        return json
     }
 }

@@ -301,6 +301,8 @@ struct OwnerAdjustView: View {
     }
 
     private func submit(_ input: [String: Any], prompt: String, key: String, success: String) async {
+        // A second click before the first redraw would ask Touch ID twice (the server already dedupes by clientId).
+        guard !m.busy else { return }
         m.busy = true; notch.holdOpen = true; m.notice = nil
         let result = await store.sendOwner(input, reason: prompt)
         notch.holdOpen = false; m.busy = false

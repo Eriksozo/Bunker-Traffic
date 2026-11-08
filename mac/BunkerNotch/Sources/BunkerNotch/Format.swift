@@ -70,7 +70,9 @@ enum Format {
         f.dateFormat = format
         return f
     }
-    private static let stampFormatter = bunkerClock("dd/MM HH:mm"), clockFormatter = bunkerClock("HH:mm")
+    private static let stampFormatter = bunkerClock("dd/MM HH:mm"), clockFormatter = bunkerClock("HH:mm"), dayFormatter = bunkerClock("yyyy-MM-dd")
+    /// "2026-11-08" in the Bunker's clock (Boa Vista); the UTC prefix when the instant does not parse.
+    static func bunkerDay(_ value: String) -> String { date(value).map { dayFormatter.string(from: $0) } ?? String(value.prefix(10)) }
     static func stamp(_ value: String?) -> String {
         guard let d = date(value) else { return "N/D" }
         return stampFormatter.string(from: d)
@@ -173,7 +175,8 @@ enum Format {
     static func orderChange(_ o: Summary.OrderReceipt) -> String {
         if o.action == "status" { return "Pausar · " + statusName(o.before?.status) + " → " + statusName(o.after?.status) }
         let b = o.before?.dailyBudget, a = o.after?.dailyBudget
-        let verb = (a ?? 0) >= (b ?? 0) ? "Aumentar" : "Reduzir"
+        // Without both values the direction is unknown: never guess "Aumentar".
+        let verb = a == nil || b == nil ? "Orçamento" : a! > b! ? "Aumentar" : a! < b! ? "Reduzir" : "Orçamento"
         return verb + " · " + money(b, currency: o.currency) + " → " + money(a, currency: o.currency) + "/dia"
     }
     static func orderTone(_ stage: String) -> Tone {

@@ -240,6 +240,10 @@ struct ExpandedView: View {
             } else if let s = store.summary, let item = notch.selected {
                 CampaignDetailView(s: s, item: item)
             } else if let s = store.summary {
+                // Switching projects: the numbers on screen still belong to the previous one until the new reading lands.
+                let switching = s.project != store.project
+                if switching { Banner(text: "Lendo o projeto escolhido… os números abaixo ainda são de \(s.projectName).", tone: .neutral) }
+                Group {
                 KPIStrip(s: s)
                 TabBar(s: s)
                 ScrollView(.vertical, showsIndicators: false) {
@@ -255,6 +259,8 @@ struct ExpandedView: View {
                     }
                     .padding(.bottom, DS.Space.l)
                 }
+                }
+                .opacity(switching ? 0.4 : 1).allowsHitTesting(!switching)
             } else if store.error == nil && !store.preparing {
                 HStack(spacing: DS.Space.s) { ProgressView().controlSize(.small); Text("Lendo o Bunker…").font(DS.Font.body).foregroundStyle(DS.Color.inkMuted) }
                     .frame(maxWidth: .infinity, alignment: .center).padding(.top, DS.Space.xl)
@@ -262,6 +268,8 @@ struct ExpandedView: View {
         }
         .padding(.horizontal, DS.Space.xl)
         .foregroundStyle(DS.Color.ink)
+        // Another project: a campaign detail or a filter from the previous one must not stay on screen.
+        .onChange(of: store.project) { _, _ in withAnimation(DS.Motion.quick) { notch.selected = nil; notch.activityFilter = nil } }
     }
 }
 
@@ -305,13 +313,19 @@ struct IconButton: View {
     let symbol: String; let help: String; var spinning = false; let action: () -> Void
     var body: some View {
         Button(action: action) {
+            // Reduce Motion: no endless spin; the dimmed icon still says it is working.
+            let spin = spinning && !A11y.reduceMotion
             Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                .rotationEffect(.degrees(spinning ? 360 : 0))
-                .animation(spinning ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: spinning)
+                .rotationEffect(.degrees(spin ? 360 : 0))
+                .animation(spin ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: spin)
+                .opacity(spinning && !spin ? 0.5 : 1)
                 .frame(width: 24, height: 24)
                 .foregroundStyle(DS.Color.inkSoft)
                 .background(DS.Color.surface, in: Circle())
+                .contentShape(Circle())
         }.buttonStyle(.plain).help(help)
+        // VoiceOver reads the purpose, not the symbol name ("arrow.clockwise").
+        .accessibilityLabel(help)
     }
 }
 
@@ -319,12 +333,13 @@ struct ProjectMenu: View {
     @EnvironmentObject var store: Store
     var body: some View {
         Menu {
-            Button("Todos os projetos") { store.project = "all" }
+            Button { store.project = "all" } label: { menuLabel("Todos os projetos", store.project == "all") }
             Divider()
-            ForEach(store.summary?.projects ?? [], id: \.id) { p in Button(p.name) { store.project = p.id } }
+            ForEach(store.summary?.projects ?? [], id: \.id) { p in Button { store.project = p.id } label: { menuLabel(p.name, store.project == p.id) } }
         } label: {
             HStack(spacing: 5) {
-                Text(store.summary?.projectName ?? "Projeto").font(DS.Font.bodyStrong).lineLimit(1)
+                // The chosen project shows at once; the summary for it arrives a moment later.
+                Text(selectedName).font(DS.Font.bodyStrong).lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(DS.Color.inkMuted)
             }
             .padding(.horizontal, 10).padding(.vertical, 5)
@@ -332,6 +347,13 @@ struct ProjectMenu: View {
             .overlay(Capsule().stroke(DS.Color.stroke))
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+    }
+    var selectedName: String {
+        if store.project == "all" { return "Todos os projetos" }
+        return store.summary?.projects.first { $0.id == store.project }?.name ?? store.summary?.projectName ?? "Projeto"
+    }
+    @ViewBuilder func menuLabel(_ name: String, _ current: Bool) -> some View {
+        if current { Label(name, systemImage: "checkmark") } else { Text(name) }
     }
 }
 

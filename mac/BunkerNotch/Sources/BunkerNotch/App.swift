@@ -9,6 +9,11 @@ enum BunkerNotchMain {
         if CommandLine.arguments.contains("--self-test") { exit(SelfTest.run()) }
         if let i = CommandLine.arguments.firstIndex(of: "--render-notch"), i + 1 < CommandLine.arguments.count { exit(NotchPreview.render(to: CommandLine.arguments[i + 1])) }
         if let i = CommandLine.arguments.firstIndex(of: "--render-bunk"), i + 1 < CommandLine.arguments.count { exit(BunkSheet.render(to: CommandLine.arguments[i + 1])) }
+        if let i = CommandLine.arguments.firstIndex(of: "--dump-preview"), i + 1 < CommandLine.arguments.count {
+            exit(FileManager.default.createFile(atPath: CommandLine.arguments[i + 1], contents: Data(NotchPreview.fixtureJSON().utf8)) ? 0 : 1)
+        }
+        // Contract check: decode summary files written by lib/companion-summary.mjs (no network, no credential).
+        if let i = CommandLine.arguments.firstIndex(of: "--decode-summary"), i + 1 < CommandLine.arguments.count { exit(SummaryContract.check(Array(CommandLine.arguments[(i + 1)...]))) }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate

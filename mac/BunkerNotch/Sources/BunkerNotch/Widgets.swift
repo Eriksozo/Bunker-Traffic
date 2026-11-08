@@ -57,5 +57,6 @@ struct QuietMenu: View {
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         .help("Parar de avisar: dispensar até o estado mudar, ou adiar")
+        .accessibilityLabel(until != nil ? "Adiado. Abrir opções de aviso" : dismissed ? "Dispensado. Abrir opções de aviso" : "Silenciar este aviso")
     }
 }

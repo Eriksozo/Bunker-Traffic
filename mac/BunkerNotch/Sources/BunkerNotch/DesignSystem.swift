@@ -90,7 +90,8 @@ struct Pill: View {
         }
         .lineLimit(1)
         .padding(.horizontal, 6).padding(.vertical, 2)
-        .foregroundStyle(tone.color)
+        // Neutral text on its own tint measured 4.3:1; 62% white keeps it quieter than ink and passes AA (≈7:1).
+        .foregroundStyle(tone == .neutral ? SwiftUI.Color.white.opacity(A11y.increaseContrast ? 0.8 : 0.62) : tone.color)
         .background(tone == .tag ? SwiftUI.Color.white.opacity(0.07) : tone.color.opacity(tone == .neutral ? 0.12 : 0.15), in: Capsule())
     }
 }
