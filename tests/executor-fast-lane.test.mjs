@@ -75,6 +75,13 @@ test('busy projects never starve a quiet one: the stalest joins the reads of the
  await e.alarm();
  assert.ok(calls.includes('live:proj-busy,proj-quiet'),'one read of the edited project and the stale one: '+calls.join(' > '));
 });
+test('a pulse that started earlier never puts back an older live reading over a newer one',()=>{
+ const row=(status,at)=>({projectId:'p',snapshot:{fetchedAt:at,rows:[{id:'c',status}]}});
+ const paused=row('PAUSED','2026-11-08T14:32:06Z'),before=row('ACTIVE','2026-11-08T14:27:00Z');
+ assert.equal(changeWatch.newestLiveItems([paused],[before],{})[0].snapshot.rows[0].status,'PAUSED','the older pulse keeps the fast-lane reread');
+ assert.equal(changeWatch.newestLiveItems([before],[{projectId:'p'}],{p:paused})[0].snapshot.rows[0].status,'PAUSED','a fresh import replaces the held one');
+ assert.equal(changeWatch.newestLiveItems([],[before],{})[0],before,'nothing held: this read');
+});
 test('the fast lane never asks the engine for model work',()=>{
  assert.deepEqual([...changeWatch.fastLaneKinds],['verify','followUp','execution']);
  const s={config:{},jobs:[],agents:{},snapshots:[],proposals:[],executions:[],messages:[{id:'q',project:'a',status:'Pendente',agentId:'traffic'}],collaborationRounds:[]};

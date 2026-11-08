@@ -25,7 +25,7 @@ import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
-import {changeWatchPolicy,fastLaneKinds,watchProject,nextPulse,liveOrder,orderPulse} from '../lib/change-watch.mjs';
+import {changeWatchPolicy,fastLaneKinds,watchProject,nextPulse,liveOrder,orderPulse,newestLiveItems} from '../lib/change-watch.mjs';
 import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
 
@@ -62,7 +62,10 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   for(const [id,at] of Object.entries(lastSuccess)){const t=Date.parse(String(at||''));if(Number.isFinite(t))this.liveReadAt[id]=Math.max(this.liveReadAt[id]||0,t);}
   const projects=only?live.projects.filter((p:any)=>first.includes(p.projectId)).slice(0,changeWatchPolicy.maxLiveReads+1):liveOrder(live.projects,{first,urgent,lastSuccess});
   for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project||this.liveReading.has(p.projectId))continue;this.liveReading.add(p.projectId);try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId){fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};this.liveReadAt[p.projectId]=Date.now();}}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}finally{this.liveReading.delete(p.projectId);}}
-  this.liveItems=(live.items||[]).map((i:any)=>fresh[i.projectId]||i);
+  // The fast lane and the heavy pulse may read live at the same time: per project, the newest reading wins, so a pulse
+  // that started earlier never puts back the pre-pause row a fast-lane reread just replaced (owner report of 08/11:
+  // a campaign paused from the notch stayed in the list).
+  this.liveItems=newestLiveItems(this.liveItems,live.items||[],fresh);
   return current.state;
  }
  /** Fast edit watch (lib/change-watch.mjs): a small read per configured project; new edits are stored with
