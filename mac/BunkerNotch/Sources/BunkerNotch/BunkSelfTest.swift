@@ -95,6 +95,13 @@ extension SelfTest {
         expect(BunkMotion.tilt(vx: 0, vy: 0) == 0 && abs(BunkMotion.tilt(vx: 5000, vy: -5000)) <= 35 && BunkMotion.tilt(vx: 800, vy: 0) > 0, #line)
         let s1 = BunkDesk.step(from: .zero, to: CGPoint(x: 10, y: 0), distance: 4)
         expect(s1.point == CGPoint(x: 4, y: 0) && !s1.arrived && BunkDesk.step(from: s1.point, to: CGPoint(x: 10, y: 0), distance: 8).arrived, #line)
+        // Stored away (not resident) and idle out of the notch: he goes home; never while walking, dragged, touring or living there.
+        expect(BunkDesk.strayed(resident: false, roaming: false, moving: false, dragging: false), #line)
+        expect(!BunkDesk.strayed(resident: true, roaming: false, moving: false, dragging: false), #line)
+        expect(!BunkDesk.strayed(resident: false, roaming: true, moving: false, dragging: false), #line)
+        expect(!BunkDesk.strayed(resident: false, roaming: false, moving: true, dragging: false), #line)
+        expect(!BunkDesk.strayed(resident: false, roaming: false, moving: false, dragging: true), #line)
+        expect(BunkDesk.strayGrace > 0 && BunkDesk.strayGrace <= 5, #line)
     }
     private static func expect(_ condition: Bool, _ line: Int) {
         if !condition { FileHandle.standardError.write(Data("self-test falhou na linha \(line) de BunkSelfTest.swift\n".utf8)); bunkFailures += 1 }

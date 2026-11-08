@@ -81,6 +81,10 @@ enum BunkDesk {
     static let margin: CGFloat = 24
     static let sleepAfter: TimeInterval = 120
     static let sleepMouseDistance: CGFloat = 150
+    /// Seconds a stray Bunk (out, idle, not living on the desktop) waits before flying home.
+    static let strayGrace: TimeInterval = 3
+    /// Out of the notch with no walk, flight, fall or drag, and not living on the desktop: he should go home.
+    static func strayed(resident: Bool, roaming: Bool, moving: Bool, dragging: Bool) -> Bool { !resident && !roaming && !moving && !dragging }
 
     /// Panel origin for Bunk's feet at `feet` (screen coordinates, origin bottom-left), and back.
     static func origin(feet: CGPoint) -> CGPoint { CGPoint(x: feet.x - panel.width / 2, y: feet.y - footInset) }

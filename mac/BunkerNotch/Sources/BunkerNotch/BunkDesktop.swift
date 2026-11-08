@@ -78,6 +78,8 @@ struct BunkStageView: View {
     private var monitors: [Any] = []
     private var bag = Set<AnyCancellable>()
     private var screenAsleep = false
+    /// Since when he has been out with nothing to do while not living on the desktop.
+    private var strayedAt: Date?
 
     static let roamKey = "bunkRoam", residentKey = "bunkResident", spotKey = "bunkSpot"
     var roamEnabled: Bool { get { UserDefaults.standard.bool(forKey: Self.roamKey) } set { UserDefaults.standard.set(newValue, forKey: Self.roamKey) } }
@@ -132,7 +134,16 @@ struct BunkStageView: View {
         if alert.kind == .order { react(alert.id.hasSuffix(":confirmed") ? .happy : .surprised, for: 1.6) }
     }
 
+    /// True while the main display sleeps or the session is locked (read from the system, not from notifications).
+    nonisolated static func displayAsleepOrLocked() -> Bool {
+        if CGDisplayIsAsleep(CGMainDisplayID()) != 0 { return true }
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return (session?["CGSSessionScreenIsLocked"] as? Bool) == true
+    }
+
     private func idleCheck() {
+        // A missed wake/unlock notification must never freeze him mid-walk: recheck the real state every minute.
+        if screenAsleep && !Self.displayAsleepOrLocked() { screenAsleep = false; retime() }
         guard !roaming else { return }
         let all = BunkBrain.lines(store.summary, error: store.error, preparing: store.preparing, ledger: store.ledger)
         if resident { if BunkBrain.awake(Date()), !CallWatch.shared.inCall, Int.random(in: 0..<4) == 0 { speak(all.first ?? "Sigo vigiando.") }; return }
@@ -298,6 +309,13 @@ struct BunkStageView: View {
         guard let p = panel else { return }
         // Rest ↔ activity (hover, bubble, reaction) changes the frame rate; retime() is a no-op when it is unchanged.
         defer { retime() }
+        // A drag whose mouse-up never arrived (sleep, lock, another app took the event) ends here.
+        if dragging && NSEvent.pressedMouseButtons & 1 == 0 { dragging = false; dragStart = nil; dropped(); return }
+        // Out of the notch with nothing to do and not living on the desktop: back home after a short grace.
+        if BunkDesk.strayed(resident: resident, roaming: roaming, moving: !stops.isEmpty || flight != nil || falling, dragging: dragging) {
+            if let since = strayedAt { if Date().timeIntervalSince(since) > BunkDesk.strayGrace { strayedAt = nil; endRoam(goHome: true); return } }
+            else { strayedAt = Date() }
+        } else { strayedAt = nil }
         let mouse = NSEvent.mouseLocation, origin = p.frame.origin
         let local = CGPoint(x: mouse.x - origin.x, y: mouse.y - origin.y)
         let over = BunkDesk.isOverBody(local) || (stage.bubble != nil && BunkDesk.bubble.contains(local))
