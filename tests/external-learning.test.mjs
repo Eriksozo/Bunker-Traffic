@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {collectHistoryLearning,persistHistoryLearning,storeHistoryCollection,historyLearningKey} from '../lib/cloud-history-learning.mjs';
+import {collectHistoryLearning,persistHistoryLearning,storeHistoryCollection,historyLearningKey,historyLearningPolicy} from '../lib/cloud-history-learning.mjs';
 import {collectExternalLearning,persistExternalLearning,externalLearningRecall,externalLearningCandidates} from '../lib/external-learning.mjs';
 import {retainKnowledgeMeasurements} from '../lib/knowledge.mjs';
 import {historyNow as now,historyProject as project,historyRow as row,historyEvent} from './fixtures/history-learning.mjs';
@@ -69,7 +69,7 @@ test('An existing full backfill or another comparison range is never stolen to r
 });
 test('Concurrent history capacity exhaustion records a bounded failure without deleting history or crediting a comparison',async()=>{
  const s=await setup(),key=historyLearningKey('p','a','c');s.historyLearning.scopes[key].intervals=[];const child=historyEvent(3,{id:'new-child',at:'2026-11-02T11:00:00.000Z',category:'creative',object:{level:'ad',externalId:'child',campaign:{externalId:'c'}},values:{kind:'text',field:'video',from:'old',to:'new'}}),result=await collectExternalLearning(repairSource({extra:[child]}),s,project,{now:()=>now});assert.equal(result.status,'Lida');
- s.historyLearning.changes.push(...Array.from({length:9999},(_,i)=>({key:'other-'+i,project:'q'})));const before=structuredClone(s.historyLearning);assert.equal(persistExternalLearning(s,result,now).code,'SOURCE_EXTERNAL_HISTORY_CAPACITY');assert.deepEqual(s.historyLearning.scopes,before.scopes);assert.deepEqual(s.historyLearning.changes,before.changes);assert.equal(s.historyLearning.failures[key].code,'SOURCE_HISTORY_CAPACITY');assert.equal(s.decisionHistoryOutcomes,undefined);assert.equal(s.externalHistoryMeasurements,undefined);
+ s.historyLearning.changes.push(...Array.from({length:historyLearningPolicy.maximumChanges-1},(_,i)=>({key:'other-'+i,project:'q'})));const before=structuredClone(s.historyLearning);assert.equal(persistExternalLearning(s,result,now).code,'SOURCE_EXTERNAL_HISTORY_CAPACITY');assert.deepEqual(s.historyLearning.scopes,before.scopes);assert.deepEqual(s.historyLearning.changes,before.changes);assert.equal(s.historyLearning.failures[key].code,'SOURCE_HISTORY_CAPACITY');assert.equal(s.decisionHistoryOutcomes,undefined);assert.equal(s.externalHistoryMeasurements,undefined);
 });
 test('Automatic history does not consume approved-execution measurement capacity',async()=>{
  const s=await setup();s.snapshots=[{projectId:'p',source:'Malva MCP',complete:true,level:'campaign',from:'2026-11-01T00:00:00Z',to:'2026-11-02T00:00:00Z',fetchedAt:date(now-1000),rows:[{...row,spend:50,revenueNet:70,frontOrders:1}]}];retainKnowledgeMeasurements(s,date(now));assert.equal(s.knowledgeMeasurements.length,0);

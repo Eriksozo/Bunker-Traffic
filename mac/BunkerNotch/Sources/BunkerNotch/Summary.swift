@@ -107,6 +107,9 @@ struct Summary: Decodable, Equatable {
     struct First24h: Decodable, Equatable { let ceiling: Double?; let counts: First24hCounts; let items: [First24hItem]; let scheduled: [First24hScheduled] }
     /// Ad-account panel (lib/account-limits.mjs). Limit and today's spend are in the account currency.
     let accounts: Accounts?
+    /// Storage alarm from the executor: warns at 85% of the central limit or of the history ceiling.
+    struct Storage: Decodable, Equatable { let warning: Bool?; let critical: Bool?; let message: String?; let centralPct: Double?; let ledgerPct: Double? }
+    var storage: Storage? = nil
     struct AccountCounts: Decodable, Equatable { let total: Int; let active: Int; let running: Int; let disabled: Int; let nearLimit: Int; let withLimit: Int }
     struct AccountRow: Decodable, Equatable, Identifiable {
         var id: String { accountId }

@@ -230,6 +230,7 @@ struct ExpandedView: View {
             Header()
             if let says = notch.bunkSays { BunkBubble(text: says) }
             if let error = store.error { Banner(text: error, tone: .bad) }
+            if let st = store.summary?.storage, st.warning == true, let msg = st.message { Banner(text: msg, tone: st.critical == true ? .bad : .warn) }
             if store.preparing && store.summary == nil { Banner(text: "Resumo em preparação pelo executor. Aparece em 1 a 2 minutos.", tone: .neutral) }
             if notch.webTarget != nil {
                 AdjustView()
