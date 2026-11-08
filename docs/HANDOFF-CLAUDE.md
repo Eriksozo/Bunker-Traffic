@@ -656,3 +656,10 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Pedido do dono:** "uma forma de o Bunk conseguir me avisar no meu iphone". Escolhas dele: Pushover; perda, proposta aguardando, ordem confirmada/falhou e ritmo do orçamento.
 - **Mudança:** `lib/phone-alerts.mjs` (novo) e `storeCompanion` em `worker/cloud-executor.ts` enviam esses avisos depois de gravar o resumo do notch, uma execução por vez, com memória `phoneAlerts` no DO. Status em `phone` no `status` do executor. Detalhes e passo a passo em `docs/connections.md` ("Avisos no iPhone pelo Pushover").
 - **Pendente (dono):** instalar o Pushover, criar a aplicação e cadastrar `PUSHOVER_TOKEN` e `PUSHOVER_USER` pelo wrangler. Sem eles o envio fica desligado. Depois: conferir `phone.primed:true` e o primeiro aviso real no iPhone.
+
+## Quatro regras novas na sombra, a partir dos gestores (registro escrito às 2026-11-08 18:37:05 UTC por `date -u`)
+
+- **Aprovação do dono:** "Aplicar as 4", depois de estudo somente leitura de pausas de campanhas novas com venda e das edições de orçamento de um gestor (dados fora do repositório; resumo em `docs/autonomy-policy.md`).
+- **O que mudou** (`lib/autonomy-shadow.mjs`, `shadowRulePolicy` v2): `new-sale-loss` (campanha nova com venda, R$300+ e ROI < 0,8 pausaria; 0,8–1,0 só alerta); `bad-day-reduce` cobre campanhas de 1 a 3 dias com ontem ≥ 1,2, gatilho ROI < 0,9, −30% se aumentada hoje; `night-increase` (00:00–00:30, 1–4 dias, ontem ≥ 1 front e ROI ≥ 1,3); `morning-increase` sem exigir 3 dias em campanha nova (2+ front, ROI ≥ 2, +30%). Regras de orçamento com portão de placar (`scoreGatedRules`; o worker passa o placar de todas). Mac lê as regras de forma genérica, sem mudança.
+- **Testes:** `tests/shadow-four-rules.test.mjs`. Nada executa: fase sombra.
+- **Pendente:** ver as regras novas aparecerem em produção (a de virada do dia só à 00:00–00:30) e revisar o placar com o dono.

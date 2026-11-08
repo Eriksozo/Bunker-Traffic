@@ -19,7 +19,7 @@ import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
-import {evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy} from '../lib/autonomy-shadow.mjs';
+import {evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
@@ -105,8 +105,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const now=Date.now(),list=await this.ctx.storage.list<any>({prefix:'attr:'}),withAuthors={...state,changeAttributions:usableAttributions([...list.values()])};
   const events=activityLog(withAuthors,{since:now-26*3600000,now});
   const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()],meta=await this.ctx.storage.get<any>('metaLive');
-  // Owner decision 08/11/2026: bad-day-reduce only becomes executable after its own graded accuracy proves itself.
-  const accuracy={'bad-day-reduce':ruleAccuracy(prior,'bad-day-reduce')};
+  // Owner decisions 08/11/2026: budget rules only become executable after their own graded accuracy proves itself.
+  const accuracy=Object.fromEntries(scoreGatedRules.map(rule=>[rule,ruleAccuracy(prior,rule)]));
   let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={};
   for(const project of Object.keys(state.config||{})){
    const params=policy?.projects?.[project];if(!params||params.enabled===false)continue;

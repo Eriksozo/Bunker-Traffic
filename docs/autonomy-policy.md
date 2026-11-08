@@ -15,15 +15,17 @@ Decisão do proprietário em 07/11/2026, depois do estudo das ações de um gest
 Código: `lib/autonomy-shadow.mjs`. Limiares por projeto ficam na configuração privada `AUTONOMY_SHADOW_POLICY` (secret do Worker), nunca no repositório. Projeto sem configuração não é avaliado.
 
 1. **Pausar campanha nova sem venda** (primeiras 24h e 2º dia; testes e programadas de um dia para o outro): sem front, sem pedidos e sem receita desde o início. Com 0–1 IC vale o teto geral do proprietário de R$110 (pausa a partir de R$99, alerta a partir de R$77); com 2+ IC, o limiar privado do projeto. No 2º dia, venda só de ontem não protege hoje: gasto de hoje sem venda é conferido sozinho contra o mesmo teto (08/11/2026). Detalhes em `first-24h-protocol.md`.
-2. **Reduzir 20% em dia ruim**: campanha com ROI de 3 dias ≥ 1,3, a partir das 10h, gasto relevante e ROI do dia < 0,7 ou zero pedidos. Orçamento diário próprio (CBO). ESCALA/COST-CAP/BID-CAP ficam só como sugestão. **Decisão do proprietário de 08/11/2026:** fica só como sugestão até o placar da própria regra (avaliação pelo dia seguinte, janela de 7 dias da sombra) chegar a ≥ 60% de acerto com ≥ 20 decisões avaliadas.
+2. **Reduzir em dia ruim** (−20%, ou −30% se o orçamento foi aumentado hoje): campanha com ROI de 3 dias ≥ 1,3, ou campanha de 1 a 3 dias (nunca no dia do lançamento) com ROI de ontem ≥ 1,2 e venda hoje; a partir das 10h, gasto relevante e ROI do dia < 0,9 (ou zero pedidos, só no primeiro caso). Orçamento diário próprio (CBO). ESCALA/COST-CAP/BID-CAP ficam só como sugestão. **Decisão do proprietário de 08/11/2026:** fica só como sugestão até o placar da própria regra (avaliação pelo dia seguinte, janela de 7 dias da sombra) chegar a ≥ 60% de acerto com ≥ 20 decisões avaliadas.
 3. **Pausar campanha sem entrega** (organização): sem gasto verificado nos últimos 3 dias e sem impressão hoje, depois das 12h; nunca para campanha nova ou datada de ontem em diante (programada).
-4. **Aumentar por vendas desde a meia-noite**: a partir das 9h, ≥ 3 pedidos com ≥ 2 front, ROI parcial ≥ 2,5 e gasto relevante. **Decisão do proprietário de 08/11/2026:** exige histórico de 3 dias com ROI ≥ 1,3 (sem ele, só sugestão); dia forte (ROI do dia ≥ 3) é o gatilho preferencial e leva +50%; os demais casos levam +30%. Sem teto do proprietário por objeto/conta, o aumento nunca executaria.
+4. **Aumentar por vendas desde a meia-noite**: a partir das 9h, ≥ 3 pedidos com ≥ 2 front, ROI parcial ≥ 2,5 e gasto relevante. **Decisão do proprietário de 08/11/2026:** exige histórico de 3 dias com ROI ≥ 1,3 (sem ele, só sugestão); dia forte (ROI do dia ≥ 3) é o gatilho preferencial e leva +50%; os demais casos levam +30%. Sem teto do proprietário por objeto/conta, o aumento nunca executaria. Campanha nova (1º e 2º dia) não precisa de histórico: com ≥ 2 front e ROI parcial ≥ 2 leva +30%, só como sugestão até o placar da regra provar (08/11/2026).
+5. **Pausar campanha nova com venda e prejuízo** (1º e 2º dia): vendeu hoje, gasto de hoje ≥ R$300 e ROI de hoje < 0,8 → pausaria; ROI de 0,8 a 1,0 → só alerta.
+6. **Aumentar na virada do dia**: das 00:00 às 00:30, campanha de 1 a 4 dias cujo ontem teve ≥ 1 front e ROI ≥ 1,3 → +100% em orçamento abaixo de R$1.000, +30% acima (+50% com ROI de ontem ≥ 2). Antes da primeira análise do dia, "ontem" é o último corte da análise de ontem, declarado no registro. Só sugestão até o placar provar.
 
 Bloqueios comuns: fonte de hoje com mais de 30 minutos, conta ou campanha inativa, aquecimento/engajamento, edição de outro gestor nas últimas 2h. Limitações declaradas em cada registro: pedidos pendentes e vendas em hora sem gasto não são verificados pela fonte de campanhas.
 
 ## Decisões do proprietário para a fase de execução
 
-- Regras elegíveis: as quatro acima, incluindo o padrão de aumento, com teto.
+- Regras elegíveis: as quatro originais, incluindo o padrão de aumento, com teto. As regras 5 e 6 (08/11/2026) seguem a mesma revisão antes de qualquer execução.
 - Sem limite diário de ações por projeto; o proprietário acompanha as decisões junto com o Bunker.
 - O Bunker cuida dos testes no 1º e 2º dia. Avisos vão somente ao proprietário.
 
@@ -37,3 +39,12 @@ Bloqueios comuns: fonte de hoje com mais de 30 minutos, conta ou campanha inativ
 ## Ajuste das regras pelo backtest (08/11/2026)
 
 O proprietário aprovou ("Aplicar agora") três ajustes, apoiados no backtest de séries diárias reais (dados fora do repositório): um único dia ruim só antecipou dia seguinte negativo em cerca de um terço dos casos; dia forte (ROI ≥ 3, ≥ 3 pedidos) teve dia seguinte positivo em ~76%; aumento com ROI de 3 dias ≥ 1,3 acertou ~69%. As regras continuam em fase sombra: nada executa. Constantes em `shadowRulePolicy` (`lib/autonomy-shadow.mjs`).
+
+## Regras de 08/11/2026, a partir dos gestores ("Aplicar as 4")
+
+Relato do proprietário: um gestor agiu antes do Bunker, e "nunca pode fazer primeiro". Estudo somente leitura das pausas de campanhas novas com venda (03 a 08/11) e de ~285 edições de orçamento de um gestor (01 a 08/11), com dados fora do repositório:
+
+- Campanha nova que vendeu com ROI < 0,8 quase nunca virou lucro no dia seguinte (2 de 20); de 0,8 a 1,0 recuperou com frequência; de 1,0 a 1,3, cerca de metade. O corte típico dos gestores é 1 front com R$350–500 gastos.
+- Os aumentos do gestor saem em lotes (≈09h–10h, ≈13h–15h e, uma vez, logo depois da meia-noite pelo ontem fechado), com passo mediano de +50%; só ~40% fecharam o dia seguinte com ROI ≥ 1,2. As reduções são de −20% ou −30% com o ROI de hoje < 1, mesmo com ontem bom.
+
+Por isso só a regra 5 (pausa abaixo de 0,8) pode marcar "executaria". As regras de orçamento (2, 4 em campanha nova, 6) ficam como sugestão até o próprio placar passar de 60% com 20+ avaliações (`scoreGatedRules`). Nada executa: a fase continua sombra. Testes: `tests/shadow-four-rules.test.mjs`.
