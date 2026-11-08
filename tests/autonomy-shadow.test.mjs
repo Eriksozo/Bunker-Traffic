@@ -40,8 +40,12 @@ test('Second-day test counts as no-sale only when yesterday also sold nothing',(
  const s=state({today:[today],closed:{yesterday:[y],'3d':[y],'7d':[y]}});
  assert.equal(launchDay(today,{yesterday:y,'3d':y,'7d':y,today},{now}),1);
  assert.equal(run(s).decisions.find(x=>x.rule==='test-no-sale')?.launchDay,1);
+ // Owner report 08/11/2026: yesterday's sale does not cover today's spend without a sale (today alone vs the ceiling).
  const ySold={...y,frontOrders:1,orders:1,revenueNet:297};
- assert.equal(run(state({today:[today],closed:{yesterday:[ySold],'3d':[ySold],'7d':[ySold]}})).decisions.some(x=>x.rule==='test-no-sale'),false);
+ const carried=run(state({today:[today],closed:{yesterday:[ySold],'3d':[ySold],'7d':[ySold]}})).decisions.find(x=>x.rule==='test-no-sale');
+ assert.equal(carried?.wouldExecute,true);assert.match(carried.reason,/vendeu ontem, hoje sem venda/);assert.match(carried.reason,/R\$250/);
+ const soldToday=row('t6','06/11 - [TESTE] F',m(250,297,1,1,2));
+ assert.equal(run(state({today:[soldToday],closed:{yesterday:[ySold],'3d':[ySold],'7d':[ySold]}})).decisions.some(x=>x.rule==='test-no-sale'),false);
  const older={...y,spend:400};// spend before yesterday: neither day 0 nor day 1
  assert.equal(run(state({today:[today],closed:{yesterday:[y],'3d':[older],'7d':[older]}})).decisions.some(x=>x.rule==='test-no-sale'),false);
 });
@@ -120,6 +124,24 @@ test('Second day counts the spend since launch: yesterday plus today against the
  const t=row('s1','06/11 - [CBO] - [PRE] H',m(40,0,0,0,1)),y=row('s1','06/11 - [CBO] - [PRE] H',m(70,0,0,0,0));
  const d=run(state({today:[t],closed:{yesterday:[y],'3d':[y],'7d':[y]}}),{params:{}}).decisions.find(x=>x.rule==='test-no-sale');
  assert.equal(d.launchDay,1);assert.match(d.reason,/2º dia/);assert.match(d.reason,/R\$110 /);
+});
+test('Second day after a selling first day: today with spend and no sale is held to the ceiling (shadow and board)',async()=>{
+ const {first24hWatch}=await import('../lib/autonomy-shadow.mjs');
+ // Invented values, shaped like the cases a manager paused first: sold on day 1, burned on day 2.
+ const y=(id,spend,front,rev)=>row(id,'06/11 - [CBO] - [TESTE] - [1-3-1] '+id,m(spend,rev,front,front,5));
+ const t=(id,spend,ic)=>row(id,'06/11 - [CBO] - [TESTE] - [1-3-1] '+id,m(spend,0,0,0,ic));
+ const closed=[y('d1',420,3,900),y('d2',150,1,185),y('d3',300,2,340),y('d4',300,2,340)];
+ const today=[t('d1',350,9),t('d2',105,0),t('d3',80,1),row('d4','06/11 - [CBO] - [TESTE] - [1-3-1] d4',m(300,600,2,2,6))];
+ const s=state({today,closed:{yesterday:closed,'3d':closed,'7d':closed}});
+ const d=run(s).decisions.filter(x=>x.rule==='test-no-sale');
+ // d1: 14 IC, R$350 >= project threshold; d2: 0 IC, R$105 >= 90% of R$110; d3: R$80 below; d4 sold today.
+ assert.deepEqual(d.map(x=>[x.objectId,x.wouldExecute]),[['d1',true],['d2',true]]);
+ assert.match(d[0].reason,/limiar do projeto R\$200/);assert.match(d[1].reason,/Teto R\$110/);
+ // Without the project threshold, 2+ IC is still recorded (blocked) once today's spend reaches R$110.
+ const noLimit=run(s,{params:{}}).decisions.find(x=>x.objectId==='d1');
+ assert.equal(noLimit.wouldExecute,false);assert.match(noLimit.blockedBy[0],/Limiar/);
+ const b=first24hWatch(s,{project:'p',params,now});
+ assert.deepEqual(b.items.map(i=>[i.objectId,i.level,i.spend]),[['d1','over',350],['d2','pause',105],['d3','alert',80],['d4','sold',600]]);
 });
 test('First-24h board: scheduled for tomorrow, first day by level, older campaigns out',async()=>{
  const {first24hWatch,first24hSummary}=await import('../lib/autonomy-shadow.mjs');

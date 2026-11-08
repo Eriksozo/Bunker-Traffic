@@ -32,6 +32,7 @@ Regra geral do proprietário: campanha nova **sem venda** e com **0 ou 1 IC** n�
 | Qualquer venda (front, pedido ou receita) | com venda: segue o acompanhamento normal |
 | 2+ IC e 0 venda | limiar privado do projeto (`pauseTestMinSpend`), pausa no próprio limiar |
 
+- **2º dia depois de um 1º dia com venda** (relato do proprietário, 08/11/2026): a venda de ontem não cobre o gasto de hoje. Se hoje há gasto e nenhuma venda, o gasto de **hoje** é conferido contra o mesmo teto (R$110 com 0–1 IC de hoje; limiar do projeto com 2+ IC). Antes, a venda de ontem deixava a campanha como "com venda" o dia inteiro, e um gestor pausou seis testes desse tipo sem registro prévio da sombra.
 - A política privada `AUTONOMY_SHADOW_POLICY` pode **reduzir** o teto por projeto (`first24hLowIcLimit`, ou `pauseTestMinSpendNoCheckout` para 0 IC); nunca subir acima de R$110.
 - IC não informado pela fonte: o teto aparece, mas a decisão fica bloqueada até conferir. Vendas não informadas ficam N/D, nunca zero.
 - O valor é em reais, como o gasto da fonte de campanhas.
