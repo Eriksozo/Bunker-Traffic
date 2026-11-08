@@ -15,6 +15,8 @@ test('every evidence-reference refusal carries its fixed reason and position',()
  assert.deepEqual(why(raw([null])),{reason:'reference_shape',index:0});
  assert.deepEqual(why(raw([{observation:'C9/P/3d',metric:'spend'}])),{reason:'reference_not_in_packet',index:0});
  assert.deepEqual(why(raw([{observation:'C0/P/3d',metric:'secret_metric'}])),{reason:'reference_not_in_packet',index:0});
+ assert.deepEqual(why(raw([{observation:'C0/P/3d',metric:'spend',value:10}])),{reason:'reference_shape',index:0},'an extra field is a shape problem');
+ assert.deepEqual(why(raw([{observation:'C0/P/3d'}])),{reason:'reference_shape',index:0},'a missing metric is a shape problem');
  assert.deepEqual(why(raw([{observation:'C0/P/7d',metric:'spend'}])),{reason:'not_in_reflection',index:0});
  assert.deepEqual(why(raw([{observation:'C0/P/3d',metric:'spend'}],[{observation:'C0/P/3d',metric:'spend'},{observation:'C0/P/3d',metric:'spend'}])),{reason:'ambiguous_reflection',index:0});
  assert.deepEqual(why(raw([{observation:'C0/P/3d',metric:'spend'},{observation:'C0/P/3d',metric:'spend'}])),{reason:'duplicate_reference',index:1});

@@ -99,6 +99,14 @@ test('generation failure releases only its own claim, preserves attempt evidence
  assert.throws(()=>failCloudOpinion(f.state,{...args,executionRef:'other'},'CLOUD_AI_SCOPE'));
  failCloudOpinion(f.state,args,'CLOUD_AI_SCOPE');assert.equal(stage.status,'Falhou');assert.equal(f.state.cloudAttemptFailures[stage.claimId].attempt,stage.attempt);assert.equal(stage.conclusionId,undefined);
 });
+test('a memory review refusal keeps only its fixed reason, and only under its own code',()=>{
+ const secret='private-model-text-mvk_do_not_store';
+ for(const [code,expected] of [['CLOUD_MEMORY_REVIEW_EVIDENCE',{reason:'not_in_reflection',index:1}],['CLOUD_AI_SCOPE',undefined]]){
+  const f=fixture(),round=f.state.collaborationRounds[0],stage=round.stages[3],args={roundId:round.id,agentId:stage.agentId,claimId:stage.claimId,executionRef:stage.executionRef};
+  failCloudOpinion(f.state,args,code,Date.now(),null,null,{reason:'not_in_reflection',index:1,raw:secret});
+  assert.deepEqual(f.state.cloudAttemptFailures[stage.claimId].memoryReviewFailure,expected,code);assert.doesNotMatch(JSON.stringify(f.state.cloudAttemptFailures),/private-model|do_not_store/);
+ }
+});
 
 test('large model packets preserve numbers and mark reduced hierarchy and deferred campaign coverage',()=>{
  const campaigns=Array.from({length:6},(_,i)=>({target:{adAccountId:account,externalId:String(i)},windows:{today:{spend:100+i}},hierarchy:[{total:4,rows:Array.from({length:4},()=>({spend:123,name:'x'.repeat(600)}))}]}));
@@ -309,4 +317,21 @@ test('A model format failure returns only its own safe diagnosis to the next eli
 test('An exact owner-approved execution remains ahead of already admitted collection jobs',()=>{
  const f=fixture(),other='55555555-5555-4555-8555-555555555555',now=Date.now();f.state.config[other]={projectName:'Reserved'};f.state.cadence={enabled:false};f.state.jobs.push({id:'waiting-collection',project:other,executor:'cloudflare',status:'Em análise',startedAt:iso(now-1000)});f.state.agents[other]={jobId:'waiting-collection'};
  const next=cloudNext(f.state,[],now);assert.equal(next.kind,'execution');assert.equal(next.proposalId,f.p.id);assert.equal(f.state.jobs.find(j=>j.id==='waiting-collection').status,'Em análise');
+});
+
+test('the next attempt of the same stage is told why its memory review was refused, nothing else',async()=>{
+ const f=fixture();f.state.collaborationRounds=[];f.state.collaborationMessages=[];f.state.proposals=[];f.state.executions=[];
+ for(const cut of f.state.snapshots)for(const r of cut.rows){r.spend=100;r.revenueNet=200;r.frontOrders=2;}
+ ensureCollaboration(f.state,f.state.jobs[0]);const store=memory(f),packets=[];let calls=0;
+ const ai={run:async(_m,request)=>{calls++;const b=JSON.parse(request.messages[1].content),r=b.reflectionRequirements;packets.push(b.context);
+  if(calls===1)return {choices:[{finish_reason:'length',message:{role:'assistant',content:'cut'}}]};
+  assert.match(request.messages[0].content,/memoryReviewFailure diz por que/);
+  return {choices:[{finish_reason:'stop',message:{role:'assistant',content:JSON.stringify({campaignReadings:mockCampaignReadings(b.context),decision:'Observar',reason:'Conferir aquisição',nextStep:'Comparar novas vendas',text:'Uma campanha priorizada nesta unidade.',reflection:{lesson:'Validar números da origem.',uncertainty:'Efeito não medido.',nextCheck:'Comparar períodos.',citations:r.examples.slice(0,1),peerChecks:r.requiredPeerRoles.map(role=>({messageId:r.peerConclusions.find(p=>p.role===role).messageId,stance:'inconclusive',reason:'Sem resultado novo.'}))},suggestions:[],question:null})}}]};}};
+ const engine=createCloudEngine({modelPolicy:'wide',read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{dispatch:async()=>{throw Error('Unexpected dispatch');}},ai,ops:{}});
+ await assert.rejects(engine.step());
+ // Turn the recorded failure into a memory-review refusal (as validateMemoryReview would record it), with a foreign field.
+ await store.write(s=>{const f0=Object.values(s.cloudAttemptFailures)[0];f0.code='CLOUD_MEMORY_REVIEW_EVIDENCE';delete f0.modelFailure;f0.memoryReviewFailure={reason:'not_in_reflection',index:0,text:'private-model-text'};});
+ assert.equal((await engine.step()).kind,'stage');
+ assert.deepEqual(packets[1].validationFeedback.memoryReviewFailure,{reason:'not_in_reflection',index:0});assert.equal(packets[1].validationFeedback.modelFailure,null);
+ assert.doesNotMatch(JSON.stringify(packets[1].validationFeedback),/private-model/);
 });
