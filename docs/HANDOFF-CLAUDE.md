@@ -525,3 +525,15 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - O ciclo pesado (análise, contas, sombra, histórico) continua a cada 60 s; o alarme agora acorda a cada 15 s.
   - A web consulta o pulso a cada 5 s com a aba visível: recarrega autores e dados ao vivo e mostra um aviso ("Erik pausou …"). O notch consulta a cada 8 s e relê o resumo quando o pulso muda; a partir daí os avisos de gestor e o Bunk seguem o fluxo de sempre.
   - Custo: cerca de 24 leituras leves da Malva por minuto pela ponte `malva-mcp`, sem escrita na central quando nada mudou. Ajustes feitos fora da Malva (direto na Meta) dependem de quando a própria Malva importa o histórico da Meta. Ajustes de conjunto (ABO) seguem no ciclo de 60 s.
+- **Correção do diagnóstico de "rollback" e protocolo de publicação** (registro escrito às 2026-11-08 01:36:19 UTC por `date -u`). Eu tinha concluído que o build automático do GitHub publicava código antigo. **Os logs não sustentam isso.**
+  - O build remoto b095e208 usou `dist/server/wrangler.json`, rodou testes, tipos e build. O build controlado 1fe1f8ac, do commit 04cfa01, passou nos 1056 testes e publicou 48301865 às 01:30:09Z (conferência do Codex).
+  - Causa provável: **descompasso temporário entre o Worker e o Durable Object.** A estratégia padrão de troca de código do DO é `deferred`, com `max_delay` de 300 s, e objetos ativos seguem no código anterior até hibernar ou estourar esse prazo (Cloudflare, "Access Durable Objects storage").
+  - Os horários batem: o 503 do pulso, com rota nova e DO antigo, durou cerca de 5 min depois de 390566af/53eee529. O campo `watch` apareceu cerca de 4 min depois de b6e52454. Meus deploys manuais repetidos não eram necessários e só criaram concorrência.
+  - Compatibilidade durante a janela: as chaves novas do DO são aditivas (`watchConfig`, `watchTargets`, `watch-head:*`, `syncPulse`, `watchStatus`, `lastHeavyAt`). Rota nova com DO antigo devolve 503 tratado, e o notch e a web ignoram respostas diferentes de 200.
+  - **Protocolo:**
+    1. Um único publicador por vez.
+    2. Depois de um push, aguardar o build automático (comando salvo: `npx wrangler deploy --config dist/server/wrangler.json`) e a janela de até 5 min do DO.
+    3. Conferir a versão (`wrangler deployments list` ou a API), o `/health` 200 e, no status MCP `cloud-data`/`status`, a chave `watch` com `at` avançando.
+    4. Não fazer deploy manual concorrente por causa de 503 transitório.
+    5. Não trocar para `immediate` nem mexer em permissões.
+  - Evidência real: `syncPulse` chegou à versão 3 (01:19:36Z), então o sensor já detectou ajuste real na Malva. Às 01:35:33Z, `watch.projects` estava em 6, `failed` em 0 e `paused` em false.
