@@ -4,8 +4,9 @@
  * (start_time, created_time) and today's delivery (spend, impressions, IC, purchases) of the campaigns the Bunker watches.
  * Never writes to Meta: actions keep going through the Malva after the owner's approval.
  * The same file runs in the `meta-read` Edge Function (copy kept identical by a test).
+ * Read per ad account (`/act_<id>/campaigns`): the `ids=` multi-object read is deprecated by Meta since v26.0.
  */
-export const metaLivePolicy=Object.freeze({version:3,graphVersion:'v23.0',maxIds:200,chunk:50,maxRequests:40,refreshMs:120000,maxAgeMs:600000,skipMs:6*3600000});
+export const metaLivePolicy=Object.freeze({version:4,graphVersion:'v26.0',maxIds:200,maxAccounts:40,maxPages:3,maxRequests:60,refreshMs:120000,maxAgeMs:600000,skipMs:6*3600000});
 const arr=v=>Array.isArray(v)?v:[],finite=Number.isFinite;
 const num=v=>{const n=typeof v==='number'?v:typeof v==='string'&&v.trim()!==''?Number(v):NaN;return finite(n)?n:null;};
 const fail=code=>Object.assign(new Error(code),{code});
@@ -18,11 +19,19 @@ export const metaBasicFields='id,status,effective_status,start_time,created_time
 /** Graph error text without numbers that could be ids (never carries the token). */
 const diagnostic=e=>e&&typeof e==='object'?{code:num(e.code),subcode:num(e.error_subcode),type:typeof e.type==='string'?e.type.slice(0,40):null,message:typeof e.message==='string'?e.message.replace(/\d{5,}/g,'#').slice(0,180):null}:null;
 
-/** Campaign ids are numeric strings; anything else is refused before any request. */
+/** Campaign and account ids are numeric strings; anything else is refused before any request. */
 export function cleanMetaIds(ids){
  const out=[...new Set(arr(ids).filter(v=>typeof v==='string'&&/^\d{6,25}$/.test(v)))];
  if(out.length>metaLivePolicy.maxIds)throw fail('META_TOO_MANY_IDS');
  return out;
+}
+/** [{account,ids}] grouped and bounded: at most 40 accounts and 200 campaigns in all. */
+export function cleanMetaAccounts(accounts){
+ const byAccount=new Map();
+ for(const a of arr(accounts)){const acc=typeof a?.account==='string'?a.account.replace(/^act_/,''):'';if(!/^\d{5,25}$/.test(acc))continue;const set=byAccount.get(acc)||new Set();for(const id of cleanMetaIds(a.ids))set.add(id);if(set.size)byAccount.set(acc,set);}
+ if(byAccount.size>metaLivePolicy.maxAccounts)throw fail('META_TOO_MANY_ACCOUNTS');
+ if([...byAccount.values()].reduce((n,s)=>n+s.size,0)>metaLivePolicy.maxIds)throw fail('META_TOO_MANY_IDS');
+ return [...byAccount].map(([account,set])=>({account,ids:[...set]}));
 }
 
 /** One campaign node from the Graph API as the Bunker needs it. Missing values stay null (N/D), never zero. */
@@ -35,47 +44,37 @@ export function normalizeMetaCampaign(node){
 }
 
 /**
- * Reads up to 200 campaigns by id (50 per request). GET only; the token goes in the Authorization header.
- * In an `ids=` read, one id the token cannot see makes Meta refuse the whole request (#100): the request is split
- * in halves until each refused id is isolated and returned in `skipped`. At most 40 requests per read.
- * Errors become fixed codes (META_190, META_100_33, META_HTTP_400…), never a URL, a message or the token.
- * @param {typeof fetch} fetchImpl @param {string} token @param {string[]} ids
+ * Reads the active campaigns of each ad account (GET /act_<id>/campaigns, up to 3 pages) and keeps only the
+ * requested ids. GET only; the token goes in the Authorization header. If the insights expansion is refused,
+ * the schedule fields are still read. An account the token cannot read is returned in `skippedAccounts`.
+ * Errors become fixed codes (META_190, META_100_33, META_HTTP_400…); the Graph text is kept with numbers masked.
+ * @param {typeof fetch} fetchImpl @param {string} token @param {Array<{account:string,ids:string[]}>} accounts
  */
-export async function readMetaCampaigns(fetchImpl,token,ids,{version=metaLivePolicy.graphVersion}={}){
+export async function readMetaAccountCampaigns(fetchImpl,token,accounts,{version=metaLivePolicy.graphVersion}={}){
  if(typeof token!=='string'||!token.trim())throw fail('META_TOKEN_MISSING');
  if(!/^v\d{1,2}\.\d$/.test(version))throw fail('META_VERSION_INVALID');
- const list=cleanMetaIds(ids),items=[],errors=[],skipped=[];let requests=0,fields=metaCampaignFields,diag=null;
- const get=async(group,f)=>{
+ const list=cleanMetaAccounts(accounts),items=[],errors=[],skippedAccounts=[];let requests=0,fields=metaCampaignFields,diag=null,downgraded=false;
+ const get=async(account,f,after)=>{
   requests++;
-  const qs=new URLSearchParams({ids:group.join(','),fields:f});
-  let response;try{response=await fetchImpl(`https://graph.facebook.com/${version}/?${qs}`,{method:'GET',headers:{Authorization:'Bearer '+token.trim()}});}catch{return {network:true};}
+  const qs=new URLSearchParams({fields:f,effective_status:JSON.stringify(['ACTIVE','IN_PROCESS','WITH_ISSUES']),limit:'100'});if(after)qs.set('after',after);
+  let response;try{response=await fetchImpl(`https://graph.facebook.com/${version}/act_${account}/campaigns?${qs}`,{method:'GET',headers:{Authorization:'Bearer '+token.trim()}});}catch{return {network:true};}
   let body=null;try{body=await response.json();}catch{body=null;}
   if(!response.ok||body?.error){const c=num(body?.error?.code),sub=num(body?.error?.error_subcode);return {c,code:c?`META_${c}${sub?'_'+sub:''}`:`META_HTTP_${response.status}`,error:body?.error};}
   return {body};
  };
- // Probe with one id: a refusal of the request itself (fields, permission) must not be mistaken for bad ids.
- if(list.length){
-  let probe=await get([list[0]],fields);
-  if(probe.c===190)throw fail(probe.code);
-  if(probe.c===100&&list.length>1){const second=await get([list[1]],fields);if(second.c===100){
-   diag=diagnostic(probe.error);
-   const basic=await get([list[0]],metaBasicFields);
-   if(basic.body){fields=metaBasicFields;errors.push('META_INSIGHTS_REJECTED');}
-   else return {version:metaLivePolicy.version,items,skipped,requests,errors:[probe.code],diagnostic:diag,fields:'none'};
-  }}
- }
- const read=async group=>{
-  if(requests>=metaLivePolicy.maxRequests){errors.push('META_REQUEST_BUDGET');return;}
-  const r=await get(group,fields);
-  if(r.network){errors.push('META_NETWORK');return;}
-  if(r.error||r.code){
-   if(r.c===190)throw fail(r.code);
-   if(r.c===100&&group.length>1){const half=Math.ceil(group.length/2);await read(group.slice(0,half));await read(group.slice(half));return;}
-   if(r.c===100&&group.length===1){skipped.push(group[0]);errors.push(r.code);diag=diag||diagnostic(r.error);return;}
-   errors.push(r.code);diag=diag||diagnostic(r.error);return;
+ for(const {account,ids} of list){
+  const wanted=new Set(ids);let after=null;
+  for(let page=0;page<metaLivePolicy.maxPages;page++){
+   if(requests>=metaLivePolicy.maxRequests){errors.push('META_REQUEST_BUDGET');break;}
+   let r=await get(account,fields,after);
+   // The insights expansion refused once: fall back to schedule fields for every account.
+   if(r.c===100&&fields===metaCampaignFields&&!downgraded){diag=diag||diagnostic(r.error);const b=await get(account,metaBasicFields,after);if(b.body){fields=metaBasicFields;downgraded=true;errors.push('META_INSIGHTS_REJECTED');r=b;}}
+   if(r.network){errors.push('META_NETWORK');break;}
+   if(r.code){if(r.c===190)throw fail(r.code);errors.push(r.code);diag=diag||diagnostic(r.error);if([100,10,200,270,283,294].includes(r.c))skippedAccounts.push(account);break;}
+   for(const node of arr(r.body?.data))if(node&&wanted.has(String(node.id))){items.push(normalizeMetaCampaign(node));wanted.delete(String(node.id));}
+   after=typeof r.body?.paging?.cursors?.after==='string'&&r.body?.paging?.next?r.body.paging.cursors.after:null;
+   if(!after||!wanted.size)break;
   }
-  for(const node of Object.values(r.body||{}))if(node&&typeof node==='object'&&node.id)items.push(normalizeMetaCampaign(node));
- };
- for(let i=0;i<list.length;i+=metaLivePolicy.chunk)await read(list.slice(i,i+metaLivePolicy.chunk));
- return {version:metaLivePolicy.version,items,skipped,requests,errors:[...new Set(errors)],diagnostic:diag,fields:fields===metaCampaignFields?'full':'basic'};
+ }
+ return {version:metaLivePolicy.version,items,skippedAccounts,requests,errors:[...new Set(errors)],diagnostic:diag,fields:fields===metaCampaignFields?'full':'basic'};
 }

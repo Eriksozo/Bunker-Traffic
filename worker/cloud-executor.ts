@@ -20,7 +20,7 @@ import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 import {evaluateShadow,mergeShadow,shadowOutcomes,shadowSummary,shadowPolicy,first24hWatch,first24hSummary} from '../lib/autonomy-shadow.mjs';
-import {metaLiveCandidates} from '../lib/first-24h.mjs';
+import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
@@ -123,15 +123,18 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   if(!state||state.paused)return;
   const now=Date.now(),prior=await this.ctx.storage.get<any>('metaLive'),last=Math.max(Date.parse(prior?.at||'')||0,Date.parse(prior?.failedAt||'')||0);
   if(now-last<metaLivePolicy.refreshMs)return;
-  // Ids Meta refused for this token (another business, deleted) are skipped for 6 hours instead of breaking every batch.
+  // Ad accounts Meta refused for this token (another business, no access) are skipped for 6 hours.
   const skip=Object.fromEntries(Object.entries<any>(prior?.skip||{}).filter(([,at])=>now-Date.parse(at)<metaLivePolicy.skipMs));
-  const ids=metaLiveCandidates(this.liveItems||[],{now,limit:metaLivePolicy.maxIds,exclude:new Set(Object.keys(skip))});
-  if(!ids.length){await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:new Date(now).toISOString(),items:{},requested:0,read:0,skip,errors:[]});return;}
+  const links=(await this.ctx.storage.get<any>('metaAccountLinks'))?.links||{};
+  const picks=metaLiveCandidates(this.liveItems||[],{now,limit:metaLivePolicy.maxIds});
+  const accounts=groupMetaAccounts(picks,links,{skip:new Set(Object.keys(skip)),maxAccounts:metaLivePolicy.maxAccounts});
+  const ids=accounts.flatMap((a:any)=>a.ids);
+  if(!ids.length){await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:new Date(now).toISOString(),items:{},requested:0,read:0,unlinked:picks.length,skip,errors:[]});return;}
   try{
-   const r:any=await this.db().rpc('metaRead',{ids});
+   const r:any=await this.db().rpc('metaRead',{accounts});
    const items=Object.fromEntries((Array.isArray(r?.items)?r.items:[]).filter((i:any)=>typeof i?.id==='string').map((i:any)=>[i.id,i]));
-   for(const id of Array.isArray(r?.skipped)?r.skipped:[])if(typeof id==='string')skip[id]=new Date(now).toISOString();
-   await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:typeof r?.at==='string'?r.at:new Date(now).toISOString(),items,requested:ids.length,read:Object.keys(items).length,requests:r?.requests??null,fields:typeof r?.fields==='string'?r.fields:null,diagnostic:r?.diagnostic&&typeof r.diagnostic==='object'?{code:r.diagnostic.code??null,subcode:r.diagnostic.subcode??null,type:typeof r.diagnostic.type==='string'?r.diagnostic.type.slice(0,40):null,message:typeof r.diagnostic.message==='string'?r.diagnostic.message.slice(0,180):null}:null,skip,errors:Array.isArray(r?.errors)?r.errors.slice(0,10):[]});
+   for(const acc of Array.isArray(r?.skippedAccounts)?r.skippedAccounts:[])if(typeof acc==='string')skip[acc]=new Date(now).toISOString();
+   await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:typeof r?.at==='string'?r.at:new Date(now).toISOString(),items,requested:ids.length,accounts:accounts.length,unlinked:picks.length-ids.length,read:Object.keys(items).length,requests:r?.requests??null,fields:typeof r?.fields==='string'?r.fields:null,diagnostic:r?.diagnostic&&typeof r.diagnostic==='object'?{code:r.diagnostic.code??null,subcode:r.diagnostic.subcode??null,type:typeof r.diagnostic.type==='string'?r.diagnostic.type.slice(0,40):null,message:typeof r.diagnostic.message==='string'?r.diagnostic.message.slice(0,180):null}:null,skip,errors:Array.isArray(r?.errors)?r.errors.slice(0,10):[]});
   }catch(e:any){
    const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_READ_FAILED';
    await this.ctx.storage.put('metaLive',{...(prior||{version:metaLivePolicy.version,items:{}}),failedAt:new Date(now).toISOString(),error:code});
@@ -144,7 +147,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async syncAccounts(state:any){
   if(!state||state.paused)return;
   const prior=await this.ctx.storage.get<any>('accountsPanel');
-  if(prior?.version===accountPanelPolicy.version&&Date.now()-Date.parse(prior.generatedAt)<accountPanelPolicy.refreshMs)return;
+  const linked=await this.ctx.storage.get<any>('metaAccountLinks');
+  if(prior?.version===accountPanelPolicy.version&&Date.now()-Date.parse(prior.generatedAt)<accountPanelPolicy.refreshMs&&linked)return;
   const source=cloudMalvaClient(this.db()),projects:any[]=[],projectErrors:Record<string,string>={};
   for(const [id,c] of Object.entries<any>(state.config||{})){
    try{const r:any=await source.read('tracking_ad_accounts',{projectId:id});projects.push({id,name:c?.projectName||id,items:Array.isArray(r?.items)?r.items:[]});}
@@ -154,6 +158,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   try{meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN||'',{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});}
   catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';}
   await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors});
+  // Malva account id → Meta ad account number, for the live Meta read of new campaigns (no other use).
+  const links:Record<string,string>={};for(const p of projects)for(const a of p.items)if(a?.provider==='meta'&&typeof a.id==='string'&&/^(act_)?\d{5,25}$/.test(String(a.accountId??'')))links[a.id]=String(a.accountId).replace(/^act_/,'');
+  if(Object.keys(links).length)await this.ctx.storage.put('metaAccountLinks',{at:new Date().toISOString(),links});
  }
  /** Recent Malva campaign edits, including edits between reads and campaigns not in the analysis queue. */
  private async syncAttribution(state:any){
@@ -223,7 +230,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const day=typeof input.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.day)?input.day:status?.day;
    const entries=all.filter((e:any)=>!day||e.day===day).sort((a:any,b:any)=>Date.parse(a.firstAt)-Date.parse(b.firstAt)).slice(0,300).map((e:any)=>({rule:e.rule,project:e.projectName,account:e.accountName,adAccountId:e.adAccountId,objectId:e.objectId,campaign:e.name,action:e.action,before:e.before,after:e.after,reason:e.reason,launchDay:e.launchDay,newCampaign:e.newCampaign||null,metrics:e.metrics,firstAt:e.firstAt,firstWouldExecuteAt:e.firstWouldExecuteAt,lastAt:e.lastAt,blockedBy:e.blockedBy,manager:e.manager}));
    const first24h=await this.ctx.storage.get<any>('first24h'),meta=await this.ctx.storage.get<any>('metaLive');
-   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
+   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
   }
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse');return Response.json({...runtime,attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
