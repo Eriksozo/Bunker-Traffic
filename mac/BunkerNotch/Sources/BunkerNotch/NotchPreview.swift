@@ -21,6 +21,9 @@ import SwiftUI
             ("08-open-agentes", { $0.mode = .open; $0.tab = .agents }),
             ("09-open-sistema", { $0.mode = .open; $0.tab = .system }),
             ("10-detalhe", { $0.mode = .open; $0.selected = loss }),
+            ("11-ajuste-executar", { adjust($0, cards: ownerCards(fresh: true), action: "reduce") }),
+            ("12-ajuste-bloqueado", { adjust($0, cards: ownerCards(fresh: false), action: "pause") }),
+            ("13-aprovar", { adjust($0, cards: ownerCards(fresh: true, approvals: true), action: "", campaign: false) }),
         ]
         var failures: Int32 = 0
         for (name, setup) in shots {
@@ -38,6 +41,27 @@ import SwiftUI
         }
         print(failures == 0 ? "Notch salvo em \(dir.path)" : "\(failures) imagem(ns) falharam")
         return failures == 0 ? 0 : 1
+    }
+
+    private static func adjust(_ n: NotchState, cards: OwnerCards?, action: String, campaign: Bool = true) {
+        n.mode = .open
+        n.ownerAdjust.preview = true; n.ownerAdjust.data = cards; n.ownerAdjust.action = action; n.ownerAdjust.percentText = "20"
+        n.adjust = campaign ? AdjustTarget(project: "p2", adAccountId: "a2", campaignId: "c2", name: "07/11 - [CBO] - [AVATAR] - Criativo 009") : AdjustTarget(project: nil, adAccountId: nil, campaignId: nil, name: nil)
+    }
+    /// Fictional decision card for the adjust screen: runnable now, or blocked by a stale reading.
+    private static func ownerCards(fresh: Bool, approvals: Bool = false) -> OwnerCards? {
+        let blocked = fresh ? "[\"Faltam pareceres da equipe para esta campanha ou sua hierarquia.\",\"Meta de retorno do projeto não configurada.\"]"
+                            : "[\"Leitura de hoje vencida ou com data inválida.\",\"Faltam pareceres da equipe para esta campanha ou sua hierarquia.\"]"
+        let order = fresh ? "{\"increase\":true,\"reduce\":true,\"pause\":true,\"keep\":false}" : "{\"increase\":false,\"reduce\":false,\"pause\":false,\"keep\":false}"
+        let orderBlockers = fresh ? "[]" : "[\"Leitura de hoje vencida ou com data inválida.\"]"
+        let approval = approvals ? "[{\"id\":\"pr1\",\"version\":1,\"signature\":\"s\",\"status\":\"Aguardando aprovação\",\"project\":\"p2\",\"title\":\"Conta Exemplo 02 · Reduzir 20%\",\"reason\":\"ROAS abaixo do equilíbrio em 3 e 7 dias; filhos sem venda.\",\"action\":\"budget\",\"level\":\"campaign\",\"adAccountId\":\"a2\",\"objectId\":\"c9\",\"campaign\":\"[ABO] - [ESCALA] - Criativo A\",\"account\":\"Conta Exemplo 02\",\"currency\":\"USD\",\"before\":{\"dailyBudget\":500},\"after\":{\"dailyBudget\":400},\"expiresAt\":\"\(ago(-120))\",\"expired\":false,\"projectName\":\"Beta\"}]" : "[]"
+        let json = """
+        {"revision":7,"paused":false,"approvals":\(approval),"cards":[{"id":"k","signature":"s","project":"p2","projectName":"Beta","campaign":"07/11 - [CBO] - [AVATAR] - Criativo 009","account":"Conta Exemplo 02","adAccountId":"a2","objectId":"c2","status":"ACTIVE","dailyBudget":95.1,"currency":"USD",
+          "windows":{"today":{"spend":310,"roas":0.62,"roi":0.5,"frontOrders":1},"yesterday":{"spend":480,"roas":1.12,"roi":0.9,"frontOrders":3},"3d":{"spend":1450,"roas":0.94,"roi":0.8,"frontOrders":8},"7d":null},
+          "suggestion":{"action":"keep","percent":null,"reason":"Diagnóstico: comparar aquisição, última edição e os quatro períodos.","origin":"diagnostic"},
+          "intentActions":{"increase":true,"reduce":true,"pause":true,"keep":true},"blockedReasons":\(blocked),"lastChoice":null,"proposal":null,"orderActions":\(order),"orderBlockers":\(orderBlockers)}]}
+        """
+        return try? JSONDecoder().decode(OwnerCards.self, from: Data(json.utf8))
     }
 
     /// Hosted in an off-screen window so AppKit-backed controls (scroll views, menus, buttons) draw too.

@@ -25,6 +25,8 @@ struct OwnerCards: Decodable, Equatable {
         let windows: [String: Window?]
         let suggestion: Suggestion?; let intentActions: Actions; let blockedReasons: [String]
         let lastChoice: Choice?; let proposal: Proposal?
+        /// Owner direct order (Touch ID): which actions run now and what still blocks them. Older servers omit both.
+        let orderActions: Actions?; let orderBlockers: [String]?
     }
     let revision: Int?
     let paused: Bool
@@ -65,6 +67,28 @@ enum OwnerAdjust {
         if action == "increase" || action == "reduce", let percent { input["percent"] = percent }
         return input
     }
+    /// Owner direct order, signed with Touch ID: becomes an approved exact proposal that the Cloudflare executor
+    /// applies once via Malva (current value checked before, reread after). Pause, increase or reduce only.
+    static func order(card: OwnerCards.Card, revision: Int, action: String, percent: Double?, reason: String, clientId: String) -> [String: Any] {
+        var input = intent(card: card, revision: revision, action: action, percent: percent, reason: reason, clientId: clientId)
+        input["ownerOrder"] = true
+        return input
+    }
+    static func canOrder(_ card: OwnerCards.Card, action: String) -> Bool {
+        guard action != "keep", let a = card.orderActions else { return false }
+        return allowed(a, action) && (canDecide(card) || card.lastChoice?.canReportApplied != nil)
+    }
+    /// Team gaps, return goal and daily cap inform but do not block a direct order.
+    static func advisory(_ reason: String) -> Bool {
+        ["Faltam pareceres", "Meta de retorno", "Teto diário"].contains { reason.contains($0) }
+    }
+    /// "Pausar: ativa → pausada" or "Reduzir 20%: US$ 95,10 → US$ 76,08/dia" — screen and Touch ID prompt.
+    static func orderLine(_ card: OwnerCards.Card, action: String, percent: Double?) -> String {
+        if action == "pause" { return "Pausar: " + Format.statusName(card.status) + " → pausada" }
+        let after = newBudget(card.dailyBudget, action: action, percent: percent)
+        return label(action) + (percent.map { " " + Format.percent($0, signed: false) } ?? "") + ": "
+            + Format.money(card.dailyBudget, currency: card.currency) + " → " + Format.money(after, currency: card.currency) + "/dia"
+    }
     /// "Já fiz no Gerenciador": the owner reports an action already made in Meta. Never approves, never executes.
     static func applied(card: OwnerCards.Card, revision: Int, action: String, percent: Double?, reason: String, clientId: String) -> [String: Any] {
         var input = intent(card: card, revision: revision, action: action, percent: percent, reason: reason, clientId: clientId)
@@ -73,6 +97,7 @@ enum OwnerAdjust {
     }
     /// A new decision is open when there is none, the scenario was reopened, or (for "Já fiz") it matches the pending intent.
     static func canDecide(_ card: OwnerCards.Card) -> Bool { card.lastChoice == nil || card.lastChoice?.reopenable == true }
+    static let symbols = ["increase": "arrow.up.right", "reduce": "arrow.down.right", "pause": "pause.fill", "keep": "equal"]
     static func canReportApplied(_ card: OwnerCards.Card, action: String) -> Bool {
         action != "keep" && (canDecide(card) || card.lastChoice?.canReportApplied == action)
     }

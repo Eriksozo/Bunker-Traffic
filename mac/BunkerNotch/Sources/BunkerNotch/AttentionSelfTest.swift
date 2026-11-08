@@ -89,6 +89,21 @@ extension SelfTest {
         expectA(BunkScreens.toggle("B", all: ["A", "B"], saved: ["B"]) == [], #line)
         expectA(BunkScreens.migrate(oldIDs: [2, 9, 1], uuidOf: { $0 == 9 ? nil : "U\($0)" }) == ["U1", "U2"], #line)
     }
+    /// Owner direct order: signed input, what can run now, and the exact line shown on screen and in Touch ID.
+    static func testOwnerOrder() {
+        let json = """
+        {"revision":3,"paused":false,"approvals":[],"cards":[{"id":"k","signature":"s","project":"p","campaign":"C","account":"A","adAccountId":"a","objectId":"o","status":"ACTIVE","dailyBudget":95.1,"currency":"USD","windows":{},
+          "suggestion":null,"intentActions":{"increase":true,"reduce":true,"pause":true,"keep":true},"blockedReasons":["Faltam pareceres da equipe para esta campanha ou sua hierarquia.","Leitura de hoje vencida ou com data inválida."],
+          "lastChoice":null,"proposal":null,"orderActions":{"increase":false,"reduce":true,"pause":true,"keep":false},"orderBlockers":[]}]}
+        """
+        guard let card = (try? JSONDecoder().decode(OwnerCards.self, from: Data(json.utf8)))?.cards.first else { expectA(false, #line); return }
+        let input = OwnerAdjust.order(card: card, revision: 3, action: "reduce", percent: 20, reason: " ", clientId: "c")
+        expectA(input["ownerOrder"] as? Bool == true && input["approveExact"] as? Bool == false && input["applied"] == nil && input["percent"] as? Double == 20, #line)
+        expectA(OwnerAdjust.canOrder(card, action: "reduce") && OwnerAdjust.canOrder(card, action: "pause") && !OwnerAdjust.canOrder(card, action: "increase") && !OwnerAdjust.canOrder(card, action: "keep"), #line)
+        expectA(OwnerAdjust.orderLine(card, action: "reduce", percent: 20) == "Reduzir 20%: " + Format.money(95.1, currency: "USD") + " → " + Format.money(76.08, currency: "USD") + "/dia", #line)
+        expectA(OwnerAdjust.orderLine(card, action: "pause", percent: nil) == "Pausar: ativa → pausada", #line)
+        expectA(OwnerAdjust.advisory(card.blockedReasons[0]) && !OwnerAdjust.advisory(card.blockedReasons[1]), #line)
+    }
     private static func expectA(_ condition: Bool, _ line: Int) {
         if !condition { FileHandle.standardError.write(Data("self-test falhou na linha \(line) de AttentionSelfTest.swift\n".utf8)); bunkFailures += 1 }
     }

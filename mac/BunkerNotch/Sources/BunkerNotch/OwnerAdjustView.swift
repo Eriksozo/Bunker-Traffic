@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 
 /// Native owner adjustment inside the island, confirmed with Touch ID on this Mac.
-/// Same rules as the web card: a choice asks the team for an exact proposal; only a proposal
-/// the agents already reviewed can be approved, and the Cloudflare executor applies it via Malva.
+/// "Executar agora" is the owner's direct order (decided 2026-11-07): an exact change that the Cloudflare
+/// executor applies once via Malva, checking the current value before and rereading after. "Pedir à equipe"
+/// asks the agents for a proposal; "Já fiz no Gerenciador" only records a change made in Meta.
 struct OwnerAdjustView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
@@ -16,7 +17,7 @@ struct OwnerAdjustView: View {
                 IconButton(symbol: "chevron.left", help: "Voltar (Esc)") { withAnimation(DS.Motion.quick) { notch.adjust = nil } }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(target.campaignId == nil ? "Aprovar propostas" : (target.name ?? "Ajustar campanha")).font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
-                    Text("Confirmação com Touch ID · executa só proposta exata revisada").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                    Text(target.campaignId == nil ? "Propostas revisadas pela equipe · aprovar com Touch ID" : "Sua ordem com Touch ID · o executor aplica uma vez pela Malva e confere").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 }
                 Pill(text: "Touch ID", tone: .accent, icon: "touchid")
                 Spacer()
@@ -45,7 +46,7 @@ struct OwnerAdjustView: View {
                 }.padding(.bottom, DS.Space.l)
             }
         }
-        .task(id: target) { m.reset(for: target); await load() }
+        .task(id: target) { if !m.preview { m.reset(for: target) }; await load() }
     }
 
     // MARK: Sections
@@ -62,81 +63,177 @@ struct OwnerAdjustView: View {
     }
 
     func approvalCard(_ p: OwnerCards.Proposal, revision: Int?) -> some View {
-        VStack(alignment: .leading, spacing: DS.Space.xs) {
-            HStack(spacing: DS.Space.xs) {
-                Text(p.campaign ?? p.title ?? "Proposta").font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
-                Spacer()
-                if let name = p.projectName { Pill(text: name, tone: .accent) }
+        let down = p.after.status == "PAUSED" || (p.after.dailyBudget ?? 0) < (p.before.dailyBudget ?? 0)
+        return VStack(alignment: .leading, spacing: DS.Space.s) {
+            HStack(spacing: DS.Space.s) {
+                IconBadge(symbol: p.action == "status" ? "pause.fill" : down ? "arrow.down.right" : "arrow.up.right", tone: down ? .bad : .good)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(p.campaign ?? p.title ?? "Proposta").font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
+                    HStack(spacing: DS.Space.xs) {
+                        if let name = p.projectName { Pill(text: name, tone: .tag) }
+                        Text((p.account.map { $0 + " · " } ?? "") + "v\(p.version) · vence " + Format.stamp(p.expiresAt)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
             }
-            Text((p.account.map { $0 + " · " } ?? "") + "v\(p.version) · vence " + Format.stamp(p.expiresAt)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
-            Text(OwnerAdjust.change(p)).font(DS.Font.number).foregroundStyle(p.after.status == "PAUSED" || (p.after.dailyBudget ?? 0) < (p.before.dailyBudget ?? 0) ? DS.Color.bad : DS.Color.good)
+            Text(OwnerAdjust.change(p)).font(DS.Font.stat).foregroundStyle(down ? DS.Color.bad : DS.Color.good).lineLimit(1).minimumScaleFactor(0.7)
             if let r = p.reason { Text(r).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(3).fixedSize(horizontal: false, vertical: true) }
             HStack(spacing: DS.Space.s) {
-                Button { Task { await review(p, revision: revision, decision: "approve") } } label: {
-                    Label("Aprovar com Touch ID", systemImage: "touchid").font(DS.Font.bodyStrong)
-                        .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(DS.Color.accent, in: Capsule())
-                }.buttonStyle(.plain).disabled(m.busy || p.expired == true || revision == nil)
-                Button("Pedir revisão") { Task { await review(p, revision: revision, decision: "revise") } }.controlSize(.small).disabled(m.busy || revision == nil)
-                Button("Recusar") { Task { await review(p, revision: revision, decision: "reject") } }.controlSize(.small).disabled(m.busy || revision == nil)
+                ActionButton(title: "Aprovar e executar", icon: "touchid", leadingIcon: true, prominent: true, help: "Autoriza só este valor. O executor confere o valor atual, envia uma vez pela Malva e relê.") {
+                    Task { await review(p, revision: revision, decision: "approve") }
+                }.disabled(m.busy || p.expired == true || revision == nil).opacity(m.busy || p.expired == true || revision == nil ? 0.5 : 1)
+                ActionButton(title: "Pedir revisão", help: "Devolve à equipe com seu pedido de revisão") { Task { await review(p, revision: revision, decision: "revise") } }.disabled(m.busy || revision == nil)
+                ActionButton(title: "Recusar", help: "Encerra esta proposta") { Task { await review(p, revision: revision, decision: "reject") } }.disabled(m.busy || revision == nil)
+                Spacer(minLength: 0)
+                if m.busy { ProgressView().controlSize(.small) }
             }
-            Text("Aprovar autoriza só este valor. O executor Cloudflare confere o valor atual, envia uma vez pelo Malva e relê.").font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted)
         }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+    }
+
+    /// The four periods at a glance: ROAS large, spend under it; missing stays N/D.
+    func periodsStrip(_ card: OwnerCards.Card) -> some View {
+        HStack(spacing: DS.Space.xs) {
+            ForEach([("today", "Hoje"), ("yesterday", "Ontem"), ("3d", "3 dias"), ("7d", "7 dias")], id: \.0) { key, label in
+                let w = card.windows[key] ?? nil
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                    Text(Format.ratio(w?.roas)).font(DS.Font.number).foregroundStyle(w?.roas == nil ? DS.Color.inkMuted : (w?.roas ?? 0) >= 1 ? DS.Color.ink : DS.Color.bad)
+                    Text("gasto " + Format.compactMoney(w?.spend) + " · front " + (w?.frontOrders.map { String(Int($0)) } ?? "N/D")).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
+                }
+                .padding(.horizontal, DS.Space.s).padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
+                .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+            }
+        }
+        .help("ROAS por janela (hoje é parcial). Gasto na moeda do projeto.")
     }
 
     func decision(_ card: OwnerCards.Card, revision: Int?) -> some View {
         let percent = Double(m.percentText.replacingOccurrences(of: ",", with: "."))
         let needsPercent = m.action == "increase" || m.action == "reduce"
         let preview = OwnerAdjust.newBudget(card.dailyBudget, action: m.action, percent: percent)
-        let canSend = !m.busy && revision != nil && !m.action.isEmpty && OwnerAdjust.allowed(card.intentActions, m.action) && OwnerAdjust.validPercent(m.action, percent)
-        return VStack(alignment: .leading, spacing: DS.Space.s) {
-            SectionHeader(title: "Sua decisão", detail: (card.account ?? "") + " · " + Format.statusName(card.status) + " · diário " + Format.money(card.dailyBudget, currency: card.currency))
+        let valid = !m.busy && revision != nil && !m.action.isEmpty && OwnerAdjust.validPercent(m.action, percent)
+        let canOrder = valid && OwnerAdjust.canOrder(card, action: m.action)
+        let canAsk = valid && OwnerAdjust.allowed(card.intentActions, m.action) && OwnerAdjust.canDecide(card)
+        let canApplied = valid && OwnerAdjust.allowed(card.intentActions, m.action) && OwnerAdjust.canReportApplied(card, action: m.action)
+        let blockers = card.orderBlockers ?? card.blockedReasons.filter { !OwnerAdjust.advisory($0) }
+        let info = card.blockedReasons.filter(OwnerAdjust.advisory)
+        let tone: Tone = m.action == "increase" ? .good : m.action == "keep" || m.action.isEmpty ? .neutral : .bad
+        return VStack(alignment: .leading, spacing: DS.Space.m) {
+            // Context: where this campaign stands now.
+            HStack(spacing: DS.Space.xs) {
+                Pill(text: card.projectName ?? card.project, tone: .tag)
+                if let a = card.account { Pill(text: a, tone: .tag) }
+                Pill(text: Format.statusName(card.status), tone: card.status == "ACTIVE" ? .good : .neutral)
+                Text("diário " + Format.money(card.dailyBudget, currency: card.currency)).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft)
+                Spacer(minLength: 0)
+            }
+            periodsStrip(card)
             if let s = card.suggestion {
-                Text(OwnerAdjust.suggestionLine(s))
-                    .font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: DS.Space.s) {
+                    Image(systemName: s.origin == "diagnostic" ? "stethoscope" : "person.3.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.inkMuted).frame(width: 14)
+                    Text(OwnerAdjust.suggestionLine(s)).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                }
             }
             if let last = card.lastChoice {
-                Banner(text: OwnerAdjust.lastChoiceLine(last) + (last.canReportApplied != nil ? ". Se já fez no Gerenciador, escolha a mesma ação e toque em \"Já fiz\"." : last.reopenable == true ? "" : ". Para decidir de novo, use Rever cenário no Histórico do Bunker."),
+                Banner(text: OwnerAdjust.lastChoiceLine(last) + (last.canReportApplied != nil ? ". Você ainda pode executar agora ou informar que já fez." : last.reopenable == true ? "" : ". Para decidir de novo, use Rever cenário no Histórico do Bunker."),
                        tone: last.verification == "Divergente" ? .bad : last.verification == "Conferida" ? .good : .neutral)
             }
-            HStack(spacing: DS.Space.xs) {
-                ForEach(OwnerAdjust.choices, id: \.self) { a in
-                    let ok = OwnerAdjust.allowed(card.intentActions, a)
-                    Button { m.action = a } label: {
-                        Text(OwnerAdjust.label(a)).font(DS.Font.bodyStrong).frame(maxWidth: .infinity).padding(.vertical, 6)
-                            .foregroundStyle(ok ? (m.action == a ? Color.black.opacity(0.85) : DS.Color.ink) : DS.Color.inkMuted)
-                            .background(m.action == a ? DS.Color.accent : DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
-                    }.buttonStyle(.plain).disabled(!ok || m.busy)
+            // 1 · What to do.
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                Text("O que fazer").font(DS.Font.eyebrow).foregroundStyle(DS.Color.inkSoft)
+                HStack(spacing: DS.Space.xs) {
+                    ForEach(OwnerAdjust.choices, id: \.self) { a in
+                        let ok = OwnerAdjust.allowed(card.intentActions, a), selected = m.action == a
+                        Button { withAnimation(DS.Motion.quick) { m.action = a } } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: OwnerAdjust.symbols[a] ?? "circle").font(.system(size: 10, weight: .bold))
+                                Text(OwnerAdjust.label(a)).font(DS.Font.bodyStrong)
+                            }
+                            .frame(maxWidth: .infinity).padding(.vertical, 7)
+                            .foregroundStyle(!ok ? DS.Color.inkMuted : selected ? Color.black.opacity(0.85) : DS.Color.ink)
+                            .background(selected ? DS.Color.accent : DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous).stroke(selected ? Color.clear : DS.Color.stroke))
+                            .contentShape(Rectangle())
+                        }.buttonStyle(.plain).disabled(!ok || m.busy).help(ok ? OwnerAdjust.label(a) : "Indisponível com a leitura atual desta campanha")
+                    }
+                }
+                if needsPercent {
+                    HStack(spacing: DS.Space.s) {
+                        ForEach(["10", "20", "30", "50"], id: \.self) { v in
+                            let on = m.percentText == v
+                            Button { m.percentText = v } label: {
+                                Text(v + "%").font(DS.Font.caption).monospacedDigit().padding(.horizontal, 8).padding(.vertical, 4)
+                                    .foregroundStyle(on ? DS.Color.ink : DS.Color.inkSoft)
+                                    .background(on ? DS.Color.surfaceSelected : DS.Color.surface, in: Capsule())
+                            }.buttonStyle(.plain)
+                        }
+                        TextField("%", text: $m.percentText).textFieldStyle(.roundedBorder).controlSize(.small).frame(width: 54)
+                        Text("%").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                        Spacer(minLength: 0)
+                    }
+                    if !OwnerAdjust.validPercent(m.action, percent) { Text("Aumento até 1000%; redução acima de 0 e abaixo de 100%.").font(DS.Font.caption).foregroundStyle(DS.Color.bad) }
                 }
             }
-            if needsPercent {
-                HStack(spacing: DS.Space.s) {
-                    TextField("%", text: $m.percentText).textFieldStyle(.roundedBorder).controlSize(.small).frame(width: 60)
-                    Text("%").font(DS.Font.body)
-                    ForEach(["10", "20", "30", "50"], id: \.self) { v in Button(v + "%") { m.percentText = v }.controlSize(.small) }
-                    Spacer()
-                    Text(Format.money(card.dailyBudget, currency: card.currency) + " → " + Format.money(preview, currency: card.currency)).font(DS.Font.number)
-                        .foregroundStyle(m.action == "increase" ? DS.Color.good : DS.Color.bad)
+            // 2 · Exactly what changes (the same line Touch ID shows).
+            if !m.action.isEmpty && m.action != "keep" {
+                HStack(spacing: DS.Space.m) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Muda na Meta").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                        if m.action == "pause" {
+                            Text(Format.statusName(card.status) + " → pausada").font(DS.Font.stat).foregroundStyle(DS.Color.bad)
+                        } else {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(Format.money(card.dailyBudget, currency: card.currency)).font(DS.Font.number).foregroundStyle(DS.Color.inkMuted).strikethrough()
+                                Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(DS.Color.inkMuted)
+                                Text(Format.money(preview, currency: card.currency)).font(DS.Font.stat).foregroundStyle(tone.color)
+                                Text("/dia").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if let b = card.dailyBudget, let a = preview, m.action != "pause" {
+                        Pill(text: (a >= b ? "+" : "−") + Format.money(abs(a - b), currency: card.currency) + "/dia", tone: tone)
+                    }
                 }
-                if !OwnerAdjust.validPercent(m.action, percent) { Text("Aumento até 1000%; redução acima de 0 e abaixo de 100%.").font(DS.Font.caption).foregroundStyle(DS.Color.bad) }
+                .padding(DS.Space.m)
+                .background(tone.color.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).stroke(tone.color.opacity(0.25)))
             }
             TextField("Motivo (opcional)", text: $m.reason).textFieldStyle(.roundedBorder).controlSize(.small)
+            // 3 · One primary action: execute when it can run now; otherwise ask the team.
             HStack(spacing: DS.Space.s) {
-                Button { Task { await sendIntent(card, revision: revision, percent: needsPercent ? percent : nil) } } label: {
-                    Label(m.action == "keep" ? "Registrar manter (Touch ID)" : "Pedir à equipe (Touch ID)", systemImage: "touchid").font(DS.Font.bodyStrong)
-                        .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(canSend ? DS.Color.accent : DS.Color.inkMuted, in: Capsule())
-                }.buttonStyle(.plain).disabled(!canSend || !OwnerAdjust.canDecide(card))
-                let canApplied = canSend && OwnerAdjust.canReportApplied(card, action: m.action)
-                Button { Task { await sendApplied(card, revision: revision, percent: needsPercent ? percent : nil) } } label: {
-                    Label("Já fiz no Gerenciador (Touch ID)", systemImage: "checkmark.circle").font(DS.Font.bodyStrong)
-                        .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(canApplied ? DS.Color.ink : DS.Color.inkMuted)
-                        .background(DS.Color.surface, in: Capsule()).overlay(Capsule().stroke(canApplied ? DS.Color.accent : DS.Color.stroke))
-                }.buttonStyle(.plain).disabled(!canApplied).help("Avise que você já fez esta ação no Gerenciador da Meta. O Bunker registra e confere na próxima leitura do Malva.")
+                if m.action == "keep" {
+                    ActionButton(title: "Registrar manter", icon: "touchid", leadingIcon: true, prominent: true, help: "Registra sua decisão de manter (Touch ID). Não altera a Meta.") {
+                        Task { await sendIntent(card, revision: revision, percent: nil) }
+                    }.disabled(!canAsk).opacity(canAsk ? 1 : 0.5)
+                } else {
+                    ActionButton(title: "Executar agora", icon: "touchid", leadingIcon: true, prominent: canOrder, help: canOrder ? "Touch ID autoriza este valor exato. O executor Cloudflare confere o valor atual, envia uma vez pela Malva e relê." : "Execução direta indisponível agora: veja o motivo abaixo.") {
+                        Task { await sendOrder(card, revision: revision, percent: needsPercent ? percent : nil) }
+                    }.disabled(!canOrder).opacity(canOrder ? 1 : 0.45)
+                    ActionButton(title: "Pedir à equipe", icon: "person.3", leadingIcon: true, prominent: !canOrder && canAsk, help: "Os agentes preparam a proposta exata, que volta em \"Aguardando você\". Não altera a Meta agora.") {
+                        Task { await sendIntent(card, revision: revision, percent: needsPercent ? percent : nil) }
+                    }.disabled(!canAsk).opacity(canAsk ? 1 : 0.45)
+                }
+                Spacer(minLength: 0)
                 if m.busy { ProgressView().controlSize(.small) }
+                if m.action != "keep" {
+                    Button { Task { await sendApplied(card, revision: revision, percent: needsPercent ? percent : nil) } } label: {
+                        Label("Já fiz no Gerenciador", systemImage: "checkmark.circle").font(DS.Font.caption)
+                            .foregroundStyle(canApplied ? DS.Color.inkSoft : DS.Color.inkMuted)
+                    }.buttonStyle(.plain).disabled(!canApplied).help("Avise que você já fez esta ação no Gerenciador da Meta (Touch ID). O Bunker registra e confere na próxima leitura do Malva; nada é enviado à Meta.")
+                }
             }
-            Text("\"Pedir à equipe\" vira pedido para os agentes prepararem a proposta exata, que volta aqui em \"Aguardando você\". \"Já fiz no Gerenciador\" só registra o que você fez na Meta; o Bunker confere na próxima leitura do Malva. Nenhum dos dois altera a Meta.")
-                .font(.system(size: 9.5)).foregroundStyle(DS.Color.inkMuted).fixedSize(horizontal: false, vertical: true)
-            if !card.blockedReasons.isEmpty {
-                Text("Para executar depois: " + card.blockedReasons.prefix(3).joined(separator: " ")).font(.system(size: 9.5)).foregroundStyle(DS.Color.warn).fixedSize(horizontal: false, vertical: true)
+            // Why it cannot run now (blocking), and what is only informative.
+            if m.action != "keep" && !blockers.isEmpty && !canOrder {
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("Para executar agora falta:", systemImage: "exclamationmark.triangle.fill").font(DS.Font.microStrong).foregroundStyle(DS.Color.warn)
+                    ForEach(blockers.prefix(4), id: \.self) { b in Text("• " + b).font(DS.Font.micro).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true) }
+                }
+                .padding(DS.Space.s).frame(maxWidth: .infinity, alignment: .leading)
+                .background(DS.Color.warn.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+            }
+            if !info.isEmpty {
+                Text("Informativo (não trava sua ordem): " + info.joined(separator: " ")).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).fixedSize(horizontal: false, vertical: true)
             }
         }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
     }
@@ -144,6 +241,7 @@ struct OwnerAdjustView: View {
     // MARK: Actions
 
     func load() async {
+        if m.preview { return }   // `--render-notch`: fictional cards, no network
         m.loading = true; defer { m.loading = false }
         switch await store.fetchCards(target) {
         case .ok(let next): m.data = next; m.loadError = nil
@@ -168,6 +266,15 @@ struct OwnerAdjustView: View {
                      success: m.action == "keep" ? "Decisão de manter registrada." : "Pedido registrado. A equipe vai conferir e preparar a proposta exata; nada foi alterado na Meta.")
     }
 
+    func sendOrder(_ card: OwnerCards.Card, revision: Int?, percent: Double?) async {
+        guard let revision else { return }
+        let key = ["order", card.id, card.signature, m.action, percent.map { String($0) } ?? "", m.reason].joined(separator: "|")
+        let input = OwnerAdjust.order(card: card, revision: revision, action: m.action, percent: percent, reason: m.reason, clientId: clientId(key))
+        let line = OwnerAdjust.orderLine(card, action: m.action, percent: percent)
+        await submit(input, prompt: "executar \(line) em \(card.campaign ?? "campanha") (\(card.account ?? card.adAccountId))", key: key,
+                     success: "Ordem autorizada: \(line). O executor Cloudflare aplica uma vez pela Malva em instantes e confere o resultado.")
+    }
+
     func sendApplied(_ card: OwnerCards.Card, revision: Int?, percent: Double?) async {
         guard let revision else { return }
         let key = ["applied", card.id, card.signature, m.action, percent.map { String($0) } ?? "", m.reason].joined(separator: "|")
@@ -184,7 +291,7 @@ struct OwnerAdjustView: View {
         let input = OwnerAdjust.review(p, revision: revision, decision: decision, comment: comment, clientId: clientId(key))
         let verb = ["approve": "aprovar", "reject": "recusar", "revise": "pedir revisão de"][decision] ?? decision
         await submit(input, prompt: "\(verb): \(p.campaign ?? "campanha") · \(OwnerAdjust.change(p))", key: key,
-                     success: decision == "approve" ? "Aprovado. O executor Cloudflare aplica pelo Malva e confere; acompanhe em Atividade." : decision == "reject" ? "Proposta recusada." : "Revisão pedida à equipe.")
+                     success: decision == "approve" ? "Aprovado. O executor Cloudflare aplica uma vez pela Malva e confere o resultado." : decision == "reject" ? "Proposta recusada." : "Revisão pedida à equipe.")
     }
 
     private func submit(_ input: [String: Any], prompt: String, key: String, success: String) async {
@@ -213,6 +320,8 @@ final class OwnerAdjustModel: ObservableObject {
     @Published var busy = false
     @Published var notice: (String, Tone)?
     @Published var unregistered: String?
+    /// Design review only (`--render-notch`): keeps the injected cards and skips the network.
+    var preview = false
     /// One clientId per exact request, so a retry of the same decision cannot count twice.
     var requestIds: [String: String] = [:]
     private var target: AdjustTarget?
