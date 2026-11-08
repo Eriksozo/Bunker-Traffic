@@ -52,6 +52,10 @@ enum Format {
         return (w.value > 0 ? "+" : "") + compactMoney(w.value)
     }
     static func balanceTone(_ w: Summary.BalanceWindow?) -> Tone { guard let w else { return .neutral }; return w.value < 0 ? .bad : w.value > 0 ? .good : .neutral }
+    /// Fits the row: the verdict in two or three words (the full sentence goes to the tooltip).
+    static func balanceVerdictShort(_ v: String?) -> (text: String, tone: Tone, icon: String)? {
+        switch v { case "recovers": return ("recupera no 7d", .warn, "arrow.uturn.up"); case "negative": return ("negativo no 7d", .bad, "arrow.down"); default: return nil }
+    }
     static func balanceVerdict(_ v: String?) -> (text: String, tone: Tone)? {
         switch v { case "recovers": return ("hoje negativo · histórico positivo", .warn); case "negative": return ("negativo também com 7d", .bad); default: return nil }
     }

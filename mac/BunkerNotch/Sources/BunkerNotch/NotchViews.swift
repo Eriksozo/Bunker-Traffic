@@ -536,26 +536,50 @@ struct ListRow: View {
     }
 }
 
-/// Today stays the headline in red; this strip shows yesterday, 3d, 7d and 7d + hoje so the manager sees whether
-/// the history covers today's loss before deciding. Missing windows read N/D.
+/// Period ladder under a loss: today, yesterday, 3d, 7d and 7d + hoje side by side, each label over its value, so
+/// the manager reads at a glance whether the history covers today's loss. A short verdict leads; the full sentence
+/// is in the tooltip and for VoiceOver. Missing windows read N/D.
 struct BalanceStrip: View {
     let balance: Summary.Balance
+    /// Off when the row already shows today's result on the right (no repeated number).
+    var showToday = true
     var body: some View {
-        HStack(spacing: DS.Space.xs) {
-            if let v = Format.balanceVerdict(balance.verdict) {
-                Text(v.text).font(DS.Font.microStrong).foregroundStyle(v.tone.color)
-                    .padding(.horizontal, 6).padding(.vertical, 1).overlay(Capsule().stroke(v.tone.color.opacity(0.6), lineWidth: 0.8))
+        HStack(spacing: DS.Space.s) {
+            if let v = Format.balanceVerdictShort(balance.verdict) {
+                HStack(spacing: 3) {
+                    Image(systemName: v.icon).font(.system(size: 8, weight: .bold))
+                    Text(v.text).font(DS.Font.microStrong)
+                }
+                .foregroundStyle(v.tone.color).lineLimit(1).fixedSize()
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(v.tone.color.opacity(0.12), in: Capsule())
             }
-            part("ontem", balance.yesterday); part("3d", balance.d3); part("7d", balance.d7)
-            Text("7d+hoje " + Format.balance(balance.with7d)).font(DS.Font.microStrong).foregroundStyle(Format.balanceTone(balance.with7d).color)
+            HStack(spacing: 0) {
+                if showToday { cell("hoje", balance.today); divider }
+                cell("ontem", balance.yesterday)
+                divider; cell("3d", balance.d3)
+                divider; cell("7d", balance.d7)
+                cell("7d+hoje", balance.with7d, emphasis: true).padding(.leading, 4)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
         }
-        .lineLimit(1)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Saldo: hoje \(Format.balance(balance.today)), ontem \(Format.balance(balance.yesterday)), 3 dias \(Format.balance(balance.d3)), 7 dias \(Format.balance(balance.d7)), 7 dias mais hoje \(Format.balance(balance.with7d))")
-        .help("Saldo por período (resultado, ou receita menos mídia sem custos). 7 dias termina ontem; 7d+hoje soma dias diferentes.")
+        .accessibilityLabel((Format.balanceVerdict(balance.verdict).map { $0.text + ". " } ?? "") + "Saldo: hoje \(Format.balance(balance.today)), ontem \(Format.balance(balance.yesterday)), 3 dias \(Format.balance(balance.d3)), 7 dias \(Format.balance(balance.d7)), 7 dias mais hoje \(Format.balance(balance.with7d))")
+        .help((Format.balanceVerdict(balance.verdict).map { $0.text.prefix(1).uppercased() + $0.text.dropFirst() + ". " } ?? "") + "Saldo por período (resultado, ou receita menos mídia sem custos). 7 dias termina ontem; 7d+hoje soma dias diferentes.")
     }
-    private func part(_ label: String, _ w: Summary.BalanceWindow?) -> some View {
-        Text(label + " " + Format.balance(w)).font(DS.Font.micro).foregroundStyle(w == nil ? DS.Color.inkMuted : Format.balanceTone(w).color.opacity(0.9))
+    private var divider: some View { Rectangle().fill(DS.Color.stroke).frame(width: 1).padding(.vertical, 4) }
+    private func cell(_ label: String, _ w: Summary.BalanceWindow?, emphasis: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.system(size: 8.5, weight: .medium)).foregroundStyle(DS.Color.inkMuted)
+            Text(Format.balance(w)).font(emphasis ? DS.Font.microStrong : DS.Font.micro).monospacedDigit()
+                .foregroundStyle(w == nil ? DS.Color.inkMuted : Format.balanceTone(w).color)
+                .fixedSize(horizontal: emphasis, vertical: false)
+        }
+        .lineLimit(1).minimumScaleFactor(emphasis ? 1 : 0.85)
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .layoutPriority(emphasis ? 1 : 0)
+        .background(emphasis ? Format.balanceTone(w).color.opacity(w == nil ? 0 : 0.12) : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
     }
 }
 
@@ -611,7 +635,7 @@ struct NowTab: View {
                             value: (loss ? "−" : "+") + Format.money(q.amount),
                             valueCaption: loss ? (q.basis == "result" ? (q.period == "today" ? "prejuízo hoje" : "prejuízo em 3 dias") : "receita abaixo da mídia") : "resultado em 3 dias",
                             action: { withAnimation(DS.Motion.quick) { notch.selected = q } },
-                            footer: q.balance.flatMap { $0.hasAny ? AnyView(BalanceStrip(balance: $0)) : nil })
+                            footer: q.balance.flatMap { $0.hasAny ? AnyView(BalanceStrip(balance: $0, showToday: q.period != "today")) : nil })
                         .opacity(quiet ? 0.55 : 1)
                     if loss || quiet { QuietMenu(key: AttentionLedger.key(q), item: q, compact: true) }
                     }
