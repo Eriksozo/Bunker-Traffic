@@ -39,11 +39,17 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async read(){const current=await readPersistedState(this.db(),empty);this.centralView={paused:current.state.paused,cadence:current.state.cadence,at:new Date().toISOString()};this.storagePressure=(current as any).storage?.pressure??null;return current;}
  // Storage alarm for the notch (lib/history-storage.mjs storagePressure): warns at 85% of the central or ledger limit.
  private storagePressure:any=null;
- private async write(fn:(s:any,revision:number)=>any){
-  const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);return result;
+ /** Central writes of this object run one at a time: the fast lane may write while a long heavy unit waits for the
+  * model, and each write still rereads the central first, so neither loses the other's change (the CAS stays). */
+ private writeChain:Promise<unknown>=Promise.resolve();
+ private write(fn:(s:any,revision:number)=>any):Promise<any>{
+  const run=this.writeChain.then(async()=>{const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);return result;});
+  this.writeChain=run.catch(()=>{});return run;
  }
  /** Last successful live read per project, kept in memory for the fast lane's rotation (never a source of data). */
  private liveReadAt:Record<string,number>={};
+ /** Projects with a live read in flight (heavy pulse or fast lane): the other one skips them, never two imports at once. */
+ private liveReading=new Set<string>();
  /** `only`: read just the `first` projects (fast lane), never the usual oldest-first rotation. */
  private async syncLive(first:string[]=[],only=false):Promise<any>{
   if(only&&!first.length)return null;
@@ -55,7 +61,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const urgent=pendingLiveRefresh(current.state,lastSuccess);
   for(const [id,at] of Object.entries(lastSuccess)){const t=Date.parse(String(at||''));if(Number.isFinite(t))this.liveReadAt[id]=Math.max(this.liveReadAt[id]||0,t);}
   const projects=only?live.projects.filter((p:any)=>first.includes(p.projectId)).slice(0,changeWatchPolicy.maxLiveReads):liveOrder(live.projects,{first,urgent,lastSuccess});
-  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId){fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};this.liveReadAt[p.projectId]=Date.now();}}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
+  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project||this.liveReading.has(p.projectId))continue;this.liveReading.add(p.projectId);try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId){fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};this.liveReadAt[p.projectId]=Date.now();}}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}finally{this.liveReading.delete(p.projectId);}}
   this.liveItems=(live.items||[]).map((i:any)=>fresh[i.projectId]||i);
   return current.state;
  }
@@ -228,6 +234,13 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  /** A fresh live read changed what the notch shows (status, budget): move the pulse without a toast (no campaign). */
  private async bumpLive(projects:string[]){const prev=await this.ctx.storage.get<any>('syncPulse');await this.ctx.storage.put('syncPulse',{...(prev||{}),version:(prev?.version||0)+1,at:new Date().toISOString(),projects,last:{kind:'live',projects,at:new Date().toISOString()}});}
  private lastWatchAt=0;
+ private lastOrderSweepAt=0;
+ /** Single flight: the timer during a long heavy unit and the unit boundaries share one running fast lane. */
+ private laneRun:Promise<void>|null=null;
+ private runLane():Promise<void>{
+  if(!this.laneRun)this.laneRun=this.fastLane().catch(()=>{}).finally(()=>{this.laneRun=null;});
+  return this.laneRun;
+ }
  /** Set when the fast lane ran an order unit: the heavy pulse then rebuilds the notch from a fresh central read. */
  private laneExecuted=false;
  /**
@@ -240,14 +253,17 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async fastLane(){
   if(!(await this.setting()).enabled)return;
   const wake=await this.ctx.storage.get<any>('wake'),watchDue=Date.now()-this.lastWatchAt>=changeWatchPolicy.tickMs;
-  if(!wake&&!watchDue)return;
+  // Order work belongs to the fast lane only (the heavy pulse skips it): a wake, or a sweep each minute for orders
+  // approved elsewhere (web) and for follow-ups.
+  const orderDue=!!wake?.order||Date.now()-this.lastOrderSweepAt>=changeWatchPolicy.heavyMs;
+  if(!wake&&!watchDue&&!orderDue)return;
   const touched=new Set<string>();
   if(watchDue){this.lastWatchAt=Date.now();for(const p of await this.watchChanges().catch(()=>[] as string[]))touched.add(p);}
   let ran=false;
-  if(wake){
-   await this.ctx.storage.delete('wake');
-   for(const p of Array.isArray(wake.projects)?wake.projects:[])touched.add(p);
-   if(wake.order)for(let n=0;n<changeWatchPolicy.fastUnits;n++){
+  if(wake){await this.ctx.storage.delete('wake');for(const p of Array.isArray(wake.projects)?wake.projects:[])touched.add(p);}
+  if(orderDue){
+   this.lastOrderSweepAt=Date.now();
+   for(let n=0;n<changeWatchPolicy.fastUnits;n++){
     if(!(await this.setting()).enabled)break;
     let result:any;try{result=await this.engine().step({only:fastLaneKinds});}catch(e:any){await this.ctx.storage.put('runtime',runtimeFailure(await this.setting(),e));break;}
     if(['idle','blocked'].includes(result.kind))break;
@@ -326,12 +342,16 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  }
  async alarm(){
   if(this.running)return;let setting=await this.setting();if(!setting.enabled)return;this.running=true;
+  let laneTimer:any=null;
   try{
    // Every alarm: the fast lane (edit watch, woken owner orders, touched/stale live reads). A failure never blocks the pulse.
-   await this.fastLane().catch(()=>{});
+   await this.runLane();
    const lastHeavy=await this.ctx.storage.get<number>('lastHeavyAt')||0;
    if(Date.now()-lastHeavy<changeWatchPolicy.heavyMs)return;
-   const lane=()=>this.fastLane().catch(()=>{});
+   const lane=()=>this.runLane();
+   // During the heavy pulse the fast lane also runs on a timer, so a long model unit no longer holds back an owner
+   // order or a status read. Same object and alarm; writes are serialized; the timer stops before the alarm ends.
+   laneTimer=setInterval(()=>{void this.runLane();},changeWatchPolicy.laneMs);
    await this.ctx.storage.put('lastHeavyAt',Date.now());
    await this.ctx.storage.put('runtime',{...setting,lastPulseAt:new Date().toISOString()});const engine=this.engine();
    // Bounded work prevents one large project from owning a whole alarm forever.
@@ -339,7 +359,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const started=Date.now();for(let n=0;n<4&&Date.now()-started<90000;n++){
     setting=await this.setting();if(!setting.enabled)break;
     let result:any;
-    try{result=await engine.step();}
+    try{result=await engine.step({skip:fastLaneKinds});}
     catch(e:any){
      // A rejected model format was already recorded as one attempt of that stage (cap 3, with correction feedback):
      // retry it in this pulse instead of waiting for the next one. Anything else still ends the pulse.
@@ -376,6 +396,6 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    if(view)await this.bumpLive([]);
    if(view)await this.publishOrders(view);
   }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
-  finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+changeWatchPolicy.tickMs);}
+  finally{if(laneTimer)clearInterval(laneTimer);await this.laneRun;this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+changeWatchPolicy.tickMs);}
  }
 }

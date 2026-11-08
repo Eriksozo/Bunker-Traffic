@@ -610,3 +610,15 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Teste: `tests/executor-fast-lane.test.mjs`.
 - Pendente: medir em produção o tempo da aprovação até o recibo confirmado depois do deploy. O app do Mac precisa ser reinstalado (`mac/build.sh`).
 - **Motivo exato das falhas da revisão de memória (parte 2)** (registro escrito às 2026-11-08 13:07:57 UTC por `date -u`). `failCloudOpinion` guarda `memoryReviewFailure` sanitizado só para `CLOUD_MEMORY_REVIEW_EVIDENCE`; a tentativa seguinte da mesma etapa recebe o rótulo no `validationFeedback` e o prompt explica cada rótulo ("Corrigir não relaxa nenhuma checagem"). Revisão independente apontou rótulo errado para referência com campo a mais/sem métrica (agora `reference_shape`), corrigido. Coordenado com as sessões "20 baterias de testes" (f72eb8a) e "Ajuste de campanhas via notch" (f12cf48, faixa rápida), publicados juntos.
+
+## Faixa rápida em paralelo ao pulso pesado (registro escrito às 2026-11-08 13:29:02 UTC por `date -u`)
+
+- Medição depois do f12cf48: as releituras ao vivo caíram de ~12 min para no máximo ~7 min, porque uma etapa longa do modelo ainda segurava a faixa rápida.
+- O dono aprovou ("Sim, fazer") rodar a faixa rápida num temporizador de 5 s durante o pulso pesado.
+- Proteções:
+  - execução única (`runLane`);
+  - gravações da central serializadas no objeto (`writeChain`), cada uma relendo antes do CAS;
+  - `liveReading` impede duas leituras ao vivo do mesmo projeto;
+  - o trabalho de ordem (verify/followUp/execution) é só da faixa rápida: o pesado usa `step({skip})`, com varredura a cada 60 s.
+- Testes: `tests/executor-fast-lane.test.mjs` cobre a ordem servida durante uma unidade lenta e a não sobreposição de gravações.
+- Pendente: medir em produção que nenhum projeto passa de ~3–4 min.
