@@ -91,3 +91,16 @@ A unidade confere reserva, dono, executor e prazo antes de consultar identidade,
 Os testes reproduzem o intervalo observado em 05/11 (reserva às 22:41:49 UTC, tentativa de conclusão às 23:33:21 UTC), além de pausa, troca de dono, fronteira exata de 45 minutos, perda de CAS e seis projetos admitidos diante de pareceres pendentes. É uma proteção de fila e validade, não garantia de que todas as análises terminem dentro do intervalo configurado nem autorização para ampliar a duração das reservas.
 
 Se uma nova prioridade surgir durante a consulta de identidade ou antes da gravação, a coleta cede a vez com resultado `deferred`, preservando a reserva original e as fontes. Isso não conclui a rodada, não registra uma falha de origem e não renova o prazo. O próximo ciclo reconsidera a fila atual.
+
+## Faixa rápida (08/11/2026)
+
+Pedido do dono: a ação no notch e a mudança de status demoravam. Medição: o pulso pesado (etapas de modelo, leituras ao vivo, autores, contas, sombra) levava 3,5–4,5 min e lia 2 projetos por vez, então cada projeto ficava cerca de 12 min sem status novo. Durante o pulso, o watch de 15 s não rodava, e uma ordem aprovada esperava o pulso inteiro.
+
+A faixa rápida roda no início de cada alarme e entre as unidades do pulso pesado, no mesmo Durable Object e no mesmo alarme. Não existe segundo executor, cron ou daemon. Ela faz:
+
+- o watch de edições a cada 15 s;
+- quando a rota do dono a acorda (`{action:'wake'}`, só um flag e o alarme em 300 ms), executa somente trabalho de ordem (`verify`, `followUp`, `execution`), pelo mesmo `engine.step` e o mesmo claim → prepare → submit único → releitura → confirm. Nunca faz chamada de modelo;
+- relê ao vivo só os projetos tocados. Se não houver novidade, relê o projeto ao vivo mais antigo quando ele tem mais de 3 min (um por vez);
+- move o pulso do notch. Uma releitura ao vivo usa `last.kind='live'`, sem campanha, para não repetir o aviso da edição no site.
+
+Aprovação, recibo único, cadência, pausa e limites não mudam. A rota `/api/companion/owner` acorda o executor depois do commit: ordem direta/aprovação com `order:true`, demais decisões e "sem leitura ao vivo" só com o projeto. Uma falha do aviso não altera a resposta. Depois de uma ordem, o notch confere o pulso a cada 2 s por 2 min.

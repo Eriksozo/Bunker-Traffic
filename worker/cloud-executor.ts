@@ -25,7 +25,7 @@ import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
-import {changeWatchPolicy,watchProject,nextPulse,liveOrder,orderPulse} from '../lib/change-watch.mjs';
+import {changeWatchPolicy,fastLaneKinds,watchProject,nextPulse,liveOrder,orderPulse} from '../lib/change-watch.mjs';
 import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
 
@@ -42,15 +42,20 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async write(fn:(s:any,revision:number)=>any){
   const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);return result;
  }
- private async syncLive(first:string[]=[]):Promise<any>{
+ /** Last successful live read per project, kept in memory for the fast lane's rotation (never a source of data). */
+ private liveReadAt:Record<string,number>={};
+ /** `only`: read just the `first` projects (fast lane), never the usual oldest-first rotation. */
+ private async syncLive(first:string[]=[],only=false):Promise<any>{
+  if(only&&!first.length)return null;
   const current=await this.read();if(current.state.paused)return null;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
   // The shadow reuses this pulse's live reads: no extra central or Supabase read.
   const fresh:Record<string,any>={};
   // Owner "Já fiz" reports jump the queue: their project is read first, then the oldest reads as before.
   const lastSuccess=Object.fromEntries((live.items||[]).map((i:any)=>[i.projectId,i.lastSuccessAt]));
   const urgent=pendingLiveRefresh(current.state,lastSuccess);
-  const projects=liveOrder(live.projects,{first,urgent,lastSuccess});
-  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId)fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
+  for(const [id,at] of Object.entries(lastSuccess)){const t=Date.parse(String(at||''));if(Number.isFinite(t))this.liveReadAt[id]=Math.max(this.liveReadAt[id]||0,t);}
+  const projects=only?live.projects.filter((p:any)=>first.includes(p.projectId)).slice(0,changeWatchPolicy.maxLiveReads):liveOrder(live.projects,{first,urgent,lastSuccess});
+  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project)continue;try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId){fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};this.liveReadAt[p.projectId]=Date.now();}}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}}
   this.liveItems=(live.items||[]).map((i:any)=>fresh[i.projectId]||i);
   return current.state;
  }
@@ -216,6 +221,53 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  }
  private async assertEnabled(){if(!(await this.setting()).enabled){const error:any=new Error('CLOUD_EXECUTOR_PAUSED');error.code='CLOUD_EXECUTOR_PAUSED';throw error;}}
  private engine(){const source=cloudMalvaClient(this.db());return createCloudEngine({read:()=>this.read(),write:(fn:any)=>this.write(fn),source:{read:source.read,dispatch:async(command:any,execution:any)=>{await this.assertEnabled();return source.dispatch(command,execution);}},ai:this.env.AI,modelPolicy:cloudProductionModelPolicy,prepareGuard:async(s:any,args:any)=>{await this.assertEnabled();return assertCurrentExecutionContingency(s,args);},ops:{creativeItems:async(s:any,projectId:string)=>syncCloudCreatives({db:this.db(),state:s,projectId,source:cloudOrbitaClient(this.db()),malva:source,expectedEmail:this.env.BUNKER_OWNER_EMAIL,expectedWorkspace:(await this.setting()).check?.workspaceId,readCurrent:async()=>{const current=(await this.read()).state;await this.assertEnabled();return current;}}),liveItems:async(s:any)=>(await readLiveData(this.db(),s)).items,claimBatch,updateRun,importBundle:(s:any,b:any)=>apply(s,{op:'import',bundle:b}),answer:(s:any,id:string,text:string)=>{const m=s.messages.find((m:any)=>m.id===id);if(!m)throw Error('CLOUD_QUESTION_MISSING');return answerOfficeMessage(m,text,new Date().toISOString());}}});}
+ /** One executor unit into the runtime history (heavy pulse and fast lane alike). */
+ private async recordUnit(result:any){const at=new Date().toISOString(),latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,lastErrorDetail:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});}
+ /** A receipt that changed stage (order queued, sent, confirmed or failed) reaches the notch without waiting. */
+ private async publishOrders(state:any){const o=orderPulse(await this.ctx.storage.get<any>('syncPulse'),ownerOrderReceipts(state,{now:Date.now()}),await this.ctx.storage.get<string>('ordersSig'));await this.ctx.storage.put(o.pulse?{ordersSig:o.sig,syncPulse:o.pulse}:{ordersSig:o.sig});}
+ /** A fresh live read changed what the notch shows (status, budget): move the pulse without a toast (no campaign). */
+ private async bumpLive(projects:string[]){const prev=await this.ctx.storage.get<any>('syncPulse');await this.ctx.storage.put('syncPulse',{...(prev||{}),version:(prev?.version||0)+1,at:new Date().toISOString(),projects,last:{kind:'live',projects,at:new Date().toISOString()}});}
+ private lastWatchAt=0;
+ /** Set when the fast lane ran an order unit: the heavy pulse then rebuilds the notch from a fresh central read. */
+ private laneExecuted=false;
+ /**
+  * Fast lane (owner request of 2026-11-08: "quando eu executo a ação no notch demora muito" / "demora pra reconhecer a
+  * mudança de status"). Runs at the start of every alarm and between the heavy pulse's units, so a long pulse (model
+  * stages, six live reads) no longer freezes it: the 15 s edit watch; an owner order the route woke us for, through the
+  * same engine step as the heavy pulse (claim → prepare → submit once → confirm; only verify/followUp/execution work,
+  * never a model call, never a second executor); then a live reread of only the touched projects, or of the stalest one.
+  */
+ private async fastLane(){
+  if(!(await this.setting()).enabled)return;
+  const wake=await this.ctx.storage.get<any>('wake'),watchDue=Date.now()-this.lastWatchAt>=changeWatchPolicy.tickMs;
+  if(!wake&&!watchDue)return;
+  const touched=new Set<string>();
+  if(watchDue){this.lastWatchAt=Date.now();for(const p of await this.watchChanges().catch(()=>[] as string[]))touched.add(p);}
+  let ran=false;
+  if(wake){
+   await this.ctx.storage.delete('wake');
+   for(const p of Array.isArray(wake.projects)?wake.projects:[])touched.add(p);
+   if(wake.order)for(let n=0;n<changeWatchPolicy.fastUnits;n++){
+    if(!(await this.setting()).enabled)break;
+    let result:any;try{result=await this.engine().step({only:fastLaneKinds});}catch(e:any){await this.ctx.storage.put('runtime',runtimeFailure(await this.setting(),e));break;}
+    if(['idle','blocked'].includes(result.kind))break;
+    ran=true;this.laneExecuted=true;await this.recordUnit({...result,lane:'fast'});if(result.project)touched.add(result.project);
+   }
+  }
+  if(!touched.size){
+   // Nothing new: refresh the stalest live project so a status changed anywhere shows in minutes, not a full rotation.
+   const known=Object.entries(this.liveReadAt).sort((a,b)=>a[1]-b[1])[0];
+   if(!known||Date.now()-known[1]<changeWatchPolicy.liveStaleMs)return;
+   this.liveReadAt[known[0]]=Date.now();   // one try per stale window, even when the read fails
+   const liveState=await this.syncLive([known[0]],true).catch(()=>null);
+   if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.bumpLive([known[0]]);}
+   return;
+  }
+  const central=await this.read();if(central.state.paused)return;
+  if(this.freshChanges.length||ran){await this.storeCompanion(central.state,await this.storedShadow()).catch(()=>{});await this.bumpPulse();this.freshChanges=[];await this.publishOrders(central.state);}
+  const liveState=await this.syncLive([...touched],true).catch(()=>null);
+  if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.publishOrders(liveState);await this.bumpLive([...touched]);}
+ }
  async fetch(request:Request){
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
@@ -259,6 +311,14 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    await this.ctx.storage.put('runtime',{...runtime,enabled:true,lastError:null});await this.ctx.storage.setAlarm(Date.now()+1000);return Response.json({ok:true,enabled:true});
   }
   if(input.action==='pause'){await this.ctx.storage.put('runtime',{...runtime,enabled:false});await this.ctx.storage.deleteAlarm();return Response.json({ok:true,enabled:false});}
+  if(input.action==='wake'){
+   // Owner route after a signed order/decision: only a flag and an early alarm in this same object (no new executor).
+   const projects=(Array.isArray(input.projects)?input.projects:[]).filter((p:any)=>typeof p==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(p)).slice(0,6);
+   const prev=await this.ctx.storage.get<any>('wake');
+   await this.ctx.storage.put('wake',{order:input.order===true||prev?.order===true,projects:[...new Set([...(prev?.projects||[]),...projects])].slice(0,6),at:new Date().toISOString()});
+   if(runtime.enabled&&!this.running)await this.ctx.storage.setAlarm(Date.now()+300);
+   return Response.json({ok:true,queued:runtime.enabled,running:this.running});
+  }
   if(input.action==='tick'){
    if(runtime.enabled&&!this.running){await this.ctx.storage.setAlarm(Date.now()+1000);return Response.json({ok:true,queued:true});}return Response.json({ok:true,queued:false,enabled:runtime.enabled});
   }
@@ -267,17 +327,11 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  async alarm(){
   if(this.running)return;let setting=await this.setting();if(!setting.enabled)return;this.running=true;
   try{
-   // Every tick: the cheap edit watch. A failure never blocks the minute pulse.
-   const changed=await this.watchChanges().catch(()=>[] as string[]);
+   // Every alarm: the fast lane (edit watch, woken owner orders, touched/stale live reads). A failure never blocks the pulse.
+   await this.fastLane().catch(()=>{});
    const lastHeavy=await this.ctx.storage.get<number>('lastHeavyAt')||0;
-   if(Date.now()-lastHeavy<changeWatchPolicy.heavyMs){
-    // Between minute pulses: only when an edit appeared. Notch first (authors already stored), then the live read.
-    if(changed.length){
-     const central=await this.read();if(!central.state.paused){await this.storeCompanion(central.state,await this.storedShadow()).catch(()=>{});await this.bumpPulse();
-      const liveState=await this.syncLive(changed).catch(()=>null);if(liveState){await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.bumpPulse();}}
-    }
-    return;
-   }
+   if(Date.now()-lastHeavy<changeWatchPolicy.heavyMs)return;
+   const lane=()=>this.fastLane().catch(()=>{});
    await this.ctx.storage.put('lastHeavyAt',Date.now());
    await this.ctx.storage.put('runtime',{...setting,lastPulseAt:new Date().toISOString()});const engine=this.engine();
    // Bounded work prevents one large project from owning a whole alarm forever.
@@ -292,27 +346,35 @@ export class BunkerCloudExecutor extends DurableObject<any>{
      if(e?.code==='CLOUD_AI_INVALID'&&e?.attemptRecorded===true){await this.ctx.storage.put('runtime',runtimeFailure(await this.setting(),e));continue;}
      throw e;
     }
-    const at=new Date().toISOString();const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,lastErrorDetail:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});
+    await this.recordUnit(result);
     if(['idle','blocked'].includes(result.kind))break;
+    await lane();
    }
    }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
    // A rejected model opinion must not starve live reads, edit authors or the notch.
-   const liveState=(await this.setting()).enabled?await this.syncLive(changed):null;
+   await lane();this.laneExecuted=false;
+   const liveState=(await this.setting()).enabled?await this.syncLive():null;
+   await lane();
    if(liveState)await this.ctx.storage.put('watchConfig',Object.keys(liveState.config||{}));
    // Optional attribution never turns into an executor failure.
    if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
    // The account panel is optional: a failure keeps the last panel and never affects the executor.
+   await lane();
    if(liveState&&(await this.setting()).enabled)await this.syncAccounts(liveState).catch(()=>{});
+   await lane();
    // The live Meta read is optional: a failure keeps the last read and never affects the executor.
    if(liveState&&(await this.setting()).enabled)await this.syncMetaLive(liveState).catch(()=>{});
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
    const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    // The first-24h board is a reading aid: a failure keeps the last board and never affects the executor.
    if(liveState)await this.storeFirst24h(liveState).catch(()=>{});
-   if(liveState)await this.storeCompanion(liveState,shadow).catch(()=>{});
-   await this.bumpPulse();
-   // A receipt that changed stage (order queued, sent, confirmed or failed) reaches the notch without waiting.
-   if(liveState){const o=orderPulse(await this.ctx.storage.get<any>('syncPulse'),ownerOrderReceipts(liveState,{now:Date.now()}),await this.ctx.storage.get<string>('ordersSig'));await this.ctx.storage.put(o.pulse?{ordersSig:o.sig,syncPulse:o.pulse}:{ordersSig:o.sig});}
+   // An order the fast lane sent after this pulse's read must not be shown at its older stage.
+   const view=liveState&&this.laneExecuted?(await this.read()).state:liveState;
+   if(view)await this.storeCompanion(view,shadow).catch(()=>{});
+   await this.bumpPulse();this.freshChanges=[];
+   // This pulse's own live reads may have changed a status or budget the notch shows.
+   if(view)await this.bumpLive([]);
+   if(view)await this.publishOrders(view);
   }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}
   finally{this.running=false;const latest=await this.setting();if(latest.enabled)await this.ctx.storage.setAlarm(Date.now()+changeWatchPolicy.tickMs);}
  }

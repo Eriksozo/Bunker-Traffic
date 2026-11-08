@@ -94,6 +94,21 @@ final class Store: ObservableObject {
     }
 
     static let pulseSeconds: TimeInterval = 8
+    /// After an owner order or decision: the pulse is checked every 2 s for two minutes, so the receipt (sent,
+    /// confirmed) and the campaign's new status show as soon as the executor writes them.
+    static let burstSeconds: TimeInterval = 120
+    private var burstTimer: Timer?
+    func startBurst() {
+        burstTimer?.invalidate()
+        let until = Date().addingTimeInterval(Store.burstSeconds)
+        burstTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if Date() >= until { self.burstTimer?.invalidate(); self.burstTimer = nil; return }
+                Task { await self.checkPulse() }
+            }
+        }
+    }
     /// A tiny read (served by the executor object, no central): only the counter and the newest edit.
     func checkPulse() async {
         // Offline (two failed reads in a row): no pulse every 8 s; the network monitor reads again when it comes back.
@@ -218,7 +233,7 @@ final class Store: ObservableObject {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let message = json?["error"] as? String
-            if status == 200 { Task { await refresh() }; return .done(json?["status"] as? String ?? "Registrado") }
+            if status == 200 { startBurst(); Task { await refresh() }; return .done(json?["status"] as? String ?? "Registrado") }
             if ["OWNER_DEVICE_UNCONFIGURED", "OWNER_DEVICE_UNKNOWN_KEY"].contains(json?["code"] as? String ?? "") { return .unregistered(message ?? "Chave do Mac não registrada.") }
             return .refused(message ?? "O Bunker recusou (\(status)).")
         } catch {

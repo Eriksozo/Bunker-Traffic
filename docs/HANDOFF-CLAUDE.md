@@ -595,3 +595,17 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - **Placar da sombra**: `shadowGrades` dá nota a cada decisão pelo dia seguinte real (acertou, errou, parou, N/D; "cortou vencedor" com ROI ≥ 1,2). O placar acumulado dos 7 dias vai no resumo (`shadow.scorecard`) e no notch. É a base da revisão da sombra exigida em `docs/autonomy-policy.md`.
   - **Propostas ao dono** (não aplicadas, são política): manter "reduzir em dia ruim" só como sugestão até o placar passar de 60%. Exigir histórico de 3d ≥ 1,3 para "aumentar por vendas" (hoje +30% mesmo com histórico ruim). Avaliar dia forte com ROI ≥ 3 como gatilho preferencial de aumento.
 - **Motivo exato das falhas da revisão de memória (parte 1)** (registro escrito às 2026-11-08 12:56:39 UTC por `date -u`). Leitura após a correção de truncamento: 14 etapas seguidas sem nenhuma falha desde ~12:34 UTC (antes ~4 cortes a cada 16); sem dados de corte, a temperatura base não foi alterada. `CLOUD_MEMORY_REVIEW_EVIDENCE` vinha de 9 causas com o mesmo código; agora cada uma tem rótulo fixo e posição (`lib/memory-review-failure.mjs`: references_format, reference_shape, reference_not_in_packet, not_in_reflection, ambiguous_reflection, duplicate_reference, index_invalid, numeric_evidence_required, inconclusive_required), lançado em `cloud-evidence-references.mjs` e `agent-memory-review.mjs`, mostrado no histórico do executor e no contexto de revisão. Nenhuma checagem foi relaxada. Parte 2 pendente, combinada com a sessão "20 baterias de testes" que está editando `cloud-engine.mjs`/`cloud-analysis.mjs`: guardar o rótulo em `cloudAttemptFailures` e repassá-lo no `validationFeedback` com uma frase no prompt.
+
+## Faixa rápida do executor: ordem e status do notch (registro escrito às 2026-11-08 13:06:42 UTC por `date -u`)
+
+- Pedido do dono: "quando eu executo a ação no notch acho que demora muito" e "demora pra reconhecer a mudança de status".
+- Medido nos registros `live:*`: releituras em pares a cada ~3,5–4,5 min, ou seja, ~12 min por projeto. O watch de 15 s ficava bloqueado durante o pulso pesado.
+- Mudanças:
+  - `worker/cloud-executor.ts`: `fastLane`, ação `wake`, `syncLive(first,only)`, `recordUnit`/`publishOrders`/`bumpLive`.
+  - `lib/change-watch.mjs`: `fastUnits`, `liveStaleMs`, `fastLaneKinds`.
+  - `lib/cloud-engine.mjs`: `cloudNext`/`step` com `{only}`.
+  - `app/api/companion/owner/route.ts`: chama `wake` depois do commit.
+  - `Store.swift`: pulso a cada 2 s por 2 min após uma ordem.
+- Regras financeiras inalteradas. Detalhes em `docs/cloud-executor.md` › Faixa rápida.
+- Teste: `tests/executor-fast-lane.test.mjs`.
+- Pendente: medir em produção o tempo da aprovação até o recibo confirmado depois do deploy. O app do Mac precisa ser reinstalado (`mac/build.sh`).

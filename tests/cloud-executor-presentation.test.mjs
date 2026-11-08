@@ -41,9 +41,11 @@ test('between minute pulses a new Malva edit refreshes the notch at once, then t
  const {e,calls,values,alarms}=executor();values.set('lastHeavyAt',Date.now());
  const edit={key:'history:p:1',project:'p',name:'Campanha',accountName:'Conta',field:'status',before:'ACTIVE',after:'PAUSED',currency:'BRL',actor:'Erik',at:new Date().toISOString()};
  e.watchChanges=async()=>{e.freshChanges=[{project:'p',events:[edit]}];return ['p'];};e.read=async()=>({state:{paused:false}});e.storedShadow=async()=>[];
+ const pulses=[];const put=e.ctx.storage.put;e.ctx.storage.put=async(k,v)=>{if(k==='syncPulse')pulses.push(v);return put(k,v);};
  await e.alarm();
  assert.deepEqual(calls,['notch','live','notch'],'no analysis between minute pulses');
- assert.equal(values.get('syncPulse').version,2);assert.equal(values.get('syncPulse').last.actor,'Erik');
+ assert.equal(pulses[0].last.actor,'Erik','the edit moves the pulse with its author first');
+ assert.equal(values.get('syncPulse').version,2);assert.equal(values.get('syncPulse').last.kind,'live','the live reread moves it again without repeating the edit toast');assert.deepEqual([...values.get('syncPulse').projects],['p']);
  assert.equal(alarms.length,1);assert.ok(alarms[0]-Date.now()<=changeWatch.changeWatchPolicy.tickMs+50);
  const quiet=executor();quiet.values.set('lastHeavyAt',Date.now());quiet.e.watchChanges=async()=>[];await quiet.e.alarm();
  assert.deepEqual(quiet.calls,[]);assert.equal(quiet.values.get('syncPulse'),undefined);
