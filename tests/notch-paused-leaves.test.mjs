@@ -66,3 +66,16 @@ test('Shadow: the owner pause sent through the Bunker reads as done by the owner
  assert.equal(shadowOutcomes([entry],[{...mine,objectId:'other'}])[0].owner,null);
  assert.equal(shadowOutcomes([entry],[{...mine,action:'reduce'}])[0].owner,null);
 });
+
+test('Shadow list: newest first by the latest event, so a decision the owner just acted on comes to the top',async()=>{
+ const {shadowSummary}=await import('../lib/autonomy-shadow.mjs');
+ const e=(id,firstAt,extra={})=>({rule:'test-no-sale',ruleLabel:'Pausar teste',project:'p',projectName:'Fictício',day:'2026-11-08',name:id,action:'status',firstAt,...extra});
+ const list=[e('antiga','2026-11-08T12:00:00Z'),...Array.from({length:12},(_,i)=>e('n'+i,`2026-11-08T13:${String(10+i).padStart(2,'0')}:00Z`)),
+  e('pausada','2026-11-08T11:00:00Z',{owner:{action:'pause',at:'2026-11-08T15:05:00Z'}}),e('gestor','2026-11-08T11:30:00Z',{manager:{actor:'Gestor',at:'2026-11-08T14:00:00Z'}})];
+ const names=shadowSummary(list,{day:'2026-11-08'}).recent.map(r=>r.campaign);
+ assert.equal(names.length,12);
+ assert.equal(names[0],'pausada','owner paused 15:05: on top although decided first');
+ assert.equal(names[1],'gestor','manager acted 14:00');
+ assert.equal(names[2],'n11','then the newest decisions');
+ assert.ok(!names.includes('antiga'),'the oldest untouched decision drops out of the 12');
+});
