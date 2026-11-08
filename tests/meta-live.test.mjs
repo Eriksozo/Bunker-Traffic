@@ -12,6 +12,7 @@ test('The edge function runs the same read-only module and checks the server cre
  assert.equal(readFileSync(new URL('../supabase/functions/meta-read/meta-live.mjs',import.meta.url),'utf8'),readFileSync(new URL('../lib/meta-live.mjs',import.meta.url),'utf8'));
  const src=readFileSync(new URL('../supabase/functions/meta-read/index.ts',import.meta.url),'utf8');
  assert.match(src,/authenticateServer/);assert.match(src,/Meta_Acess_Token/);assert.doesNotMatch(src,/method:'(POST|DELETE)'.*graph/);
+ assert.equal(readFileSync(new URL('../supabase/functions/meta-read/account-limits.mjs',import.meta.url),'utf8'),readFileSync(new URL('../lib/account-limits.mjs',import.meta.url),'utf8'));assert.match(src,/action==='accounts'/);
  const lib=readFileSync(new URL('../lib/meta-live.mjs',import.meta.url),'utf8');assert.doesNotMatch(lib,/method:'(POST|DELETE|PUT)'/);
 });
 test('Real start: scheduled until start_time, then first 24h counted from it',()=>{

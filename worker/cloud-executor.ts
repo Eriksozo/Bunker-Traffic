@@ -155,7 +155,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    catch(e:any){projectErrors[c?.projectName||id]=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'MALVA_ACCOUNTS_FAILED';}
   }
   let meta:any[]|null=null,metaError:string|null=null;
-  try{meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN||'',{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});}
+  // The Worker secret wins when present; otherwise the owner's Supabase secret through the read-only `meta-read` function.
+  try{if(this.env.META_ACCOUNTS_TOKEN)meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN,{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});
+   else{const r:any=await this.db().rpc('metaRead',{action:'accounts'});if(!Array.isArray(r?.accounts))throw Object.assign(new Error('META_READ_FAILED'),{code:'META_READ_FAILED'});meta=r.accounts;}}
   catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';}
   await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors});
   // Malva account id → Meta ad account number, for the live Meta read of new campaigns (no other use).

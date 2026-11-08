@@ -52,6 +52,7 @@ Decisão do proprietário em 08/11/2026: o secret `Meta_Acess_Token`, cadastrado
 - Uso: só a lógica das primeiras 24h (`overlayMetaLive`). O início real decide programada/1º dia/2º dia. O gasto da Meta só substitui o da Malva quando está à frente, no mesmo dia local do projeto, convertido pela taxa da própria campanha. O IC fica com o maior valor entre as duas fontes; compra vista na Meta tira a campanha do teto. Leitura com mais de 10 minutos é ignorada.
 - Pedidos, receita, ROI e as demais regras continuam com a Malva. Erros viram códigos fixos (`META_190`, `META_HTTP_400`…). Falha mantém a última leitura até ela vencer.
 - Ações continuam pela Malva, com proposta aprovada pelo dono.
+- Painel de contas: sem o secret `META_ACCOUNTS_TOKEN` no Worker, o executor lê `/me/adaccounts` pela mesma função (`{"action":"accounts"}`), com o mesmo uso restrito descrito abaixo.
 
 ## Token de leitura da Meta para o painel de contas
 
