@@ -46,6 +46,10 @@ final class Store: ObservableObject {
     static let saleAlertKey = "alertEachSale"
     /// Alerts and notifications held while the owner is in a call; shown when it ends (at most three).
     private var held: [(String, String, String, IslandAlert.Kind)] = []
+    /// Adjustment kinds that arrived during a call: their sound plays when it ends, beyond the three held alerts.
+    private var heldSounds = Set<String>()
+    /// Latest time seen per change key: the same transition later again (pause, reactivate, pause) rings again.
+    private var changeAt: [String: Date] = [:]
 
     /// Dismissed (until the state changes) and snoozed items: they stop interrupting but stay in the lists.
     @Published private(set) var ledger = AttentionLedger.load()
@@ -272,9 +276,17 @@ final class Store: ObservableObject {
         for a in s.approvals.items where !seen.contains("ap:" + a.id) {
             seen.insert("ap:" + a.id); fresh.append(("ap:" + a.id, "Proposta aguardando você", (a.project.map { $0 + " · " } ?? "") + (a.title ?? "Proposta exata"), .approval))
         }
-        for e in s.activity.recent where !seen.contains(Store.changeKey(e)) {
-            seen.insert(Store.changeKey(e)); fresh.append((Store.changeKey(e), Format.who(e), (e.campaign ?? "Campanha") + " · " + Format.change(e), .manager))
+        for e in s.activity.recent {
+            let k = Store.changeKey(e), at = Format.date(e.at)
+            // The same transition again later (paused, reactivated, paused) is a new change: its own alert id.
+            let again = seen.contains(k) && AdjustSound.repeats(lastAt: changeAt[k], at: at)
+            if let at { changeAt[k] = max(changeAt[k] ?? at, at) }
+            guard !seen.contains(k) || again else { continue }
+            seen.insert(k); fresh.append((again ? k + "@" + (e.at ?? "") : k, Format.who(e), (e.campaign ?? "Campanha") + " · " + Format.change(e), .manager))
         }
+        let counts = s.activity.summary.mapValues(\.count)
+        let rise = AdjustSound.countRise(previous: summary?.project == s.project ? summary?.activity.summary.mapValues(\.count) : nil, current: counts,
+                                         alreadyNew: Set(fresh.compactMap { AdjustSound.action(fromKey: $0.0) }))
         // A loss alerts once. One the owner dismissed alerts once more when its state changed, then the dismissal ends.
         for q in s.queue where q.kind == "loss" {
             let key = AttentionLedger.key(q), came = ledger.cameBack(q)
@@ -313,11 +325,17 @@ final class Store: ObservableObject {
             let title = o.stage == "confirmed" ? "Ordem confirmada na Meta" : o.stage == "failed" ? "Ordem não enviada" : "Ordem enviada: conferir na Meta"
             fresh.append((key, title, (o.campaign ?? "Campanha") + " · " + Format.orderChange(o) + (o.reason.map { " · " + $0 } ?? ""), .order))
         }
-        defer { primed = true; Store.trimSeen(&seen, keep: fresh.map(\.0) + Store.presentKeys(s, day: day)) }
+        defer {
+            primed = true; Store.trimSeen(&seen, keep: fresh.map(\.0) + Store.presentKeys(s, day: day))
+            if changeAt.count > Store.seenLimit { changeAt = changeAt.filter { seen.contains($0.key) } }
+        }
         guard primed, !muted else { return }
-        // In a call: hold them (newest three) until it ends.
-        if CallWatch.shared.inCall { held = Array((held + fresh).suffix(3)); return }
-        deliver(fresh)
+        // In a call: hold them (newest three) until it ends; every adjustment kind is kept for its sound.
+        if CallWatch.shared.inCall {
+            heldSounds.formUnion(AdjustSound.kinds(forKeys: fresh.map(\.0), extra: rise).map(\.rawValue))
+            held = Array((held + fresh).suffix(3)); return
+        }
+        deliver(fresh, soundsAlso: rise)
     }
 
     /// Every alert key the current summary would produce: kept when the memory of seen alerts is trimmed.
@@ -335,19 +353,31 @@ final class Store: ObservableObject {
     }
 
     private func releaseHeld() {
-        guard !held.isEmpty else { return }
-        let items = held; held = []
-        if !muted { deliver(items) }
+        guard !held.isEmpty || !heldSounds.isEmpty else { return }
+        let items = held, sounds = heldSounds; held = []; heldSounds = []
+        if !muted { deliver(items, soundsAlso: sounds) }
     }
 
-    private func deliver(_ fresh: [(String, String, String, IslandAlert.Kind)]) {
+    private func deliver(_ fresh: [(String, String, String, IslandAlert.Kind)], soundsAlso extra: Set<String> = []) {
         // Approvals first, then losses, then manager changes; at most three alerts per refresh.
         let order: [IslandAlert.Kind: Int] = [.order: 0, .approval: 1, .loss: 2, .manager: 3, .sale: 4]
         for item in fresh.sorted(by: { order[$0.3]! < order[$1.3]! }).prefix(3) { alert = IslandAlert(id: item.0, kind: item.3, title: item.1, detail: item.2) }
         guard Bundle.main.bundleIdentifier != nil else { return }
-        for (id, title, body, _) in fresh.prefix(4) {
+        // Increase, reduction and pause have their own sound (every new kind, not only the first alerts); their
+        // notifications then go silent so the same change never rings twice. Another notification that rings in
+        // the same batch goes first. The app's sound switch in System Settings › Notifications also silences it.
+        let sounds = AdjustSound.enabled ? AdjustSound.kinds(forKeys: fresh.map(\.0), extra: extra) : []
+        let notes = fresh.prefix(4).map { ($0, AdjustSound.silenced(id: $0.0, isOrder: $0.3 == .order, playing: sounds)) }
+        if !sounds.isEmpty {
+            let othersRing = notes.contains { !$0.1 }
+            Task { @MainActor in
+                if await UNUserNotificationCenter.current().notificationSettings().soundSetting == .disabled { return }
+                AdjustSound.play(sounds, delay: othersRing ? 1.0 : 0)
+            }
+        }
+        for ((id, title, body, _), quiet) in notes {
             let content = UNMutableNotificationContent()
-            content.title = title; content.body = body; content.sound = .default
+            content.title = title; content.body = body; content.sound = quiet ? nil : .default
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
         }
     }

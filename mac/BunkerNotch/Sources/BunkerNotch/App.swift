@@ -8,6 +8,7 @@ enum BunkerNotchMain {
     @MainActor static func main() {
         if CommandLine.arguments.contains("--self-test") { exit(SelfTest.run()) }
         if let i = CommandLine.arguments.firstIndex(of: "--render-notch"), i + 1 < CommandLine.arguments.count { exit(NotchPreview.render(to: CommandLine.arguments[i + 1])) }
+        if let i = CommandLine.arguments.firstIndex(of: "--render-sound-settings"), i + 1 < CommandLine.arguments.count { exit(SoundSettingsPreview.render(to: CommandLine.arguments[i + 1])) }
         if let i = CommandLine.arguments.firstIndex(of: "--render-bunk"), i + 1 < CommandLine.arguments.count { exit(BunkSheet.render(to: CommandLine.arguments[i + 1])) }
         if let i = CommandLine.arguments.firstIndex(of: "--dump-preview"), i + 1 < CommandLine.arguments.count {
             exit(FileManager.default.createFile(atPath: CommandLine.arguments[i + 1], contents: Data(NotchPreview.fixtureJSON().utf8)) ? 0 : 1)
@@ -98,6 +99,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(privacy)
         let sales = item("Avisar cada venda no notch", #selector(toggleSaleAlerts), ""); sales.state = UserDefaults.standard.bool(forKey: Store.saleAlertKey) ? .on : .off
         menu.addItem(sales)
+        // Owner request 08/11/2026: one sound per increase, reduction and pause; the submenu plays each to learn them.
+        let soundMenu = NSMenuItem(title: "Som em aumento, redução e pausa", action: nil, keyEquivalent: "")
+        let sm = NSMenu()
+        let soundOn = item("Tocar som", #selector(toggleAdjustSound), ""); soundOn.state = AdjustSound.enabled ? .on : .off; sm.addItem(soundOn)
+        sm.addItem(item("Configurações de som…", #selector(openSoundSettings), ","))
+        sm.addItem(.separator())
+        for k in AdjustSound.Kind.allCases { let t = item("Ouvir: " + AdjustSound.label(k) + " (" + AdjustSound.selected(k).label + ")", #selector(previewAdjustSound(_:)), ""); t.representedObject = k.rawValue; sm.addItem(t) }
+        soundMenu.submenu = sm
+        menu.addItem(soundMenu)
         let calls = item("Silêncio em reunião (câmera ou microfone em uso)", #selector(toggleCallQuiet), ""); calls.state = CallWatch.shared.enabled ? .on : .off
         menu.addItem(calls)
         if store.muted { menu.addItem(item("Reativar avisos", #selector(unmute), "")) }
@@ -129,6 +139,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         UserDefaults.standard.set(hidden, forKey: CapturePrivacy.key)
         notch?.applyCapturePrivacy(hidden); bunk?.applyCapturePrivacy(hidden)
     }
+    @objc private func toggleAdjustSound() { AdjustSound.enabled.toggle() }
+    @objc private func previewAdjustSound(_ sender: NSMenuItem) {
+        if let raw = sender.representedObject as? String, let k = AdjustSound.Kind(rawValue: raw) { AdjustSound.play([k], force: true) }
+    }
+    @objc private func openSoundSettings() { SoundSettingsWindow.shared.show() }
     @objc private func toggleSaleAlerts() { UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: Store.saleAlertKey), forKey: Store.saleAlertKey) }
     @objc private func toggleCallQuiet() { CallWatch.shared.enabled.toggle() }
     @objc private func bunkAllScreens() { bunk?.allowAllScreens() }

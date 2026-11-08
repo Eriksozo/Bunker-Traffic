@@ -1,4 +1,6 @@
 import CryptoKit
+import AppKit
+import AVFoundation
 import CoreGraphics
 import Foundation
 
@@ -12,7 +14,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder()
+        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound()
         failures += bunkFailures
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
@@ -264,5 +266,65 @@ enum SelfTest {
               let env = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let payload = Data(base64Encoded: env["payload"] as? String ?? ""),
               let sig = Data(base64Encoded: env["sig"] as? String ?? ""), let signature = try? P256.Signing.ECDSASignature(rawRepresentation: sig) else { check(false, #line); return }
         check(key.publicKey.isValidSignature(signature, for: payload) && env["key"] as? String == OwnerKey.keyId(key.publicKey) && OwnerKey.keyId(key.publicKey).count == 16, #line)
+    }
+
+    /// Sound per kind of adjustment: read from the change alert keys, once per kind, pause first; activation is silent.
+    private static func testAdjustSound() {
+        let e = { (action: String) in Summary.Activity(action: action, field: "dailyBudget", before: nil, after: nil, percent: nil, currency: "BRL", at: nil, from: nil, actor: "Ana", origin: "history", campaign: "C", account: nil, campaignId: "1") }
+        let keys = [Store.changeKey(e("increase")), Store.changeKey(e("activate")), "ap:1", "lo:2", Store.changeKey(e("pause")), Store.changeKey(e("increase"))]
+        check(AdjustSound.action(fromKey: keys[0]) == "increase", #line)
+        check(AdjustSound.action(fromKey: "ap:1") == nil, #line)
+        check(AdjustSound.kinds(forKeys: keys) == [.pause, .increase], #line)
+        check(AdjustSound.kinds(forKeys: [Store.changeKey(e("reduce"))]) == [.reduce], #line)
+        check(AdjustSound.kinds(forKeys: ["ap:1", Store.changeKey(e("activate"))]).isEmpty, #line)
+        // Review fixes: counter rise covers changes outside the newest 12 and repeated transitions, never twice.
+        check(AdjustSound.countRise(previous: nil, current: ["pause": 3], alreadyNew: []).isEmpty, #line)
+        check(AdjustSound.countRise(previous: ["pause": 2, "increase": 4], current: ["pause": 3, "increase": 4, "reduce": 1], alreadyNew: ["reduce"]) == ["pause"], #line)
+        check(AdjustSound.kinds(forKeys: ["lo:1"], extra: ["increase", "activate"]) == [.increase], #line)
+        // The same transition later again rings; a reread with the same or an earlier time does not.
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        check(AdjustSound.repeats(lastAt: t0, at: t0.addingTimeInterval(3600)), #line)
+        check(!AdjustSound.repeats(lastAt: t0, at: t0.addingTimeInterval(-600)) && !AdjustSound.repeats(lastAt: t0, at: t0.addingTimeInterval(60)) && !AdjustSound.repeats(lastAt: nil, at: t0), #line)
+        // Notifications already covered by a kind sound stay silent: the change and a confirmed owner order.
+        check(AdjustSound.silenced(id: keys[4], isOrder: false, playing: [.pause]), #line)
+        check(!AdjustSound.silenced(id: keys[4], isOrder: false, playing: [.increase]), #line)
+        check(AdjustSound.silenced(id: "or:9:confirmed", isOrder: true, playing: [.reduce]) && !AdjustSound.silenced(id: "or:9:failed", isOrder: true, playing: [.reduce]), #line)
+        check(!AdjustSound.silenced(id: "or:9:confirmed", isOrder: true, playing: []) && !AdjustSound.silenced(id: "ap:1", isOrder: false, playing: [.pause]), #line)
+        check(AdjustSound.action(fromKey: keys[4] + "@2026-11-08T15:00:00.000Z") == "pause", #line)
+        // At least five choices per kind; ids unique; the default exists; every system sound exists on this Mac.
+        let all = AdjustSound.Kind.allCases.flatMap(AdjustSound.options)
+        check(Set(all.map(\.id)).count == all.count, #line)
+        for k in AdjustSound.Kind.allCases {
+            check(AdjustSound.options(k).filter { $0.source != .silent }.count >= 5, #line)
+            check(AdjustSound.options(k).contains { $0.source == .silent }, #line)
+            check(AdjustSound.options(k).contains { $0.id == AdjustSound.defaultID(k) }, #line)
+            check(AdjustSound.selected(k).id == AdjustSound.options(k).first { UserDefaults.standard.string(forKey: AdjustSound.choiceKey(k)) == $0.id }?.id ?? AdjustSound.defaultID(k), #line)
+        }
+        for o in all {
+            switch o.source {
+            case .silent: break
+            case .system(let name):
+                check(NSSound(named: NSSound.Name(name)) != nil, #line)
+                // Trimmed to 0.7 s with a fade: valid WAV, never longer than the limit.
+                if let d = SoundSynth.trimmedSystem(name) {
+                    check(d.prefix(4) == Data("RIFF".utf8) && d.count <= 44 + Int(0.7 * 48_000) * 2 * 2 + 8, #line)
+                    check(((try? AVAudioPlayer(data: d))?.duration ?? 9) <= 0.71, #line)
+                } else { check(false, #line) }
+            case .synth(let timbre, let notes):
+                // Generated tones: 120–700 ms, peak at most -6 dBFS, no NaN, valid WAV header.
+                let total = (notes.map { $0.startMs + $0.durationMs }.max() ?? 0)
+                check(total >= 120 && total <= 700, #line)
+                let x = SoundSynth.samples(timbre, notes), peak = x.map(abs).max() ?? 0
+                check(!x.contains { $0.isNaN } && peak <= SoundSynth.peak + 0.001 && peak > 0.2, #line)
+                let wav = SoundSynth.wav(x)
+                check(wav.count == 44 + x.count * 2 && wav.prefix(4) == Data("RIFF".utf8), #line)
+                check((try? AVAudioPlayer(data: wav))?.duration ?? 0 > 0.1, #line)
+            }
+        }
+        // Contour follows the meaning: generated increases end higher than they start, reductions and pauses lower or equal.
+        func contour(_ o: SoundOption) -> Double? { if case .synth(_, let n) = o.source, let a = n.min(by: { $0.startMs < $1.startMs }), let b = n.max(by: { $0.startMs < $1.startMs }) { return b.hz - a.hz }; return nil }
+        check(AdjustSound.options(.increase).compactMap(contour).allSatisfy { $0 > 0 }, #line)
+        check(AdjustSound.options(.reduce).compactMap(contour).allSatisfy { $0 < 0 }, #line)
+        check(AdjustSound.options(.pause).compactMap(contour).allSatisfy { $0 <= 0 }, #line)
     }
 }
