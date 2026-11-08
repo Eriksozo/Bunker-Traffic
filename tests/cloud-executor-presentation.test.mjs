@@ -63,3 +63,14 @@ test('a sale reaches only a configured project, needs an order id and is dedupli
  assert.equal((await call({...base,project:'proj-bbbb'})).added,true,'same ref in another project is a different sale');
  assert.equal(values.get('salesFeed').length,2);assert.equal(values.get('syncPulse').version,2);
 });
+
+test('a recorded model format failure retries in the same pulse; other failures still end it',async()=>{
+ let n=0;const {e,calls,values}=executor({step:async()=>{n++;calls.push('unit'+n);if(n===1)throw Object.assign(Error('format'),{code:'CLOUD_AI_INVALID',attemptRecorded:true,modelFailure:{phase:'json',reason:'invalid_final_json'}});return {kind:'idle'};}});
+ await e.alarm();
+ assert.deepEqual(calls.slice(0,2),['unit1','unit2'],'the stage gets its next attempt now');
+ const rt=values.get('runtime');assert.equal(rt.lastError,null,'the later success clears the error');assert.equal(rt.history[1].code,'CLOUD_AI_INVALID');assert.equal(rt.history[1].modelFailure.reason,'invalid_final_json');
+ let m=0;const other=executor({step:async()=>{m++;throw Object.assign(Error('x'),{code:'CLOUD_AI_INVALID'});}});await other.e.alarm();
+ assert.equal(m,1,'an unrecorded failure (not a stage attempt) ends the pulse');assert.equal(other.values.get('runtime').lastError,'CLOUD_AI_INVALID');
+ let k=0;const capped=executor({step:async()=>{k++;throw Object.assign(Error('f'),{code:'CLOUD_AI_INVALID',attemptRecorded:true});}});await capped.e.alarm();
+ assert.equal(k,4,'never more than the four units of a pulse');
+});

@@ -57,3 +57,11 @@ test('An exhausted expired claim is attention for renewal, never an infinite dis
  r.discussionPending=[{id:'question',toAgent:'creative'}];r.discussionClaims.creative={status:'Em análise',attempt:3,replyTo:'question',startedAt:at(-2000),leaseUntil:at(-1000)};
  const p=autonomousWorkPlan(s,b,now);assert.deepEqual(p.ready.map(w=>w.kind),['collection']);assert.equal(p.refresh.length,2);
 });
+
+test('an owner question that failed three generations in this round waits instead of aborting every pulse',()=>{
+ const s=state(),r=round(),b=base(r);s.messages=[{id:'q1',project:'p',status:'Pendente'},{id:'q2',project:'p',status:'Pendente'}];
+ s.ownerQuestionFailures={q1:{messageId:'q1',roundId:'round',attempts:3},q2:{messageId:'q2',roundId:'round',attempts:2}};
+ const p=autonomousWorkPlan(s,b,now);
+ assert.deepEqual(p.ready.filter(w=>w.kind==='ownerQuestion').map(w=>w.messageId),['q2']);
+ assert.equal(p.waiting.find(w=>w.kind==='ownerQuestion').messageId,'q1');
+});

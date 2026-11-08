@@ -6,6 +6,7 @@ import VirtualWorld from './virtual-world';
 import CollaborationPanel from './collaboration-panel';
 import {officeAgents,agentPresence,officePresencePlan,nearestAgent,planWalk,isWalkable} from '../lib/office.mjs';
 import {cadenceOf} from '../lib/cadence.mjs';
+import {ownerQuestionParked} from '../lib/owner-question-limit.mjs';
 import {officeDecisionView} from '../lib/office-decision-view.mjs';
 import './virtual-office.css';
 type Point={x:number;y:number};
@@ -93,7 +94,7 @@ export default function VirtualOffice({state,project,projectName,write,saving,sh
      <div className="vo-agent-intro"><span className={'vo-status '+presences[selected.id].tone}>{presences[selected.id].label}</span><p>{selected.description}</p></div>
      <div ref={conversation} className="vo-chat-log" role="log" aria-label={'Histórico com '+selected.name} aria-live="polite">
       {!messages.length&&<div className="vo-chat-empty"><MessageSquare size={24}/><strong>O que vamos olhar juntos?</strong><p>Envie uma pergunta sobre {projectName}. Ela fica registrada para a próxima revisão do agente.</p></div>}
-      {messages.map((m:any)=><div className="vo-chat-pair" key={m.id}><div className="vo-chat-bubble vo-yours"><small>Você · {stamp(m.createdAt)}</small><p>{m.text}</p></div>{m.status==='Respondida'&&m.answer?<div className="vo-chat-bubble vo-theirs"><small>{selected.name} · resposta da revisão</small><p>{m.answer}</p><small>{stamp(m.answeredAt)}</small></div>:<div className="vo-chat-wait"><Clock3 size={12}/> Aguardando análise · pergunta na fila</div>}</div>)}
+      {messages.map((m:any)=><div className="vo-chat-pair" key={m.id}><div className="vo-chat-bubble vo-yours"><small>Você · {stamp(m.createdAt)}</small><p>{m.text}</p></div>{m.status==='Respondida'&&m.answer?<div className="vo-chat-bubble vo-theirs"><small>{selected.name} · resposta da revisão</small><p>{m.answer}</p><small>{stamp(m.answeredAt)}</small></div>:<div className="vo-chat-wait"><Clock3 size={12}/> {ownerQuestionParked(state,m)?'Sem resposta após 3 tentativas nesta rodada · nova tentativa na próxima coleta':'Aguardando análise · pergunta na fila'}</div>}</div>)}
      </div>
      <div className="vo-prompts">{selected.prompts.slice(0,2).map((text:string)=><button type="button" key={text} onClick={()=>{setDrafts(old=>({...old,[draftKey]:text}));composer.current?.focus();}}>{text}</button>)}</div>
      <form className="vo-composer" onSubmit={e=>{e.preventDefault();void send();}}><label htmlFor="virtual-office-message">Mensagem para {selected.name}</label><textarea ref={composer} id="virtual-office-message" aria-label={'Mensagem para '+selected.name} value={draft} onChange={e=>{const value=e.target.value;setDrafts(old=>({...old,[draftKey]:value}));}} maxLength={4000} placeholder="O que você quer analisar?" rows={3} required/><div><small>{projectName} · {draft.length}/4000</small><button type="submit" disabled={!draft.trim()||saving||localSending||!project}><Send size={14}/>{localSending?'Registrando…':'Enviar pergunta'}</button></div></form>

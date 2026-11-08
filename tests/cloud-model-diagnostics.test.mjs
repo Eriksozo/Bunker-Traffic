@@ -14,7 +14,11 @@ test('Diagnostic sanitizer allows only recognized phase/reason pairs and bounded
  for(const phase of ['toString','constructor','__proto__','foreign',null])assert.equal(safeModelFailure({phase,reason:'invalid_schema'}),null);
  assert.equal(safeModelFailure({phase:'schema',reason:'output_truncated'}),null);
  assert.deepEqual(safeModelFailure({phase:'json',reason:'invalid_final_json',finishReason:secret,usage:{prompt_tokens:Infinity,completion_tokens:-1,total_tokens:1e10},raw:secret}),{version:1,phase:'json',reason:'invalid_final_json'});
- assert.deepEqual(modelOutputFailure(response(secret,'provider-secret'),'json','invalid_final_json').modelFailure,{version:1,phase:'json',reason:'invalid_final_json',finishReason:'other',usage:{prompt_tokens:100,completion_tokens:200,total_tokens:300}});
+ assert.deepEqual(modelOutputFailure(response(secret,'provider-secret'),'json','invalid_final_json').modelFailure,{version:1,phase:'json',reason:'invalid_final_json',finishReason:'other',reasoningField:true,usage:{prompt_tokens:100,completion_tokens:200,total_tokens:300}});
+ // Shape is a fixed label (JSON phase only); size is a bucket; reasoning is presence and a bounded count, never text.
+ assert.deepEqual(safeModelFailure({phase:'json',reason:'invalid_final_json',shape:'trailing_text',contentSize:'1k-4k',reasoningField:false,usage:{completion_tokens:5,completion_tokens_details:{reasoning_tokens:3}}}),{version:1,phase:'json',reason:'invalid_final_json',shape:'trailing_text',contentSize:'1k-4k',reasoningField:false,usage:{completion_tokens:5,reasoning_tokens:3}});
+ assert.deepEqual(safeModelFailure({phase:'json',reason:'invalid_final_json',shape:secret,contentSize:secret,reasoningField:secret,usage:{completion_tokens_details:{reasoning_tokens:-4}}}),{version:1,phase:'json',reason:'invalid_final_json'});
+ assert.equal(safeModelFailure({phase:'envelope',reason:'output_truncated',shape:'trailing_text'}).shape,undefined);
 });
 test('Generation distinguishes JSON syntax from schema failures without retries or financial output',async()=>{
  let calls=0;for(const [content,phase,reason] of [['{','json','invalid_final_json'],[JSON.stringify({decision:'only-one-field'}),'schema','invalid_schema']]){

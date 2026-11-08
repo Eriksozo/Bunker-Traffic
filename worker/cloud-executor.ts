@@ -283,7 +283,15 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    try{
    const started=Date.now();for(let n=0;n<4&&Date.now()-started<90000;n++){
     setting=await this.setting();if(!setting.enabled)break;
-    const result=await engine.step(),at=new Date().toISOString();const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,lastErrorDetail:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});
+    let result:any;
+    try{result=await engine.step();}
+    catch(e:any){
+     // A rejected model format was already recorded as one attempt of that stage (cap 3, with correction feedback):
+     // retry it in this pulse instead of waiting for the next one. Anything else still ends the pulse.
+     if(e?.code==='CLOUD_AI_INVALID'&&e?.attemptRecorded===true){await this.ctx.storage.put('runtime',runtimeFailure(await this.setting(),e));continue;}
+     throw e;
+    }
+    const at=new Date().toISOString();const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,lastUnitAt:at,lastResult:result,lastError:null,lastErrorDetail:null,history:[{at,...result},...(latest.history||[])].slice(0,30)});
     if(['idle','blocked'].includes(result.kind))break;
    }
    }catch(e:any){const latest=await this.setting();await this.ctx.storage.put('runtime',runtimeFailure(latest,e));}

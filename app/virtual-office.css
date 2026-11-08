@@ -73,6 +73,7 @@
 .vo-composer textarea{background:#0b1d23;border-color:#375c63;font-size:12px;border-radius:9px;margin:0;min-height:84px}
 .vo-composer button{background:#a1ddce;color:#112d2a;padding:11px 13px;border-radius:8px;font-size:11px}
 .vo-status{background:#1d393c;border-color:#37585c;color:#90c3bb}
+.vo-status.red{background:#332126;border-color:#653c48;color:#f08284}
 .vo-queue-note{color:#6b969b;font-size:9px}
 @media(min-width:1550px){.vo-layout{grid-template-columns:minmax(0,1fr) 330px;gap:20px}.vo-side{display:flex;flex-direction:column}.vo-welcome-card{padding:27px}.vo-welcome-icon{display:grid}.vo-welcome-card h3{font-size:28px}.vo-round-card dl{display:block}.vo-round-card dl>div{display:flex}.vo-round-card dl>div+div{margin-top:8px}.vo-round-card dd{text-align:right}.vo-round-card dt{margin:0}}
 @media(max-width:1050px){.is-virtual-office main{padding:20px 20px 0}.vo-topline{gap:15px}.vo-presence{font-size:10px}.vo-roster{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.vo-roster>button{padding:12px 10px;gap:8px}.vo-roster>button small{font-size:8px}.vo-roster-avatar{width:29px;height:34px}.vo-roster-arrow{display:none}}
