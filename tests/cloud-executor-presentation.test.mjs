@@ -6,13 +6,14 @@ import ts from 'typescript';
 import {runtimeFailure} from '../lib/cloud-failure-diagnostics.mjs';
 import * as changeWatch from '../lib/change-watch.mjs';
 import * as ownerOrders from '../lib/owner-orders.mjs';
+import * as salesFeed from '../lib/sales-feed.mjs';
 // Exercise the real Durable Object alarm with only infrastructure and provider boundaries replaced.
 const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 function executor({step,enabled=true}={}){
  const exports={},values=new Map([['runtime',{enabled,history:[]}]]),alarms=[];
  const storage={get:async k=>values.get(k),put:async(k,v)=>{if(typeof k==='object'){for(const [a,b] of Object.entries(k))values.set(a,b);}else values.set(k,v);},setAlarm:async at=>alarms.push(at)};
  class DurableObject{constructor(ctx,env){this.ctx=ctx;this.env=env;}}
- vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:name.includes('change-watch')?changeWatch:name.includes('owner-orders')?ownerOrders:{},Date,Response});
+ vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:name.includes('change-watch')?changeWatch:name.includes('owner-orders')?ownerOrders:name.includes('sales-feed')?salesFeed:{},Date,Response});
  const e=new exports.BunkerCloudExecutor({storage},{}),calls=[];
  e.engine=()=>({step:step||(async()=>{calls.push('analysis');throw Object.assign(Error('rejected'),{code:'CLOUD_MEMORY_REVIEW_EVIDENCE'});})});
  e.syncLive=async()=>{calls.push('live');return {paused:false};};e.syncAttribution=async()=>calls.push('authors');e.storeCompanion=async()=>calls.push('notch');
@@ -46,4 +47,19 @@ test('between minute pulses a new Malva edit refreshes the notch at once, then t
  assert.equal(alarms.length,1);assert.ok(alarms[0]-Date.now()<=changeWatch.changeWatchPolicy.tickMs+50);
  const quiet=executor();quiet.values.set('lastHeavyAt',Date.now());quiet.e.watchChanges=async()=>[];await quiet.e.alarm();
  assert.deepEqual(quiet.calls,[]);assert.equal(quiet.values.get('syncPulse'),undefined);
+});
+
+test('a sale reaches only a configured project, needs an order id and is deduplicated per project',async()=>{
+ const {e,values}=executor();
+ const call=async sale=>(await e.fetch(new Request('https://bunker-internal/control',{method:'POST',body:JSON.stringify({action:'sale',sale})}))).json();
+ const base={amount:97,currency:'BRL',at:new Date().toISOString(),orderRef:'abc'};
+ assert.equal((await call({...base,project:'proj-aaaa'})).refused,'projeto não configurado no Bunker','no config yet: refused');
+ values.set('watchConfig',['proj-aaaa','proj-bbbb']);
+ assert.equal((await call({...base,project:'proj-kwai'})).refused,'projeto não configurado no Bunker');
+ assert.equal((await call({...base})).refused,'projeto não configurado no Bunker','no project never means every project');
+ assert.equal((await call({...base,project:'proj-aaaa',orderRef:null})).refused,'pedido sem identificação');
+ assert.equal((await call({...base,project:'proj-aaaa'})).added,true);
+ assert.equal((await call({...base,project:'proj-aaaa'})).added,false,'retry does not duplicate');
+ assert.equal((await call({...base,project:'proj-bbbb'})).added,true,'same ref in another project is a different sale');
+ assert.equal(values.get('salesFeed').length,2);assert.equal(values.get('syncPulse').version,2);
 });

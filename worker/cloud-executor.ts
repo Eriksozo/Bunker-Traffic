@@ -223,6 +223,11 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    if(!ok)return Response.json({error:'Venda inválida.'},{status:400});
    const t=(x:any,n:number)=>typeof x==='string'?x.slice(0,n):null;
    const sale={amount:v.amount,currency:t(v.currency,3),product:t(v.product,120),campaign:t(v.campaign,120),project:t(v.project,80),at:new Date(Date.parse(v.at)).toISOString(),orderRef:t(v.orderRef,32)};
+   // Only a configured Bunker project (the Meta projects of the last heavy pulse) receives sales; an unknown or missing
+   // project, or a sale that cannot be deduplicated, is refused instead of shown everywhere.
+   const configured=await this.ctx.storage.get<string[]>('watchConfig');
+   if(!sale.project||!Array.isArray(configured)||!configured.includes(sale.project))return Response.json({ok:false,refused:'projeto não configurado no Bunker'});
+   if(!sale.orderRef)return Response.json({ok:false,refused:'pedido sem identificação'});
    const out=addSale(await this.ctx.storage.get<any[]>('salesFeed'),sale);
    if(out.added){const prev=await this.ctx.storage.get<any>('syncPulse');await this.ctx.storage.put({salesFeed:out.list,syncPulse:{...(prev||{}),version:(prev?.version||0)+1,at:new Date().toISOString(),last:{kind:'sale',project:sale.project,campaign:sale.campaign,product:sale.product,amount:sale.amount,currency:sale.currency,at:sale.at}}});}
    return Response.json({ok:true,added:out.added});
