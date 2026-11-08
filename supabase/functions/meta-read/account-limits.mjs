@@ -5,7 +5,7 @@
  * - Meta Graph `/me/adaccounts` with a read-only token (`adtrust_dsl` and today's spend in the account currency).
  * Personal data from Malva (registered address, people with access, tokens) never enters the panel.
  */
-export const accountPanelPolicy=Object.freeze({version:4,refreshMs:30*60000,maxAccounts:250,nearLimit:0.8,graphVersion:'v23.0'});
+export const accountPanelPolicy=Object.freeze({version:5,refreshMs:30*60000,maxAccounts:250,nearLimit:0.8,graphVersion:'v23.0'});
 export const metaAccountFields='account_id,name,account_status,disable_reason,currency,adtrust_dsl,timezone_name,insights.date_preset(today){spend}';
 const metaStatus=Object.freeze({1:'active',2:'disabled',3:'unsettled',7:'risk-review',8:'pending-settlement',9:'grace-period',100:'pending-closure',101:'closed',201:'active',202:'closed'});
 export const statusLabels=Object.freeze({active:'Ativa',disabled:'Desabilitada',unsettled:'Pagamento pendente','risk-review':'Em análise de risco','pending-settlement':'Acerto pendente','grace-period':'Carência','pending-closure':'Fechando',closed:'Fechada'});
@@ -25,16 +25,20 @@ export function normalizeMetaAccount(raw){
 /**
  * Reads every ad account the read-only token sees. The token travels only in the Authorization header;
  * paging uses the `after` cursor (never a `next` URL that could carry credentials). Errors are fixed codes.
+ * Fields Meta reports as nonexistent are dropped (listed in `result.dropped`); the limit then stays N/D.
  * @param {(url:string,init:any)=>Promise<any>} fetchImpl @param {string} token @param {{version?:string,maxPages?:number}} [options]
  */
 export async function readMetaAccounts(fetchImpl,token,{version=accountPanelPolicy.graphVersion,maxPages=8}={}){
  if(typeof token!=='string'||!token.trim())throw Object.assign(new Error('META_TOKEN_MISSING'),{code:'META_TOKEN_MISSING'});
  if(!/^v\d{1,2}\.\d$/.test(version))throw Object.assign(new Error('META_VERSION_INVALID'),{code:'META_VERSION_INVALID'});
- const out=[];let after=null;
+ const out=[],dropped=[];let after=null,fields=metaAccountFields.split(/,(?![^{]*})/);
  for(let page=0;page<maxPages;page++){
-  const qs=new URLSearchParams({fields:metaAccountFields,limit:'100'});if(after)qs.set('after',after);
+  const qs=new URLSearchParams({fields:fields.join(','),limit:'100'});if(after)qs.set('after',after);
   let response;try{response=await fetchImpl(`https://graph.facebook.com/${version}/me/adaccounts?${qs}`,{headers:{Authorization:'Bearer '+token.trim()}});}catch{throw Object.assign(new Error('META_NETWORK'),{code:'META_NETWORK'});}
   let body=null;try{body=await response.json();}catch{body=null;}
+  // A field Meta retired (e.g. adtrust_dsl in v26) is dropped and the same page read again; the rest stays.
+  const gone=/nonexisting field \((\w+)\)/.exec(body?.error?.message||'')?.[1];
+  if(body?.error&&num(body.error.code)===100&&gone&&fields.includes(gone)&&gone!=='account_id'&&dropped.length<3){fields=fields.filter(f=>f!==gone);dropped.push(gone);page--;continue;}
   if(!response.ok||body?.error){const c=num(body?.error?.code),e=body?.error;throw Object.assign(new Error('META_ERROR'),{code:c?`META_${c}`:`META_HTTP_${response.status}`,
    // Graph text with long numbers masked (ids), never the token: lets the owner see why Meta refused.
    diagnostic:e&&typeof e==='object'?{code:c,subcode:num(e.error_subcode),message:typeof e.message==='string'?e.message.replace(/\d{5,}/g,'#').slice(0,180):null}:null});}
@@ -42,7 +46,7 @@ export async function readMetaAccounts(fetchImpl,token,{version=accountPanelPoli
   after=typeof body?.paging?.cursors?.after==='string'&&body?.paging?.next?body.paging.cursors.after:null;
   if(!after)break;
  }
- return out;
+ return Object.assign(out,{dropped});
 }
 
 const groupOf=name=>/fb\s*flix/i.test(name||'')?'FB Flix':/alfa\s*rent/i.test(name||'')?'Alfa Rent':/fb\s*max/i.test(name||'')?'FB Max':'Outras';

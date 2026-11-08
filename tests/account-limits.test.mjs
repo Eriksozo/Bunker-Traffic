@@ -65,3 +65,12 @@ test('Shared accounts are attributed by each project own campaign spend; old dis
  assert.equal(panel.rows.find(r=>r.accountId==='111').runningLabel,'Rodando · Leandro','paused Gabe does not run in the shared account');
  assert.equal(panel.counts.total,2);assert.equal(panel.counts.listed,1);assert.equal(panel.rows.some(r=>r.accountId==='555'),false);
 });
+test('A field Meta retired is dropped and the page read again; the limit stays N/D',async()=>{
+ const {readMetaAccounts,metaAccountFields}=await import('../lib/account-limits.mjs');const calls=[];
+ const fetchImpl=async url=>{const f=new URL(url).searchParams.get('fields');calls.push(f);
+  if(f.includes('adtrust_dsl'))return {ok:false,status:400,json:async()=>({error:{code:100,message:'(#100) Tried accessing nonexisting field (adtrust_dsl)'}})};
+  return {ok:true,status:200,json:async()=>({data:[{account_id:'123456',name:'CA',account_status:1,currency:'USD',insights:{data:[{spend:'12'}]}}]})};};
+ const out=await readMetaAccounts(fetchImpl,'t');
+ assert.equal(out.length,1);assert.deepEqual(out.dropped,['adtrust_dsl']);assert.equal(calls.length,2);
+ assert.ok(calls[1].includes('insights.date_preset(today){spend}'),'the insights expansion is kept intact');assert.ok(metaAccountFields.includes('adtrust_dsl'));
+});

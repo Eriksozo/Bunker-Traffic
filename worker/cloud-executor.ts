@@ -158,7 +158,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let metaDiagnostic:any=null;
   // The Worker secret wins when present; otherwise the owner's Supabase secret through the read-only `meta-read` function.
   try{if(this.env.META_ACCOUNTS_TOKEN)meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN,{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});
-   else{const r:any=await this.db().rpc('metaRead',{action:'accounts'});if(!Array.isArray(r?.accounts))throw Object.assign(new Error('META_READ_FAILED'),{code:typeof r?.error==='string'?r.error:'META_READ_FAILED',diagnostic:r?.diagnostic||null});meta=r.accounts;}}
+   else{const r:any=await this.db().rpc('metaRead',{action:'accounts'});if(!Array.isArray(r?.accounts))throw Object.assign(new Error('META_READ_FAILED'),{code:typeof r?.error==='string'?r.error:'META_READ_FAILED',diagnostic:r?.diagnostic||null});meta=r.accounts;
+    // Fields Meta retired (adtrust_dsl in v26): the limit stays N/D and the reason is kept for the panel.
+    if(Array.isArray(r?.dropped)&&r.dropped.length)metaDiagnostic={code:null,subcode:null,message:'Campos que a Meta não oferece mais: '+r.dropped.filter((f:any)=>typeof f==='string').slice(0,3).join(', ')};}}
   catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';metaDiagnostic=e?.diagnostic&&typeof e.diagnostic==='object'?{code:e.diagnostic.code??null,subcode:e.diagnostic.subcode??null,message:typeof e.diagnostic.message==='string'?e.diagnostic.message.slice(0,180):null}:null;}
   await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors,metaDiagnostic});
   // Malva account id → Meta ad account number, for the live Meta read of new campaigns (no other use).
