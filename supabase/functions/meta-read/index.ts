@@ -11,7 +11,10 @@ Deno.serve(async(req:Request)=>{
  try{
   const raw=await req.text();if(raw.length>20000)return result({error:'META_REQUEST_LIMIT'},400);
   const input=JSON.parse(raw),token=Deno.env.get('Meta_Acess_Token')||'';
-  if(input&&typeof input==='object'&&input.action==='accounts'&&Object.keys(input).length===1)return result({at:new Date().toISOString(),accounts:await readMetaAccounts(fetch,token,{version:metaLivePolicy.graphVersion})});
+  if(input&&typeof input==='object'&&input.action==='accounts'&&Object.keys(input).length===1){
+   try{return result({at:new Date().toISOString(),accounts:await readMetaAccounts(fetch,token,{version:metaLivePolicy.graphVersion})});}
+   catch(e:any){if(e?.code==='META_190')throw e;return result({at:new Date().toISOString(),accounts:null,error:/^META_[A-Z0-9_]+$/.test(e?.code||'')?e.code:'META_BRIDGE_FAILED',diagnostic:e?.diagnostic||null});}
+  }
   if(!input||typeof input!=='object'||Object.keys(input).some(k=>k!=='accounts')||!Array.isArray(input.accounts))return result({error:'META_REQUEST_INVALID'},400);
   return result({at:new Date().toISOString(),...await readMetaAccountCampaigns(fetch,token,input.accounts)});
  }catch(error){const code=typeof (error as any)?.code==='string'&&/^META_[A-Z0-9_]+$/.test((error as any).code)?(error as any).code:'META_BRIDGE_FAILED';return result({error:code},502);}

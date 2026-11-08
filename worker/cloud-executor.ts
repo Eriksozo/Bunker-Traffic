@@ -155,11 +155,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    catch(e:any){projectErrors[c?.projectName||id]=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'MALVA_ACCOUNTS_FAILED';}
   }
   let meta:any[]|null=null,metaError:string|null=null;
+  let metaDiagnostic:any=null;
   // The Worker secret wins when present; otherwise the owner's Supabase secret through the read-only `meta-read` function.
   try{if(this.env.META_ACCOUNTS_TOKEN)meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN,{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});
-   else{const r:any=await this.db().rpc('metaRead',{action:'accounts'});if(!Array.isArray(r?.accounts))throw Object.assign(new Error('META_READ_FAILED'),{code:'META_READ_FAILED'});meta=r.accounts;}}
-  catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';}
-  await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors});
+   else{const r:any=await this.db().rpc('metaRead',{action:'accounts'});if(!Array.isArray(r?.accounts))throw Object.assign(new Error('META_READ_FAILED'),{code:typeof r?.error==='string'?r.error:'META_READ_FAILED',diagnostic:r?.diagnostic||null});meta=r.accounts;}}
+  catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';metaDiagnostic=e?.diagnostic&&typeof e.diagnostic==='object'?{code:e.diagnostic.code??null,subcode:e.diagnostic.subcode??null,message:typeof e.diagnostic.message==='string'?e.diagnostic.message.slice(0,180):null}:null;}
+  await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors,metaDiagnostic});
   // Malva account id → Meta ad account number, for the live Meta read of new campaigns (no other use).
   const links:Record<string,string>={};for(const p of projects)for(const a of p.items)if(a?.provider==='meta'&&typeof a.id==='string'&&/^(act_)?\d{5,25}$/.test(String(a.accountId??'')))links[a.id]=String(a.accountId).replace(/^act_/,'');
   if(Object.keys(links).length)await this.ctx.storage.put('metaAccountLinks',{at:new Date().toISOString(),links});
