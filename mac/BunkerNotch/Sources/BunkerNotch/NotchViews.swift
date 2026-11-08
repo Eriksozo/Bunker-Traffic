@@ -768,6 +768,7 @@ struct AgentsTab: View {
 
 /// Account planning without a manual board: status, project, today's spend vs the Meta daily limit. Read-only.
 struct AccountsTab: View {
+    @EnvironmentObject var notch: NotchState
     let s: Summary
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -777,9 +778,14 @@ struct AccountsTab: View {
                     if a.counts.nearLimit > 0 { QuietMenu(key: AttentionLedger.limitKey, compact: true) }
                 }
                 if !a.metaConnected { EmptyLine(text: Format.accountsMetaNotice(a.metaError)) }
+                if !a.rows.isEmpty {
+                    TextField("Buscar conta por nome ou ID", text: $notch.accountQuery).textFieldStyle(.island)
+                }
+                let rows = a.rows.filter { Format.accountMatches($0, notch.accountQuery) }
                 if a.rows.isEmpty { EmptyLine(text: "Nenhuma conta ativa ou com alerta.") }
+                else if rows.isEmpty { EmptyLine(text: "Nenhuma conta com “\(notch.accountQuery.trimmingCharacters(in: .whitespaces))”.") }
                 VStack(spacing: 2) {
-                    ForEach(a.rows) { r in
+                    ForEach(rows) { r in
                         let near = (r.usedPct ?? 0) >= 80, bad = r.status != "active"
                         ListRow(id: "acc:" + r.accountId, symbol: bad ? "exclamationmark.triangle.fill" : (near ? "gauge.high" : "creditcard"), tone: bad || near ? .bad : .neutral,
                                 title: r.name ?? r.accountId,

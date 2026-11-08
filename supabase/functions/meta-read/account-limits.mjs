@@ -5,7 +5,9 @@
  * - Meta Graph `/me/adaccounts` with a read-only token (`adtrust_dsl` and today's spend in the account currency).
  * Personal data from Malva (registered address, people with access, tokens) never enters the panel.
  */
-export const accountPanelPolicy=Object.freeze({version:5,refreshMs:30*60000,maxAccounts:250,nearLimit:0.8,graphVersion:'v23.0'});
+export const accountPanelPolicy=Object.freeze({version:6,refreshMs:30*60000,maxAccounts:250,nearLimit:0.8,graphVersion:'v23.0',
+ // Older Graph versions still served by Meta, tried in order only for the daily limit when the current one refuses it.
+ limitFallback:Object.freeze(['v25.0','v24.0','v23.0','v22.0'])});
 export const metaAccountFields='account_id,name,account_status,disable_reason,currency,adtrust_dsl,timezone_name,insights.date_preset(today){spend}';
 const metaStatus=Object.freeze({1:'active',2:'disabled',3:'unsettled',7:'risk-review',8:'pending-settlement',9:'grace-period',100:'pending-closure',101:'closed',201:'active',202:'closed'});
 export const statusLabels=Object.freeze({active:'Ativa',disabled:'Desabilitada',unsettled:'Pagamento pendente','risk-review':'Em análise de risco','pending-settlement':'Acerto pendente','grace-period':'Carência','pending-closure':'Fechando',closed:'Fechada'});
@@ -25,20 +27,35 @@ export function normalizeMetaAccount(raw){
 /**
  * Reads every ad account the read-only token sees. The token travels only in the Authorization header;
  * paging uses the `after` cursor (never a `next` URL that could carry credentials). Errors are fixed codes.
- * Fields Meta reports as nonexistent are dropped (listed in `result.dropped`); the limit then stays N/D.
- * @param {(url:string,init:any)=>Promise<any>} fetchImpl @param {string} token @param {{version?:string,maxPages?:number}} [options]
+ * Fields Meta reports as nonexistent are dropped (listed in `result.dropped`). When that field is the daily limit,
+ * the same field is read alone from the older versions in `limitFallback` and joined by account id
+ * (`result.limitVersion` names the version that answered, `result.limitTried` the codes of those that refused).
+ * @param {(url:string,init:any)=>Promise<any>} fetchImpl @param {string} token @param {{version?:string,maxPages?:number,limitFallback?:readonly string[]}} [options]
  */
-export async function readMetaAccounts(fetchImpl,token,{version=accountPanelPolicy.graphVersion,maxPages=8}={}){
+export async function readMetaAccounts(fetchImpl,token,{version=accountPanelPolicy.graphVersion,maxPages=8,limitFallback=accountPanelPolicy.limitFallback}={}){
+ const out=await readMetaPages(fetchImpl,token,version,metaAccountFields,maxPages);
+ let limitVersion=null;const limitTried=[];
+ if(out.dropped.includes('adtrust_dsl'))for(const v of arr(limitFallback)){
+  if(v===version||!/^v\d{1,2}\.\d$/.test(v))continue;
+  let limits;try{limits=await readMetaPages(fetchImpl,token,v,'account_id,adtrust_dsl',maxPages,false);}catch(e){limitTried.push({version:v,code:e?.code||'META_FAILED'});continue;}
+  const byId=new Map(limits.map(r=>[String(r?.account_id??'').replace(/^act_/,''),r?.adtrust_dsl]));
+  for(const r of out){const l=byId.get(String(r?.account_id??'').replace(/^act_/,''));if(l!==undefined)r.adtrust_dsl=l;}
+  limitVersion=v;break;
+ }
+ return Object.assign(out,{limitVersion,limitTried});
+}
+
+async function readMetaPages(fetchImpl,token,version,fieldList,maxPages,allowDrop=true){
  if(typeof token!=='string'||!token.trim())throw Object.assign(new Error('META_TOKEN_MISSING'),{code:'META_TOKEN_MISSING'});
  if(!/^v\d{1,2}\.\d$/.test(version))throw Object.assign(new Error('META_VERSION_INVALID'),{code:'META_VERSION_INVALID'});
- const out=[],dropped=[];let after=null,fields=metaAccountFields.split(/,(?![^{]*})/);
+ const out=[],dropped=[];let after=null,fields=fieldList.split(/,(?![^{]*})/);
  for(let page=0;page<maxPages;page++){
   const qs=new URLSearchParams({fields:fields.join(','),limit:'100'});if(after)qs.set('after',after);
   let response;try{response=await fetchImpl(`https://graph.facebook.com/${version}/me/adaccounts?${qs}`,{headers:{Authorization:'Bearer '+token.trim()}});}catch{throw Object.assign(new Error('META_NETWORK'),{code:'META_NETWORK'});}
   let body=null;try{body=await response.json();}catch{body=null;}
   // A field Meta retired (e.g. adtrust_dsl in v26) is dropped and the same page read again; the rest stays.
   const gone=/nonexisting field \((\w+)\)/.exec(body?.error?.message||'')?.[1];
-  if(body?.error&&num(body.error.code)===100&&gone&&fields.includes(gone)&&gone!=='account_id'&&dropped.length<3){fields=fields.filter(f=>f!==gone);dropped.push(gone);page--;continue;}
+  if(allowDrop&&body?.error&&num(body.error.code)===100&&gone&&fields.includes(gone)&&gone!=='account_id'&&dropped.length<3){fields=fields.filter(f=>f!==gone);dropped.push(gone);page--;continue;}
   if(!response.ok||body?.error){const c=num(body?.error?.code),e=body?.error;throw Object.assign(new Error('META_ERROR'),{code:c?`META_${c}`:`META_HTTP_${response.status}`,
    // Graph text with long numbers masked (ids), never the token: lets the owner see why Meta refused.
    diagnostic:e&&typeof e==='object'?{code:c,subcode:num(e.error_subcode),message:typeof e.message==='string'?e.message.replace(/\d{5,}/g,'#').slice(0,180):null}:null});}
@@ -47,6 +64,17 @@ export async function readMetaAccounts(fetchImpl,token,{version=accountPanelPoli
   if(!after)break;
  }
  return Object.assign(out,{dropped});
+}
+
+const fold=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+/**
+ * Panel search: account name (accents and case ignored) or account id (with or without `act_`).
+ * Every word typed must match the name, or be digits contained in the id.
+ * @param {{name?:string|null,accountId?:string}} row @param {string} query
+ */
+export function accountMatches(row,query){
+ const q=fold(query);if(!q)return true;const name=fold(row?.name),id=String(row?.accountId??'');
+ return q.split(/\s+/).every(w=>name.includes(w)||(/^(act_)?\d+$/.test(w)&&id.includes(w.replace(/^act_/,''))));
 }
 
 const groupOf=name=>/fb\s*flix/i.test(name||'')?'FB Flix':/alfa\s*rent/i.test(name||'')?'Alfa Rent':/fb\s*max/i.test(name||'')?'FB Max':'Outras';

@@ -65,6 +65,8 @@ enum SelfTest {
         check(Format.accountLimit(accRow).replacingOccurrences(of: "\u{00A0}", with: " ") == "US$ 290,00 de US$ 321,06", #line)
         let noLimit = Summary.AccountRow(accountId: "2", name: nil, group: nil, status: "active", statusLabel: nil, runningLabel: nil, currency: nil, dailyLimit: nil, todaySpend: nil, usedPct: nil, balance: nil, alerts: nil)
         check(Format.accountLimit(noLimit) == "limite N/D" && Format.accountUse(noLimit) == "N/D", #line)
+        check(Format.accountMatches(accRow, "ca 1") && Format.accountMatches(accRow, "") && !Format.accountMatches(accRow, "flix 9"), #line)
+        check(Format.accountMatches(accRow, "act_1") && !Format.accountMatches(accRow, "act_"), #line)
         check(NotchTab.allCases[2] == .accounts, #line)
         let shadowJSON = #"{"day":"2026-11-07","total":2,"byRule":{"test-no-sale":{"total":1,"wouldExecute":1,"managerDid":1,"bunkerFirst":1}},"recent":[{"rule":"test-no-sale","ruleLabel":"Pausar teste","project":"P","account":"A","campaign":"C","action":"status","reason":"x","firstAt":"2026-11-07T17:00:00.000Z","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":{"actor":"Gestor","at":"2026-11-07T17:40:00.000Z","minutesAfter":40}},{"rule":"bad-day-reduce","action":"budget","before":{"dailyBudget":100,"currency":"USD"},"after":{"dailyBudget":80,"currency":"USD"},"wouldExecute":false,"blockedBy":["x"],"manager":null}]}"#
         if let sh = try? JSONDecoder().decode(Summary.Shadow.self, from: Data(shadowJSON.utf8)) {

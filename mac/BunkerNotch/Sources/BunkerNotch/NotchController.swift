@@ -63,6 +63,8 @@ final class NotchState: ObservableObject {
     @Published var webReload = 0
     @Published var webCurrent: URL?
     @Published var pastedLink = ""
+    /// Accounts tab search (name or account id); kept while the notch stays open.
+    @Published var accountQuery = ""
     /// Native owner adjustment (Touch ID) for one campaign, or the approvals list when campaignId is nil.
     @Published var adjust: AdjustTarget?
     /// While Touch ID is asking, clicks on the system prompt or a pause must not fold the island.

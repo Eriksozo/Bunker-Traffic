@@ -1,7 +1,8 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
-import {RefreshCw} from 'lucide-react';
+import {RefreshCw,Search} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import {accountMatches} from '../lib/account-limits.mjs';
 import './accounts-panel.css';
 
 const money=(n:any,currency?:string|null)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('pt-BR',{style:'currency',currency:currency&&/^[A-Z]{3}$/.test(currency)?currency:'USD',maximumFractionDigits:2}):'N/D';
@@ -11,23 +12,24 @@ const metaErrors:Record<string,string>={META_TOKEN_MISSING:'Token de leitura da 
 
 /** Replaces the manual daily account planning: status, project, today's spend vs Meta's daily limit, balance. Read-only. */
 export default function AccountsPanel(){
- const [panel,setPanel]=useState<any>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[group,setGroup]=useState('all'),[onlyActive,setOnlyActive]=useState(true);
+ const [panel,setPanel]=useState<any>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[group,setGroup]=useState('all'),[onlyActive,setOnlyActive]=useState(true),[query,setQuery]=useState('');
  async function load(){setLoading(true);setError('');try{const r=await fetch('/api/accounts',{cache:'no-store'});const d:any=await r.json();if(!r.ok)throw Error(d?.error||'Falha ao ler as contas.');setPanel(d.panel);if(!d.panel)setError(d.unavailable?'Executor indisponível agora.':'O painel ainda está sendo montado. Ele atualiza a cada 30 minutos.');}catch(e:any){setError(e?.message||'Falha ao ler as contas.');}finally{setLoading(false);}}
  useEffect(()=>{load();const t=setInterval(load,5*60000);return ()=>clearInterval(t);},[]);
  const groups=useMemo(()=>[...new Set((panel?.rows||[]).map((r:any)=>r.group))] as string[],[panel]);
- const rows=useMemo(()=>(panel?.rows||[]).filter((r:any)=>(group==='all'||r.group===group)&&(!onlyActive||r.status==='active'||r.alerts?.length)),[panel,group,onlyActive]);
+ const rows=useMemo(()=>(panel?.rows||[]).filter((r:any)=>(group==='all'||r.group===group)&&accountMatches(r,query)&&(query.trim()||!onlyActive||r.status==='active'||r.alerts?.length)),[panel,group,onlyActive,query]);
  const c=panel?.counts;
  return <section className="panel accounts-panel" aria-label="Contas de anúncio">
   <div className="panel-title"><div><span className="eyebrow">PLANEJAMENTO DE CONTAS</span><h2>Contas de anúncio</h2>
    <p className="hint">Atualiza sozinho a cada 30 minutos: situação e projeto vêm do Malva; limite diário e gasto de hoje vêm da Meta, na moeda da conta. Somente leitura. {panel&&`Última montagem ${stamp(panel.generatedAt)}.`}</p></div>
    <Button type="button" variant="ghost" onClick={load} disabled={loading} aria-label="Recarregar contas"><RefreshCw size={15}/></Button></div>
   {panel&&!panel.metaConnected&&<p className="ap-notice">Limite diário: {metaErrors[panel.metaError]||'leitura da Meta indisponível.'} O restante do painel funciona; limites aparecem como N/D.</p>}
+  {panel?.metaConnected&&panel?.metaDiagnostic?.message&&<p className={panel.counts?.withLimit?'hint':'ap-notice'}>{panel.metaDiagnostic.message}</p>}
   {error&&<p className="ap-notice">{error}</p>}
   {c&&<div className="ap-counts"><span><strong>{c.active}</strong> ativas</span><span><strong>{c.running}</strong> rodando</span><span><strong>{c.disabled}</strong> desabilitadas</span><span className={c.nearLimit?'is-bad':''}><strong>{c.nearLimit}</strong> perto do limite</span><span><strong>{c.withLimit}</strong> com limite lido</span></div>}
-  {panel&&<div className="ap-filters"><select aria-label="Grupo de contas" value={group} onChange={e=>setGroup(e.target.value)}><option value="all">Todos os grupos</option>{groups.map(g=><option key={g} value={g}>{g}</option>)}</select>
+  {panel&&<div className="ap-filters"><label className="ap-search"><Search size={14} aria-hidden/><input type="search" placeholder="Buscar conta por nome ou ID" aria-label="Buscar conta por nome ou ID" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="Grupo de contas" value={group} onChange={e=>setGroup(e.target.value)}><option value="all">Todos os grupos</option>{groups.map(g=><option key={g} value={g}>{g}</option>)}</select>
    <label><input type="checkbox" checked={onlyActive} onChange={e=>setOnlyActive(e.target.checked)}/> Só ativas ou com alerta</label></div>}
   {panel&&<div className="table-scroll"><table><thead><tr><th>Conta</th><th>Grupo</th><th>Situação</th><th>Gasto hoje</th><th>Limite diário (Meta)</th><th>Uso</th><th>Saldo</th><th>Alertas</th></tr></thead>
-   <tbody>{rows.map((r:any)=><tr key={r.accountId}>
+   <tbody>{!rows.length&&<tr><td colSpan={8} className="hint">{query.trim()?`Nenhuma conta com “${query.trim()}”.`:'Nenhuma conta neste filtro.'}</td></tr>}{rows.map((r:any)=><tr key={r.accountId}>
     <td><strong>{r.name||r.accountId}</strong><small className="ap-sub">{r.accountId}</small></td>
     <td>{r.group}</td>
     <td>{r.runningLabel}</td>

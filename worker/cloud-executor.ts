@@ -179,7 +179,11 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   try{if(this.env.META_ACCOUNTS_TOKEN)meta=await readMetaAccounts(fetch,this.env.META_ACCOUNTS_TOKEN,{version:this.env.META_GRAPH_VERSION||accountPanelPolicy.graphVersion});
    else{const r:any=await this.db().rpc('metaRead',{action:'accounts'});if(!Array.isArray(r?.accounts))throw Object.assign(new Error('META_READ_FAILED'),{code:typeof r?.error==='string'?r.error:'META_READ_FAILED',diagnostic:r?.diagnostic||null});meta=r.accounts;
     // Fields Meta retired (adtrust_dsl in v26): the limit stays N/D and the reason is kept for the panel.
-    if(Array.isArray(r?.dropped)&&r.dropped.length)metaDiagnostic={code:null,subcode:null,message:'Campos que a Meta não oferece mais: '+r.dropped.filter((f:any)=>typeof f==='string').slice(0,3).join(', ')};}}
+    if(Array.isArray(r?.dropped)&&r.dropped.length){
+     const gone=r.dropped.filter((f:any)=>typeof f==='string').slice(0,3).join(', ');
+     const tried=Array.isArray(r?.limitTried)?r.limitTried.filter((t:any)=>/^v\d{1,2}\.\d$/.test(t?.version||'')).map((t:any)=>t.version+' '+(/^META_[A-Z0-9_]{1,40}$/.test(t?.code||'')?t.code:'recusou')).slice(0,4).join(', '):'';
+     const via=typeof r?.limitVersion==='string'&&/^v\d{1,2}\.\d$/.test(r.limitVersion)?r.limitVersion:null;
+     metaDiagnostic={code:null,subcode:null,limitVersion:via,message:via?`Limite diário lido pela versão ${via} da Meta (a atual não oferece mais: ${gone}).`:`Campos que a Meta não oferece mais: ${gone}${tried?'. Versões anteriores: '+tried:''}.`};}}}
   catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';metaDiagnostic=e?.diagnostic&&typeof e.diagnostic==='object'?{code:e.diagnostic.code??null,subcode:e.diagnostic.subcode??null,message:typeof e.diagnostic.message==='string'?e.diagnostic.message.slice(0,180):null}:null;}
   await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors,metaDiagnostic});
   // Malva account id → Meta ad account number, for the live Meta read of new campaigns (no other use).

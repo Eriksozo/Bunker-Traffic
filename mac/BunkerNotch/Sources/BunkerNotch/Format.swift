@@ -174,6 +174,19 @@ enum Format {
         guard let p = r.usedPct else { return accountMoney(r.todaySpend, r.currency) }
         return "\(Int(p.rounded()))%"
     }
+    /// Accounts search: name (accents and case ignored) or account id (with or without act_); every word must match.
+    static func accountMatches(_ r: Summary.AccountRow, _ query: String) -> Bool {
+        let fold: (String) -> String = { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR")).lowercased() }
+        let words = fold(query).split(whereSeparator: \.isWhitespace).map(String.init)
+        if words.isEmpty { return true }
+        let name = fold(r.name ?? "")
+        return words.allSatisfy { w in
+            if name.contains(w) { return true }
+            let digits = w.hasPrefix("act_") ? String(w.dropFirst(4)) : w
+            return !digits.isEmpty && digits.allSatisfy(\.isNumber) && r.accountId.contains(digits)
+        }
+    }
+
     static func accountLimit(_ r: Summary.AccountRow) -> String {
         r.dailyLimit == nil ? "limite N/D" : "\(accountMoney(r.todaySpend, r.currency)) de \(accountMoney(r.dailyLimit, r.currency))"
     }

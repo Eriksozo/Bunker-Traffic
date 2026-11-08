@@ -11,3 +11,5 @@
 .accounts-panel .ap-use.is-bad .ap-bar>span{background:var(--red,#ef4444)}
 .accounts-panel .ap-alert{display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:999px;font-size:11px;background:color-mix(in srgb,var(--red,#ef4444) 14%,transparent)}
 @media (max-width:640px){.accounts-panel .ap-counts{gap:10px}}
+.accounts-panel .ap-search{display:inline-flex;align-items:center;gap:6px;flex:1 1 220px;max-width:320px;padding:6px 10px;border:1px solid color-mix(in srgb,currentColor 18%,transparent);border-radius:8px;color:var(--muted,#8a8f98)}
+.accounts-panel .ap-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink,inherit);font:inherit}

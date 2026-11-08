@@ -70,7 +70,34 @@ test('A field Meta retired is dropped and the page read again; the limit stays N
  const fetchImpl=async url=>{const f=new URL(url).searchParams.get('fields');calls.push(f);
   if(f.includes('adtrust_dsl'))return {ok:false,status:400,json:async()=>({error:{code:100,message:'(#100) Tried accessing nonexisting field (adtrust_dsl)'}})};
   return {ok:true,status:200,json:async()=>({data:[{account_id:'123456',name:'CA',account_status:1,currency:'USD',insights:{data:[{spend:'12'}]}}]})};};
- const out=await readMetaAccounts(fetchImpl,'t');
- assert.equal(out.length,1);assert.deepEqual(out.dropped,['adtrust_dsl']);assert.equal(calls.length,2);
+ const out=await readMetaAccounts(fetchImpl,'t',{limitFallback:[]});
+ assert.equal(out.length,1);assert.deepEqual(out.dropped,['adtrust_dsl']);assert.equal(calls.length,2);assert.equal(out.limitVersion,null);
  assert.ok(calls[1].includes('insights.date_preset(today){spend}'),'the insights expansion is kept intact');assert.ok(metaAccountFields.includes('adtrust_dsl'));
+});
+test('When the current version refuses the daily limit, it is read alone from an older version and joined by id',async()=>{
+ const {readMetaAccounts,buildAccountPanel}=await import('../lib/account-limits.mjs');const calls=[];
+ const fetchImpl=async url=>{const u=new URL(url),f=u.searchParams.get('fields'),v=u.pathname.split('/')[1];calls.push(v+' '+f);
+  const refuse=()=>({ok:false,status:400,json:async()=>({error:{code:100,message:'(#100) Tried accessing nonexisting field (adtrust_dsl)'}})});
+  if(f.includes('adtrust_dsl')&&(v==='v26.0'||v==='v25.0'))return refuse();
+  if(f==='account_id,adtrust_dsl')return {ok:true,status:200,json:async()=>({data:[{account_id:'123456',adtrust_dsl:40536.42},{account_id:'999',adtrust_dsl:50}]})};
+  return {ok:true,status:200,json:async()=>({data:[{account_id:'123456',name:'CA',account_status:1,currency:'USD',insights:{data:[{spend:'12'}]}}]})};};
+ const out=await readMetaAccounts(fetchImpl,'t',{version:'v26.0'});
+ assert.equal(out.limitVersion,'v24.0');assert.deepEqual(out.limitTried,[{version:'v25.0',code:'META_100'}]);
+ assert.equal(out.length,1,'accounts only the current read listed are kept');assert.equal(out[0].adtrust_dsl,40536.42);
+ const panel=buildAccountPanel({projects:[{id:'p',name:'John',items:[{id:'u',provider:'meta',accountId:'123456',label:'CA',usage:{spendToday:1},meta:{statusKind:'active'}}]}],meta:out});
+ assert.equal(panel.rows[0].dailyLimit,40536.42);assert.equal(panel.counts.withLimit,1);
+});
+test('Every older version refusing keeps the limit N/D and lists why',async()=>{
+ const {readMetaAccounts}=await import('../lib/account-limits.mjs');
+ const fetchImpl=async url=>{const f=new URL(url).searchParams.get('fields');
+  if(f.includes('adtrust_dsl'))return {ok:false,status:400,json:async()=>({error:{code:100,message:'(#100) Tried accessing nonexisting field (adtrust_dsl)'}})};
+  return {ok:true,status:200,json:async()=>({data:[{account_id:'1',account_status:1}]})};};
+ const out=await readMetaAccounts(fetchImpl,'t',{version:'v26.0',limitFallback:['v25.0','v23.0']});
+ assert.equal(out.limitVersion,null);assert.deepEqual(out.limitTried.map(t=>t.version),['v25.0','v23.0']);assert.equal(out[0].adtrust_dsl,undefined);
+});
+test('Account search matches the name without accents or case, or the id with or without act_',async()=>{
+ const {accountMatches}=await import('../lib/account-limits.mjs');const r={name:'CA 1137 - BRL Fbflix Ação',accountId:'1234567890'};
+ assert.ok(accountMatches(r,''));assert.ok(accountMatches(r,'fbflix'));assert.ok(accountMatches(r,'ACAO'));assert.ok(accountMatches(r,'1137 brl'));
+ assert.ok(accountMatches(r,'4567'));assert.ok(accountMatches(r,'act_1234567890'));
+ assert.ok(!accountMatches(r,'alfa'));assert.ok(!accountMatches(r,'fbflix 999'));assert.ok(!accountMatches({name:'X',accountId:'1'},'act_'));
 });
