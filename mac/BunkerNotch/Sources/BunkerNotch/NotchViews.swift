@@ -237,7 +237,11 @@ struct ExpandedView: View {
             } else if let target = notch.adjust {
                 OwnerAdjustView(target: target, m: notch.ownerAdjust)
             } else if let s = store.summary, let item = notch.selected {
-                CampaignDetailView(s: s, item: item)
+                // The detail follows each new reading (status, budget, changes); a campaign that left the queue (paused
+                // from the notch, or no longer losing) says so instead of showing the old copy as current.
+                let current = s.queue.first { $0.id == item.id }
+                if current == nil { Banner(text: "Saiu de \"O que fazer agora\" na última leitura (pausada ou sem perda). Os números abaixo são de antes. Esc volta à lista.", tone: .good) }
+                CampaignDetailView(s: s, item: current ?? item)
             } else if let s = store.summary {
                 // Switching projects: the numbers on screen still belong to the previous one until the new reading lands.
                 let switching = s.project != store.project

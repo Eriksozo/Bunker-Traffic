@@ -47,6 +47,9 @@ struct OwnerAdjustView: View {
             }
         }
         .task(id: target) { if !m.preview { m.reset(for: target) }; await load() }
+        // The reload right after "Executar" comes before the executor confirms: read again when an order is confirmed,
+        // so the status pill and the blockers show the campaign as it is now (e.g. Pausada).
+        .onChange(of: (store.summary?.orders ?? []).filter { $0.stage == "confirmed" }.map(\.id)) { _, _ in if !m.preview { Task { await load() } } }
     }
 
     // MARK: Sections
