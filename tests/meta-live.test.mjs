@@ -60,3 +60,16 @@ test('Candidates: recent and scheduled dates first, then tests, then undated; ol
  const items=[{snapshot:{timezone:'America/Sao_Paulo',rows:[r('1000001','20/10 - [CBO] [TESTE] X'),r('1000002','08/11 - [CBO] PRE'),r('1000003','[CBO] SEM DATA'),r('1000004','20/10 - [CBO] [ESCALA]'),r('1000005','07/11 - [ENGAJAMENTO]'),r('1000006','06/11 - [CBO] Y',{status:'PAUSED'}),r('uuid-x','07/11 Z')]}}];
  assert.deepEqual(metaLiveCandidates(items,{now}),['1000002','1000001','1000003']);
 });
+test('One id the token cannot see is isolated by halving; the rest of the batch is still read',async()=>{
+ const bad='120000007';let calls=0;
+ const fetchImpl=async url=>{calls++;const q=new URL(url).searchParams.get('ids').split(',');
+  if(q.includes(bad))return {ok:false,status:400,json:async()=>({error:{code:100,error_subcode:33,message:'Object does not exist'}})};
+  return {ok:true,status:200,json:async()=>Object.fromEntries(q.map(id=>[id,node(id)]))};};
+ const ids=Array.from({length:10},(_,i)=>String(120000000+i));
+ const r=await readMetaCampaigns(fetchImpl,'t',ids);
+ assert.deepEqual(r.skipped,[bad]);assert.equal(r.items.length,9);assert.deepEqual(r.errors,['META_100_33']);assert.ok(calls<=9,String(calls));
+ // A systematic refusal stops at the request budget instead of spending hundreds of calls.
+ const all=await readMetaCampaigns(async()=>({ok:false,status:400,json:async()=>({error:{code:100}})}),'t',Array.from({length:200},(_,i)=>String(130000000+i)));
+ assert.equal(all.requests,metaLivePolicy.maxRequests);assert.ok(all.errors.includes('META_REQUEST_BUDGET'));
+ assert.deepEqual(metaLiveCandidates([{snapshot:{rows:[{externalId:'1000002',name:'08/11 X',level:'campaign',status:'ACTIVE'}]}}],{now:Date.parse('2026-11-08T02:00:00Z'),exclude:new Set(['1000002'])}),[]);
+});
