@@ -9,7 +9,7 @@ const value={decision:'Observar',reason:'Aguardar aquisição nova.',nextStep:'C
 test('Model policies are a fixed allowlist; wide content uses only the complete final assistant message',()=>{
  const p=cloudModelPolicy('wide');assert.equal(cloudProductionModelPolicy,'wide');assert.equal(p.model,'@cf/openai/gpt-oss-120b');assert.equal(p.contextBytes,160000);assert.ok(p.retryContextBytes<p.contextBytes);assert.equal(cloudModelContent(envelope(value),p),JSON.stringify(value));
  for(const id of ['https://external.test','constructor','__proto__'])assert.throws(()=>cloudModelPolicy(id),e=>e.code==='CLOUD_AI_POLICY');
- for(const response of [{response:value},{choices:[{finish_reason:'length',message:{role:'assistant',content:JSON.stringify(value)}}]},{choices:[{finish_reason:'stop',message:{role:'assistant',reasoning_content:JSON.stringify(value)}}]},{choices:[{finish_reason:'stop',message:{role:'tool',content:JSON.stringify(value)}}]},{choices:[{finish_reason:'stop',message:{role:'assistant',content:''}}]}])assert.throws(()=>cloudModelContent(response,p),e=>e.code==='CLOUD_AI_INVALID');
+ for(const response of [{response:value},{choices:[{finish_reason:'length',message:{role:'assistant',content:JSON.stringify(value).slice(0,-1)}}]},{choices:[{finish_reason:'stop',message:{role:'assistant',reasoning_content:JSON.stringify(value)}}]},{choices:[{finish_reason:'stop',message:{role:'tool',content:JSON.stringify(value)}}]},{choices:[{finish_reason:'stop',message:{role:'assistant',content:''}}]}])assert.throws(()=>cloudModelContent(response,p),e=>e.code==='CLOUD_AI_INVALID');
 });
 test('Wide generation keeps schema validation and rejects foreign targets, malformed final JSON and unknown policies',async()=>{
  const context={campaigns:[{target:{adAccountId:'a',externalId:'c'}}]};let calls=0;
@@ -51,4 +51,21 @@ test('only the retry right after a cut changes sampling, never the cap; other fa
  const {runCloudAnalyst}=await import('../lib/cloud-analysis.mjs');
  await assert.rejects(runCloudAnalyst({run:async()=>({choices:[{finish_reason:'length',message:{role:'assistant',content:''}}]})},'traffic',{campaigns:[]},'wide',{retryAfter:'output_truncated'}),e=>e.modelFailure.maxTokens===4400&&e.modelFailure.temperature===1&&e.modelFailure.adjustment==='after_output_truncated');
  await assert.rejects(runCloudAnalyst({run:async()=>({choices:[{finish_reason:'stop',message:{role:'assistant',content:'{'}}]})},'traffic',{campaigns:[]},'wide'),e=>e.modelFailure.temperature===0.1&&e.modelFailure.adjustment===undefined);
+});
+
+test('a cut that is one complete JSON object plus only whitespace is the full answer; anything else stays truncated',async()=>{
+ const {cloudModelContent,completeBeforeWhitespace}=await import('../lib/cloud-model-policy.mjs');
+ const wide=cloudModelPolicy('wide'),json=JSON.stringify({decision:'Observar',reason:'Motivo.',nextStep:'Comparar.',text:'Texto.',suggestions:[],question:null});
+ const cut=(content,role='assistant')=>({choices:[{finish_reason:'length',message:{role,content}}],usage:{completion_tokens:6400}});
+ for(const tail of [' '.repeat(5000),'\n'.repeat(3000),' \t\n'.repeat(900),''])assert.equal(cloudModelContent(cut(json+tail),wide),json,JSON.stringify(tail.slice(0,3)));
+ const refused=[json.slice(0,-1)+' '.repeat(5000),json+' Obrigado.'+' '.repeat(3000),'[1,2]'+' '.repeat(3000),'```json\n'+json+'\n```'+' '.repeat(3000),'<|channel|>final<|message|>'+json+' '.repeat(3000),json+json+' '.repeat(100),'Resposta: '+json+' '.repeat(3000),'   ',null];
+ for(const c of refused)assert.throws(()=>cloudModelContent(cut(c),wide),e=>e.modelFailure.reason==='output_truncated',String(c).slice(0,30));
+ assert.throws(()=>cloudModelContent(cut(json+' '.repeat(10),'tool'),wide),e=>e.modelFailure.reason==='output_truncated','only the assistant message');
+ assert.equal(completeBeforeWhitespace('{"a":1}  '),true);assert.equal(completeBeforeWhitespace('{"a":1'),false);assert.equal(completeBeforeWhitespace('null'),false);
+ // The analysis records the recovery; a normal stop does not.
+ const {runCloudAnalyst}=await import('../lib/cloud-analysis.mjs');
+ const ok=await runCloudAnalyst({run:async()=>cut(json+' '.repeat(6000))},'traffic',{campaigns:[]},'wide');
+ assert.equal(ok.decision,'Observar');assert.equal(ok.generationProfile.recovered,'trailing_whitespace');
+ const normal=await runCloudAnalyst({run:async()=>({choices:[{finish_reason:'stop',message:{role:'assistant',content:json}}]})},'traffic',{campaigns:[]},'wide');
+ assert.equal(normal.generationProfile.recovered,undefined);
 });

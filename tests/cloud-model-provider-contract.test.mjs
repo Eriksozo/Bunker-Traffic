@@ -39,7 +39,7 @@ test('Production connectivity check recognizes the final GPT-OSS envelope, uses 
  assert.equal(await checkCloudModel({run:async()=>({response:{ok:true}})},'legacy'),true);
 });
 test('Connectivity cannot succeed through reasoning, truncation, another model envelope or an invalid final object; it never retries',async()=>{
- const failures=[{response:'OK'},envelope('{"ok":true}','length'),envelope('OK'),envelope('{"ok":false}'),envelope('{"ok":true,"untrusted":1}'),envelope('null'),{choices:[{finish_reason:'stop',message:{role:'assistant',reasoning_content:'{"ok":true}'}}]}];
+ const failures=[{response:'OK'},envelope('{"ok":','length'),envelope('{"ok":true} obrigado','length'),envelope('OK'),envelope('{"ok":false}'),envelope('{"ok":true,"untrusted":1}'),envelope('null'),{choices:[{finish_reason:'stop',message:{role:'assistant',reasoning_content:'{"ok":true}'}}]}];
  let calls=0;for(const response of failures)await assert.rejects(checkCloudModel({run:async()=>{calls++;return response;}}),e=>e.code==='CLOUD_AI_INVALID');
  assert.equal(calls,failures.length);
 });
