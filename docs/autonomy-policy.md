@@ -15,9 +15,9 @@ Decisão do proprietário em 07/11/2026, depois do estudo das ações de um gest
 Código: `lib/autonomy-shadow.mjs`. Limiares por projeto ficam na configuração privada `AUTONOMY_SHADOW_POLICY` (secret do Worker), nunca no repositório. Projeto sem configuração não é avaliado.
 
 1. **Pausar campanha nova sem venda** (primeiras 24h e 2º dia; testes e programadas de um dia para o outro): sem front, sem pedidos e sem receita desde o início. Com 0–1 IC vale o teto geral do proprietário de R$110 (pausa a partir de R$99, alerta a partir de R$77); com 2+ IC, o limiar privado do projeto. Detalhes em `first-24h-protocol.md`.
-2. **Reduzir 20% em dia ruim**: campanha com ROI de 3 dias ≥ 1,3, a partir das 10h, gasto relevante e ROI do dia < 0,7 ou zero pedidos. Orçamento diário próprio (CBO). ESCALA/COST-CAP/BID-CAP ficam só como sugestão.
+2. **Reduzir 20% em dia ruim**: campanha com ROI de 3 dias ≥ 1,3, a partir das 10h, gasto relevante e ROI do dia < 0,7 ou zero pedidos. Orçamento diário próprio (CBO). ESCALA/COST-CAP/BID-CAP ficam só como sugestão. **Decisão do proprietário de 08/11/2026:** fica só como sugestão até o placar da própria regra (avaliação pelo dia seguinte, janela de 7 dias da sombra) chegar a ≥ 60% de acerto com ≥ 20 decisões avaliadas.
 3. **Pausar campanha sem entrega** (organização): sem gasto verificado nos últimos 3 dias e sem impressão hoje, depois das 12h; nunca para campanha nova ou datada de ontem em diante (programada).
-4. **Aumentar por vendas desde a meia-noite**: a partir das 9h, ≥ 3 pedidos com ≥ 2 front, ROI parcial ≥ 2,5 e gasto relevante; +30%, ou +50% com histórico de 3 dias forte. Sem teto do proprietário por objeto/conta, o aumento nunca executaria.
+4. **Aumentar por vendas desde a meia-noite**: a partir das 9h, ≥ 3 pedidos com ≥ 2 front, ROI parcial ≥ 2,5 e gasto relevante. **Decisão do proprietário de 08/11/2026:** exige histórico de 3 dias com ROI ≥ 1,3 (sem ele, só sugestão); dia forte (ROI do dia ≥ 3) é o gatilho preferencial e leva +50%; os demais casos levam +30%. Sem teto do proprietário por objeto/conta, o aumento nunca executaria.
 
 Bloqueios comuns: fonte de hoje com mais de 30 minutos, conta ou campanha inativa, aquecimento/engajamento, edição de outro gestor nas últimas 2h. Limitações declaradas em cada registro: pedidos pendentes e vendas em hora sem gasto não são verificados pela fonte de campanhas.
 
@@ -33,3 +33,7 @@ Bloqueios comuns: fonte de hoje com mais de 30 minutos, conta ou campanha inativ
 2. Tetos de orçamento definidos pelo proprietário por objeto e por conta.
 3. Registro explícito do proprietário mudando a regra de execução no `CLAUDE.md`, com as regras habilitadas e um desligamento geral.
 4. Implementação revisada: a execução continua usando claim → prepare → submit único → confirmação, com releitura da última edição imediatamente antes do envio.
+
+## Ajuste das regras pelo backtest (08/11/2026)
+
+O proprietário aprovou ("Aplicar agora") três ajustes, apoiados no backtest de séries diárias reais (dados fora do repositório): um único dia ruim só antecipou dia seguinte negativo em cerca de um terço dos casos; dia forte (ROI ≥ 3, ≥ 3 pedidos) teve dia seguinte positivo em ~76%; aumento com ROI de 3 dias ≥ 1,3 acertou ~69%. As regras continuam em fase sombra: nada executa. Constantes em `shadowRulePolicy` (`lib/autonomy-shadow.mjs`).

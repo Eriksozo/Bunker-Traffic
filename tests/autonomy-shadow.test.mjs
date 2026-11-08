@@ -66,7 +66,7 @@ test('Bad day on a good campaign proposes −20% on the CBO budget after 10h; sc
  assert.equal(d.after.dailyBudget,400);assert.equal(d.before.currency,'USD');
  assert.equal(d.wouldExecute,false,'PRE-ESCALA matches the scale-phase guard');
  const t=row('c2','01/11 - [CBO] - [AVATAR] Y',today,{dailyBudget:500}),th=row('c2','01/11 - [CBO] - [AVATAR] Y',good);
- assert.equal(run(state({today:[t],closed:{'3d':[th],'7d':[th],yesterday:[th]}})).decisions.find(x=>x.rule==='bad-day-reduce').wouldExecute,true);
+ assert.equal(run(state({today:[t],closed:{'3d':[th],'7d':[th],yesterday:[th]}}),{accuracy:{'bad-day-reduce':{graded:20,right:12,accuracy:0.6}}}).decisions.find(x=>x.rule==='bad-day-reduce').wouldExecute,true,'proven accuracy');
  assert.equal(run(state({today:[t],closed:{'3d':[th],'7d':[th],yesterday:[th]}}),{now:Date.parse('2026-11-07T11:00:00Z')}).decisions.some(x=>x.rule==='bad-day-reduce'),false,'08:00 local is too early');
 });
 test('Morning increase needs the owner cap to execute and never exceeds it',()=>{

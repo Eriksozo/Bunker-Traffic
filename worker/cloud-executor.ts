@@ -19,7 +19,7 @@ import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
-import {evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary} from '../lib/autonomy-shadow.mjs';
+import {evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
@@ -101,10 +101,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const now=Date.now(),list=await this.ctx.storage.list<any>({prefix:'attr:'}),withAuthors={...state,changeAttributions:usableAttributions([...list.values()])};
   const events=activityLog(withAuthors,{since:now-26*3600000,now});
   const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()],meta=await this.ctx.storage.get<any>('metaLive');
+  // Owner decision 08/11/2026: bad-day-reduce only becomes executable after its own graded accuracy proves itself.
+  const accuracy={'bad-day-reduce':ruleAccuracy(prior,'bad-day-reduce')};
   let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={};
   for(const project of Object.keys(state.config||{})){
    const params=policy?.projects?.[project];if(!params||params.enabled===false)continue;
-   const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now,meta});
+   const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now,meta,accuracy:accuracy as any});
    if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;
   }
   // Each decision is graded by the real next day once the closed windows cover it (assertiveness, read-only).

@@ -36,7 +36,8 @@ test('Same since-midnight evidence does not push the same direction again after 
  const inc=row('i1','04/11 - [CBO] - [AVATAR] Z',sales,{dailyBudget:130}),h=row('i1','04/11 - [CBO] - [AVATAR] Z',hist);
  const s=state('2026-11-07',now7,{today:[inc],closed:{'3d':[h],'7d':[h],yesterday:[h]}});
  const raise={project:'p',adAccountId:'acc1',objectId:'i1',action:'increase',field:'dailyBudget',before:100,after:130,actor:'Gestor X',at:iso(now7-125*60000),origin:'history'};
- const run=(st,events)=>evaluateShadow(st,{project:'p',params:{...params,budgetCap:1000},now:now7,events}).decisions;
+ const proven={'bad-day-reduce':{graded:20,right:12,accuracy:0.6}};
+ const run=(st,events)=>evaluateShadow(st,{project:'p',params:{...params,budgetCap:1000},now:now7,events,accuracy:proven}).decisions;
  assert.equal(run(s,[]).find(d=>d.rule==='morning-increase').wouldExecute,true,'control: no edit today');
  const blocked=run(s,[raise]).find(d=>d.rule==='morning-increase');
  assert.equal(blocked.wouldExecute,false);assert.match(blocked.blockedBy.join(' '),/já aumentado hoje às 11:55 \(Gestor X\)/);

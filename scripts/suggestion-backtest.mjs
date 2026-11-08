@@ -51,11 +51,13 @@ export function evaluateDay(meta,days,i,{now}={}){
  // Shadow rule 2 (bad-day-reduce) with the full day standing in for "after 10h".
  const badDay=!!(recent&&finite(recent.roi)&&recent.roi>=1.3&&finite(budgetBrl)&&finite(t?.spend)&&t.spend>=0.3*budgetBrl&&(t.orders===0||finite(t.roi)&&t.roi<0.7));
  // Shadow rule 4 (morning-increase) with the full day standing in for "since midnight": an optimistic proxy.
- const morning=!!(t&&finite(t.orders)&&t.orders>=3&&finite(t.frontOrders)&&t.frontOrders>=2&&finite(t.roi)&&t.roi>=2.5&&finite(budgetBrl)&&t.spend>=0.25*budgetBrl);
+ // Owner decision 08/11/2026: it also needs a 3-day ROI of at least 1.3; strongDay (ROI >= 3) gets the bigger step.
+ const morning=!!(t&&finite(t.orders)&&t.orders>=3&&finite(t.frontOrders)&&t.frontOrders>=2&&finite(t.roi)&&t.roi>=2.5&&finite(budgetBrl)&&t.spend>=0.25*budgetBrl&&recent&&finite(recent.roi)&&recent.roi>=1.3);
+ const strongDay=morning&&t.roi>=3;
  // Queue "O que fazer agora": a loss item when today's result is negative.
  const queueLoss=!!(t&&finite(t.result)&&t.result<0);
  const with7d=finite(sums['7d']?.result)&&finite(t?.result)?sums['7d'].result+t.result:null;
- return {date:days[i].date,windows:sums,label:cand?.decision||null,tone:cand?.tone||null,context:ctx?.kind||null,badDay,morning,queueLoss,recovers:queueLoss&&finite(with7d)&&with7d>0};
+ return {date:days[i].date,windows:sums,label:cand?.decision||null,tone:cand?.tone||null,context:ctx?.kind||null,badDay,morning,strongDay,queueLoss,recovers:queueLoss&&finite(with7d)&&with7d>0};
 }
 
 /** Outcome after D: next day and next two days (result in project currency, ROI). */
