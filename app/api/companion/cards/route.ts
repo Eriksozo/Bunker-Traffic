@@ -14,9 +14,16 @@ export async function GET(req:Request){
  const q=new URL(req.url).searchParams;
  try{
   const {state,revision}=await readState() as any;
-  const project=id(q.get('project'))||ALL_PROJECTS,campaign=id(q.get('campaign'));
-  // One campaign of one project: also read its live cache, so a direct order can use the current values.
-  const live=campaign&&project!==ALL_PROJECTS&&state.config?.[project]?await readLiveData(storage(),state,project).catch(()=>null):null;
-  return response(companionCards(state,{project,adAccountId:id(q.get('account')),objectId:campaign},revision,Date.now(),{liveItems:live?.items||[]}));
+  let project=id(q.get('project'))||ALL_PROJECTS;const campaign=id(q.get('campaign')),account=id(q.get('account'));
+  // One campaign: also read its live cache, so a direct order can use the current values. Live rows carry no
+  // project, so with "all projects" the project is the single configured one whose live reading has this campaign.
+  let live:any=null;
+  if(campaign&&project!==ALL_PROJECTS&&state.config?.[project])live=await readLiveData(storage(),state,project).catch(()=>null);
+  else if(campaign&&account){
+   const all:any=await readLiveData(storage(),state).catch(()=>null);
+   const hits=(all?.items||[]).filter((i:any)=>state.config?.[i.projectId]&&(i.snapshot?.rows||[]).some((r:any)=>r.adAccountId===account&&r.externalId===campaign));
+   if(hits.length===1){project=hits[0].projectId;live={items:hits};}
+  }
+  return response(companionCards(state,{project,adAccountId:account,objectId:campaign},revision,Date.now(),{liveItems:live?.items||[]}));
  }catch{return response({error:'Cards indisponíveis agora.'},503);}
 }
