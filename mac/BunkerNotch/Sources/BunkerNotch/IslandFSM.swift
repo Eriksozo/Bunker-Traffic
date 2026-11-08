@@ -41,16 +41,6 @@ struct IslandFSM: Equatable {
     }
 }
 
-/// Mouse polling cadence: fast only near the island, so an idle Mac does not pay for 30 Hz checks.
-enum PollRate {
-    static let near: TimeInterval = 1.0 / 30.0
-    static let far: TimeInterval = 1.0 / 5.0
-    static func interval(mouse: CGPoint, island: CGRect, open: Bool) -> TimeInterval {
-        if open { return near }
-        return island.insetBy(dx: -220, dy: -160).contains(mouse) ? near : far
-    }
-}
-
 /// Which screen hosts the island. The notch screen by default; "follow the mouse" for multi-monitor desks.
 enum DisplayChoice: String, CaseIterable {
     case notch, menuBar, followMouse

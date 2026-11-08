@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
+        _ = CallWatch.shared
         notch = NotchController(store: store)
         if let notch { bunk = BunkDesktopController(store: store, notch: notch) }
         store.$summary.combineLatest(store.$error).receive(on: RunLoop.main).sink { [weak self] _ in self?.updateTitle() }.store(in: &bag)
@@ -76,16 +77,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let home = item("Bunk morando no desktop", #selector(toggleBunkResident), ""); home.state = bunk?.resident == true ? .on : .off; b.addItem(home)
         b.addItem(item("Chamar o Bunk agora", #selector(callBunk), ""))
         b.addItem(.separator())
-        let all = item("Todas as telas", #selector(bunkAllScreens), ""); all.state = (UserDefaults.standard.array(forKey: BunkScreens.key) ?? []).isEmpty ? .on : .off; b.addItem(all)
+        let everyScreen = bunk?.allScreensAllowed ?? true
+        let all = item("Todas as telas", #selector(bunkAllScreens), ""); all.state = everyScreen ? .on : .off; b.addItem(all)
         for (i, screen) in NSScreen.screens.enumerated() {
             let s = item("Tela: " + screen.localizedName, #selector(toggleBunkScreen(_:)), ""); s.representedObject = i
-            s.state = (UserDefaults.standard.array(forKey: BunkScreens.key) ?? []).isEmpty ? .off : (bunk?.isAllowed(screen) == true ? .on : .off)
+            s.state = everyScreen ? .off : (bunk?.isAllowed(screen) == true ? .on : .off)
             b.addItem(s)
         }
         bunkMenu.submenu = b
         menu.addItem(bunkMenu)
         let privacy = item("Esconder notch e Bunk em gravações e calls", #selector(toggleCapturePrivacy), ""); privacy.state = UserDefaults.standard.bool(forKey: CapturePrivacy.key) ? .on : .off
         menu.addItem(privacy)
+        let calls = item("Silêncio em reunião (câmera ou microfone em uso)", #selector(toggleCallQuiet), ""); calls.state = CallWatch.shared.enabled ? .on : .off
+        menu.addItem(calls)
         if store.muted { menu.addItem(item("Reativar avisos", #selector(unmute), "")) }
         else { menu.addItem(item("Silenciar avisos por 1 hora", #selector(muteHour), "")); menu.addItem(item("Silenciar até amanhã às 8h", #selector(muteTomorrow), "")) }
         let login = item("Abrir ao iniciar o Mac", #selector(toggleLogin), "")
@@ -115,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         UserDefaults.standard.set(hidden, forKey: CapturePrivacy.key)
         notch?.applyCapturePrivacy(hidden); bunk?.applyCapturePrivacy(hidden)
     }
+    @objc private func toggleCallQuiet() { CallWatch.shared.enabled.toggle() }
     @objc private func bunkAllScreens() { bunk?.allowAllScreens() }
     @objc private func toggleBunkScreen(_ sender: NSMenuItem) {
         if let i = sender.representedObject as? Int, i < NSScreen.screens.count { bunk?.toggleScreen(NSScreen.screens[i]) }

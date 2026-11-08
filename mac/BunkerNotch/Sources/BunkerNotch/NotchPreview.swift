@@ -77,7 +77,9 @@ import SwiftUI
          "projects":[{"id":"p1","name":"Alfa"},{"id":"p2","name":"Beta"},{"id":"p3","name":"Gama"}],
          "paused":false,"analysisAt":"\(ago(3))",
          "today":{"today":{"roas":1.42,"roi":1.21,"cpaFront":86.4,"spend":18420},"yesterday":{"roas":1.31,"roi":1.12,"cpaFront":92.1,"spend":21030},"week":{"roas":1.55,"roi":1.33,"cpaFront":80.2,"spend":131200},
+                  "recent":{"roas":1.21,"roi":1.04,"cpaFront":95.0,"spend":58000},
                   "deltas":{"roas":{"yesterday":0.084,"week":-0.084},"roi":{"yesterday":0.08,"week":-0.09},"cpaFront":{"yesterday":-0.062,"week":0.077}}},
+         "pace":{"project":"all","name":"Todos os projetos","currency":"BRL","status":"exhausts","budget":32000,"spend":18420,"projected":36800,"elapsedPct":50,"exhaustsAt":"\(ago(-200))","leftoverPct":null,"known":14,"unknown":2,"reason":null,"byProject":[]},
          "queue":[
           {"kind":"loss","campaign":"07/11 - [CBO] - [TESTE] - Criativo C","account":"Conta Exemplo 01","project":"Alfa","adAccountId":"a1","campaignId":"c1","decision":"Revisar teste novo sem vendas","period":"today","basis":"result","amount":412,"spend":412,"roas":0,"roas7d":null,"detail":\(detail("Teste novo com gasto e sem vendas hoje. Conferir início real, checkout e filhos antes de decidir.", true))},
           {"kind":"loss","campaign":"[ABO] - [ESCALA] - Criativo A - Público amplo","account":"Conta Exemplo 02","project":"Beta","adAccountId":"a2","campaignId":"c2","decision":"Revisar perda","period":"3d","basis":"result","amount":1860,"spend":5320,"roas":0.65,"roas7d":0.78,"detail":\(detail("Abaixo do equilíbrio em 3 e 7 dias.", false))},

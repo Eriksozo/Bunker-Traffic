@@ -12,7 +12,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testPollRateAndDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam()
+        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention()
         failures += bunkFailures
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
@@ -150,11 +150,7 @@ enum SelfTest {
         check(f.handle(.alert(a)) == .alert(a) && f.handle(.click) == .open, #line) // clicking an alert opens
     }
 
-    private static func testPollRateAndDisplayChoice() {
-        let island = CGRect(x: 180, y: 528, width: 340, height: 32)
-        check(PollRate.interval(mouse: CGPoint(x: 300, y: 540), island: island, open: false) == PollRate.near, #line)
-        check(PollRate.interval(mouse: CGPoint(x: 300, y: 20), island: island, open: false) == PollRate.far, #line)
-        check(PollRate.interval(mouse: CGPoint(x: 300, y: 20), island: island, open: true) == PollRate.near, #line)
+    private static func testDisplayChoice() {
         let screens: [(hasNotch: Bool, containsMouse: Bool)] = [(false, false), (true, false)]
         check(DisplayChoice.resolve(.notch, screens: screens) == 1, #line)
         check(DisplayChoice.resolve(.menuBar, screens: screens) == 0, #line)

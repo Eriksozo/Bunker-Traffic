@@ -101,8 +101,10 @@ final class NotchController {
     private let state: NotchState
     private let store: Store
     private var fsm = IslandFSM()
+    /// Pointer: event-driven while far (no polling), a short timer only while inside or open.
     private var poll: Timer?
-    private var pollInterval: TimeInterval = PollRate.far
+    private var intent = HoverIntent()
+    private var dwellWork: DispatchWorkItem?
     private var wasInside = false
     private var alertWork: DispatchWorkItem?
     private var idleWork: DispatchWorkItem?
@@ -110,7 +112,8 @@ final class NotchController {
     private var monitors: [Any] = []
     private var bag = Set<AnyCancellable>()
     private static let panelSize = CGSize(width: 700, height: 560)
-    static let alertSeconds: TimeInterval = 6
+    /// Short on purpose: an alert that opens by itself folds back after 4 s (idea from notchd's peek/flash).
+    static let alertSeconds: TimeInterval = 4
     static let idleSeconds: TimeInterval = 45
 
     var display: DisplayChoice {
@@ -131,6 +134,7 @@ final class NotchController {
         panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) + 3)
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.ignoresMouseEvents = true
+        panel.acceptsMouseMovedEvents = true
         panel.isMovable = false
         let host = NSHostingView(rootView: NotchRootView().environmentObject(store).environmentObject(state))
         host.frame = NSRect(origin: .zero, size: Self.panelSize)
@@ -159,7 +163,15 @@ final class NotchController {
         } as Any)
         store.$alert.compactMap { $0 }.receive(on: RunLoop.main).sink { [weak self] alert in self?.enqueue(alert) }.store(in: &bag)
         HotKey.register { [weak self] in self?.send(.toggle) }
-        schedulePoll(PollRate.far)
+        // Mouse moves anywhere (no Accessibility permission for mouse events): the island reacts without polling.
+        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
+            Task { @MainActor in self?.track() }
+        } as Any)
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+            self?.track(); return event
+        } as Any)
+        // Slow safety net (screen changes, follow-the-mouse relocation, a missed event).
+        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.track() } }
     }
 
     func toggle() { send(.toggle) }
@@ -199,21 +211,25 @@ final class NotchController {
         alertWork?.cancel(); idleWork?.cancel()
         switch after {
         case .open:
+            store.islandOpen = true
             NSApp.activate(ignoringOtherApps: true)
             panel.makeKey()
             scheduleIdle()
-        case .alert:
+        case .alert(let a):
+            Announce.alert(a.title + ". " + a.detail)
             let work = DispatchWorkItem { [weak self] in Task { @MainActor in self?.send(.alertExpired) } }
             alertWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.alertSeconds, execute: work)
         case .compact:
+            store.islandOpen = false
             state.selected = nil
             state.webTarget = nil
             state.adjust = nil
             if panel.isKeyWindow { panel.resignKey() }
             if !queue.isEmpty { let next = queue.removeFirst(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.send(.alert(next)) } }
-        case .peek: break
+        case .peek: store.islandOpen = false
         }
+        updatePoll()
     }
 
     private func enqueue(_ alert: IslandAlert) {
@@ -246,25 +262,42 @@ final class NotchController {
 
     // MARK: - Pointer tracking
 
-    private func schedulePoll(_ interval: TimeInterval) {
-        pollInterval = interval
-        poll?.invalidate()
-        poll = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in Task { @MainActor in self?.track() } }
+    /// A 20 Hz check runs only while the pointer is on the island or the island is open (to notice leaving).
+    private func updatePoll() {
+        let needed = wasInside || fsm.state != .compact
+        if needed, poll == nil {
+            poll = Timer.scheduledTimer(withTimeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.track() } }
+        } else if !needed, let p = poll { p.invalidate(); poll = nil }
     }
 
     /// Mouse in panel coordinates (AppKit origin bottom-left) against the current island rect.
+    /// Entering needs intention (HoverIntent); leaving uses a slightly wider margin.
     private func track() {
         if display == .followMouse, !fsm.isOpen { relocate() }
         let mouse = NSEvent.mouseLocation, frame = panel.frame
         let island = NotchGeometry.islandRect(panel: frame.size, island: state.islandSize)
         let local = CGPoint(x: mouse.x - frame.minX, y: mouse.y - frame.minY)
-        let inside = island.insetBy(dx: -6, dy: -6).contains(local)
+        let over = island.contains(local)
+        let inside = wasInside ? island.insetBy(dx: -HoverIntent.leaveMargin, dy: -HoverIntent.leaveMargin).contains(local) : over
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
-        if inside != wasInside {
-            wasInside = inside
-            send(inside ? .mouseEntered : .mouseLeft)
+        if wasInside && !inside {
+            wasInside = false; intent.reset(); dwellWork?.cancel()
+            send(.mouseLeft); updatePoll(); return
         }
-        let next = PollRate.interval(mouse: local, island: island, open: fsm.isOpen)
-        if next != pollInterval { schedulePoll(next) }
+        guard !wasInside else { return }
+        // An open (pinned) island or an alert needs no intention to count the pointer as inside.
+        if fsm.state != .compact && fsm.state != .peek, over { wasInside = true; send(.mouseEntered); updatePoll(); return }
+        switch intent.feed(mouse, at: Date(), inside: over, atTopEdge: mouse.y >= frame.maxY - 2) {
+        case .enter:
+            dwellWork?.cancel()
+            wasInside = true; send(.mouseEntered); updatePoll()
+        case .wait(let seconds):
+            dwellWork?.cancel()
+            let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.track() } }
+            dwellWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.01, execute: work)
+        case .none:
+            dwellWork?.cancel()
+        }
     }
 }

@@ -7,7 +7,14 @@ struct Summary: Decodable, Equatable {
     struct Delta: Decodable, Equatable { let yesterday: Double?; let week: Double? }
     struct Today: Decodable, Equatable {
         let today: Ratios?; let yesterday: Ratios?; let week: Ratios?
+        /// Closed 3-day window (older summaries may not have it: stays N/D).
+        let recent: Ratios?
         let deltas: [String: Delta]
+        init(today: Ratios?, yesterday: Ratios?, week: Ratios?, recent: Ratios? = nil, deltas: [String: Delta]) {
+            self.today = today; self.yesterday = yesterday; self.week = week; self.recent = recent; self.deltas = deltas
+        }
+        /// ROAS for the mini chart, oldest window first: 7 days, 3 days, yesterday, today (partial).
+        var roasTrend: [Double?] { [week?.roas, recent?.roas, yesterday?.roas, today?.roas] }
     }
     struct QueueItem: Decodable, Equatable, Identifiable {
         var id: String { (adAccountId ?? "") + ":" + (campaignId ?? campaign ?? "") }
@@ -50,6 +57,8 @@ struct Summary: Decodable, Equatable {
     let paused: Bool
     let analysisAt: String?
     let today: Today
+    /// Today's spend pace against active daily budgets (lib/budget-pace.mjs). Reading aid, never a proposal.
+    let pace: Pace?
     let queue: [QueueItem]
     let queueSize: Int
     let board: [BoardRow]?
@@ -78,6 +87,14 @@ struct Summary: Decodable, Equatable {
         var id: String { accountId }
         let accountId: String; let name: String?; let group: String?; let status: String?; let statusLabel: String?; let runningLabel: String?
         let currency: String?; let dailyLimit: Double?; let todaySpend: Double?; let usedPct: Double?; let balance: Double?; let alerts: [String]?
+    }
+    struct Pace: Decodable, Equatable {
+        let project: String?; let name: String?; let currency: String?
+        /// on · under · exhausts · spent · nd
+        let status: String
+        let budget: Double?; let spend: Double?; let projected: Double?; let elapsedPct: Double?
+        let exhaustsAt: String?; let leftoverPct: Double?; let known: Int?; let unknown: Int?; let reason: String?
+        let byProject: [Pace]?
     }
     struct Accounts: Decodable, Equatable { let generatedAt: String?; let metaConnected: Bool; let metaError: String?; let counts: AccountCounts; let rows: [AccountRow] }
 }

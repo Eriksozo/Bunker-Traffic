@@ -26,7 +26,7 @@ struct BunkStageView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
                     .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Color.black.opacity(A11y.reduceTransparency ? 1 : 0.86), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(DS.Color.accent.opacity(0.6), lineWidth: 1))
                     .frame(maxWidth: BunkDesk.panel.width - 16)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
@@ -93,7 +93,7 @@ struct BunkStageView: View {
     func setRoam(_ on: Bool) { roamEnabled = on; if !on && roaming && !resident { endRoam(goHome: true) } }
     func setResident(_ on: Bool) { UserDefaults.standard.set(on, forKey: Self.residentKey); on ? flyOut() : goHome() }
     func callNow() {
-        let topics = BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing)
+        let topics = BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing, ledger: store.ledger)
         currentTarget = topics.first?.target
         consider(.demo, lines: topics.map(\.text))
     }
@@ -115,14 +115,16 @@ struct BunkStageView: View {
 
     private func idleCheck() {
         guard !roaming else { return }
-        let all = BunkBrain.lines(store.summary, error: store.error, preparing: store.preparing)
-        if resident { if BunkBrain.awake(Date()), Int.random(in: 0..<4) == 0 { speak(all.first ?? "Sigo vigiando.") }; return }
+        let all = BunkBrain.lines(store.summary, error: store.error, preparing: store.preparing, ledger: store.ledger)
+        if resident { if BunkBrain.awake(Date()), !CallWatch.shared.inCall, Int.random(in: 0..<4) == 0 { speak(all.first ?? "Sigo vigiando.") }; return }
         consider(.idle, lines: Array(all.prefix(1)))
     }
 
     private func consider(_ reason: RoamReason, lines: [String]) {
         let now = Date()
-        guard RoamPolicy.allow(reason, memory: memory, now: now, enabled: roamEnabled, muted: store.muted, awake: BunkBrain.awake(now), busy: roaming || dragging) else { return }
+        // In a call (camera or microphone in use) he stays home; only "Chamar o Bunk agora" still works.
+        let inCall = CallWatch.shared.inCall && reason != .demo
+        guard RoamPolicy.allow(reason, memory: memory, now: now, enabled: roamEnabled, muted: store.muted, awake: BunkBrain.awake(now), busy: roaming || dragging || inCall) else { return }
         memory = RoamPolicy.remember(reason, memory, now: now)
         self.lines = lines.isEmpty ? ["Sigo vigiando."] : lines; lineIndex = 0
         startRoam(reason)
@@ -131,20 +133,31 @@ struct BunkStageView: View {
     // MARK: - Movement
 
     static func displayID(_ s: NSScreen) -> UInt32 { (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0 }
-    private var savedScreens: [UInt32] { (UserDefaults.standard.array(forKey: BunkScreens.key) as? [Int])?.map { UInt32($0) } ?? [] }
+    /// Stable name of a screen: its display UUID (falls back to the numeric id if macOS gives none).
+    static func screenKey(_ s: NSScreen) -> String { DisplayKey.uuid(displayID(s)) ?? "id:\(displayID(s))" }
+    private var savedScreens: [String] {
+        let d = UserDefaults.standard
+        if d.object(forKey: BunkScreens.uuidKey) == nil, let old = d.array(forKey: BunkScreens.key) as? [Int] {
+            d.set(BunkScreens.migrate(oldIDs: old.map { UInt32($0) }, uuidOf: DisplayKey.uuid), forKey: BunkScreens.uuidKey)
+            d.removeObject(forKey: BunkScreens.key)
+        }
+        return d.stringArray(forKey: BunkScreens.uuidKey) ?? []
+    }
+    /// True when the owner has not picked screens (Bunk may use all of them).
+    var allScreensAllowed: Bool { savedScreens.isEmpty }
     /// Screens the owner allowed (all of them when nothing is chosen or the chosen ones are disconnected).
     var allowedScreens: [NSScreen] {
-        let ok = BunkScreens.allowed(all: NSScreen.screens.map(Self.displayID), saved: savedScreens)
-        return NSScreen.screens.filter { ok.contains(Self.displayID($0)) }
+        let ok = BunkScreens.allowed(all: NSScreen.screens.map(Self.screenKey), saved: savedScreens)
+        return NSScreen.screens.filter { ok.contains(Self.screenKey($0)) }
     }
-    func isAllowed(_ s: NSScreen) -> Bool { allowedScreens.contains { Self.displayID($0) == Self.displayID(s) } }
+    func isAllowed(_ s: NSScreen) -> Bool { allowedScreens.contains { Self.screenKey($0) == Self.screenKey(s) } }
     func toggleScreen(_ s: NSScreen) {
-        let next = BunkScreens.toggle(Self.displayID(s), all: NSScreen.screens.map(Self.displayID), saved: savedScreens)
-        UserDefaults.standard.set(next.map { Int($0) }, forKey: BunkScreens.key)
+        let next = BunkScreens.toggle(Self.screenKey(s), all: NSScreen.screens.map(Self.screenKey), saved: savedScreens)
+        UserDefaults.standard.set(next, forKey: BunkScreens.uuidKey)
         if resident, let p = panel, !allowedScreens.contains(where: { $0.frame.contains(feet) }) { _ = p; run([RoamStop(point: savedSpot(), pause: 0, speak: false)], speed: 600) { [weak self] in self?.land() } }
     }
     func applyCapturePrivacy(_ hidden: Bool) { panel?.sharingType = hidden ? .none : .readOnly }
-    func allowAllScreens() { UserDefaults.standard.removeObject(forKey: BunkScreens.key) }
+    func allowAllScreens() { UserDefaults.standard.set([String](), forKey: BunkScreens.uuidKey); UserDefaults.standard.removeObject(forKey: BunkScreens.key) }
     private func nearestAllowed(to p: CGPoint) -> NSScreen? {
         allowedScreens.first { $0.frame.contains(p) } ?? allowedScreens.min { hypot($0.frame.midX - p.x, $0.frame.midY - p.y) < hypot($1.frame.midX - p.x, $1.frame.midY - p.y) }
     }
@@ -378,7 +391,7 @@ struct BunkStageView: View {
     }
     private var topicIndex = 0
     private func nextTopic() {
-        let all = BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing)
+        let all = BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing, ledger: store.ledger)
         guard !all.isEmpty else { return }
         let topic = all[topicIndex % all.count]; topicIndex += 1
         currentTarget = topic.target

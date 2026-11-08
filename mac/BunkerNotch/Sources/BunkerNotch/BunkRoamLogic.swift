@@ -111,17 +111,22 @@ enum BunkDesk {
 }
 
 /// Which screens Bunk may walk and talk on. Empty list (or none still connected) = every screen.
+/// Screens are saved by display UUID (`uuidKey`), which survives unplugging; `key` held the old numeric ids.
 enum BunkScreens {
-    static let key = "bunkScreens"
-    static func allowed(all ids: [UInt32], saved: [UInt32]) -> [UInt32] {
+    static let key = "bunkScreens", uuidKey = "bunkScreenUUIDs"
+    static func allowed<T: Hashable & Comparable>(all ids: [T], saved: [T]) -> [T] {
         let kept = ids.filter { saved.contains($0) }
         return saved.isEmpty || kept.isEmpty ? ids : kept
     }
     /// Toggling the last allowed screen off means "every screen" again, never "no screen".
-    static func toggle(_ id: UInt32, all ids: [UInt32], saved: [UInt32]) -> [UInt32] {
+    static func toggle<T: Hashable & Comparable>(_ id: T, all ids: [T], saved: [T]) -> [T] {
         var current = allowed(all: ids, saved: saved)
         if current.contains(id) { current.removeAll { $0 == id } } else { current.append(id) }
         return current.isEmpty || Set(current) == Set(ids) ? [] : current.sorted()
+    }
+    /// One-time move from numeric ids to UUIDs, using the screens connected now; unknown ids are dropped.
+    static func migrate(oldIDs: [UInt32], uuidOf: (UInt32) -> String?) -> [String] {
+        oldIDs.compactMap(uuidOf).sorted()
     }
 }
 

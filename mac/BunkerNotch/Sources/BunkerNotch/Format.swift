@@ -12,13 +12,14 @@ enum Format {
         return f.string(from: NSNumber(value: value)) ?? "N/D"
     }
     /// Short money for the resting island: "R$ 870", "R$ 3,2 mil", "R$ 1,4 mi".
-    static func compactMoney(_ value: Double?) -> String {
+    static func compactMoney(_ value: Double?, currency: String? = "BRL") -> String {
         guard let value, value.isFinite else { return "N/D" }
         let a = abs(value), sign = value < 0 ? "−" : ""
+        let symbol = { () -> String in switch (currency ?? "BRL").uppercased() { case "BRL": return "R$"; case "USD": return "US$"; case "EUR": return "€"; case let c: return c } }()
         func one(_ v: Double) -> String { String(format: v >= 10 ? "%.0f" : "%.1f", v).replacingOccurrences(of: ".", with: ",") }
-        if a >= 1_000_000 { return sign + "R$ " + one(a / 1_000_000) + " mi" }
-        if a >= 1_000 { return sign + "R$ " + one(a / 1_000) + " mil" }
-        return sign + "R$ " + String(format: "%.0f", a)
+        if a >= 1_000_000 { return sign + symbol + " " + one(a / 1_000_000) + " mi" }
+        if a >= 1_000 { return sign + symbol + " " + one(a / 1_000) + " mil" }
+        return sign + symbol + " " + String(format: "%.0f", a)
     }
     static func ratio(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "N/D" }
@@ -44,6 +45,36 @@ enum Format {
         f.timeZone = TimeZone(identifier: "America/Boa_Vista")
         f.dateFormat = "dd/MM HH:mm"
         return f.string(from: d)
+    }
+    /// "15:40" in the Bunker's clock (Boa Vista), for same-day times.
+    static func clock(_ value: String?) -> String {
+        guard let d = date(value) else { return "N/D" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "pt_BR")
+        f.timeZone = TimeZone(identifier: "America/Boa_Vista")
+        f.dateFormat = "HH:mm"
+        return f.string(from: d)
+    }
+    /// Short pace line: "no ritmo", "esgota 15:40", "sobra 30%", "orçamento do dia gasto" or "ritmo N/D".
+    static func pace(_ p: Summary.Pace?) -> String {
+        guard let p else { return "ritmo N/D" }
+        switch p.status {
+        case "on": return "no ritmo"
+        case "under": return p.leftoverPct.map { "sobra \(Int($0))%" } ?? "abaixo do ritmo"
+        case "exhausts": return p.exhaustsAt.map { "esgota " + clock($0) } ?? "acima do ritmo"
+        case "spent": return "orçamento do dia gasto"
+        default: return "ritmo N/D"
+        }
+    }
+    static func paceTone(_ p: Summary.Pace?) -> Tone {
+        switch p?.status { case "exhausts", "spent": return .warn; case "under": return .neutral; case "on": return .good; default: return .neutral }
+    }
+    /// "gasto R$ 820 de R$ 1.500 · 12 campanhas" or the reason it is N/D.
+    static func paceBase(_ p: Summary.Pace?) -> String {
+        guard let p else { return "resumo sem ritmo nesta versão" }
+        if p.status == "nd" { return p.reason ?? "sem orçamento diário conhecido" }
+        let missing = (p.unknown ?? 0) > 0 ? " · \(p.unknown!) sem orçamento" : ""
+        return "gasto \(compactMoney(p.spend, currency: p.currency)) de \(compactMoney(p.budget, currency: p.currency)) · \(p.known ?? 0) camp.\(missing)"
     }
     /// "agora", "há 5 min", "há 2 h"; older than a day falls back to the full stamp.
     static func relative(_ value: Date?, now: Date = Date()) -> String {

@@ -8,13 +8,14 @@ enum DS {
     enum Radius { static let s: CGFloat = 6, m: CGFloat = 10, l: CGFloat = 14, island: CGFloat = 24 }
     enum Color {
         static let canvas = SwiftUI.Color.black
-        static let surface = SwiftUI.Color.white.opacity(0.055)
+        // Increase Contrast: stronger surfaces, strokes and muted text (read at render time).
+        static var surface: SwiftUI.Color { SwiftUI.Color.white.opacity(A11y.increaseContrast ? 0.1 : 0.055) }
         static let surfaceHover = SwiftUI.Color.white.opacity(0.09)
         static let surfaceSelected = SwiftUI.Color.white.opacity(0.12)
-        static let stroke = SwiftUI.Color.white.opacity(0.08)
+        static var stroke: SwiftUI.Color { SwiftUI.Color.white.opacity(A11y.increaseContrast ? 0.24 : 0.08) }
         static let ink = SwiftUI.Color.white.opacity(0.94)
         static let inkSoft = SwiftUI.Color.white.opacity(0.72)
-        static let inkMuted = SwiftUI.Color.white.opacity(0.5)
+        static var inkMuted: SwiftUI.Color { SwiftUI.Color.white.opacity(A11y.increaseContrast ? 0.7 : 0.5) }
         static let accent = SwiftUI.Color(red: 0.72, green: 0.61, blue: 0.91)
         static let good = SwiftUI.Color(red: 0.24, green: 0.80, blue: 0.62)
         static let bad = SwiftUI.Color(red: 0.95, green: 0.45, blue: 0.48)
@@ -41,10 +42,18 @@ enum DS {
         static let quick = Animation.easeOut(duration: 0.15)
         /// Island changes: open for growth, close for shrinking; a plain fade when Reduce Motion is on.
         static func island(opening: Bool) -> Animation {
-            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return .easeInOut(duration: 0.18) }
+            if A11y.reduceMotion { return .easeInOut(duration: 0.18) }
             return opening ? open : close
         }
     }
+}
+
+/// System accessibility display settings, read where they are drawn.
+enum A11y {
+    static var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    /// Reduce Transparency: no blur transitions and opaque bubbles over other apps.
+    static var reduceTransparency: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
+    static var increaseContrast: Bool { NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
 }
 
 enum Tone {

@@ -45,22 +45,24 @@ enum BunkBrain {
         AdjustTarget(project: q.detail?.projectId, adAccountId: q.adAccountId, campaignId: q.campaignId, name: q.campaign)
     }
     static let approvalsTarget = AdjustTarget(project: nil, adAccountId: nil, campaignId: nil, name: nil)
-    static func lines(_ s: Summary?, error: String?, preparing: Bool) -> [String] { topics(s, error: error, preparing: preparing).map(\.text) }
-    static func topics(_ s: Summary?, error: String?, preparing: Bool) -> [Topic] {
+    static func lines(_ s: Summary?, error: String?, preparing: Bool, ledger: AttentionLedger = AttentionLedger()) -> [String] { topics(s, error: error, preparing: preparing, ledger: ledger).map(\.text) }
+    /// `ledger`: dismissed or snoozed items are not brought up (they still show in the island's lists).
+    static func topics(_ s: Summary?, error: String?, preparing: Bool, ledger: AttentionLedger = AttentionLedger()) -> [Topic] {
         if let error { return [Topic(text: "Não consegui ler o Bunker agora: \(error)")] }
         guard let s else { return [Topic(text: preparing ? "Estou montando o resumo. Volto em 1 a 2 minutos." : "Lendo o Bunker…")] }
         var out: [Topic] = []
-        if s.approvals.count > 0 { out.append(Topic(text: "\(s.approvals.count) proposta(s) exata(s) esperando você no Bunker.", target: approvalsTarget)) }
-        if let loss = s.queue.first(where: { $0.kind == "loss" }) {
+        if s.approvals.count > 0, !ledger.isQuiet(key: AttentionLedger.approvalsKey) { out.append(Topic(text: "\(s.approvals.count) proposta(s) exata(s) esperando você no Bunker.", target: approvalsTarget)) }
+        if let loss = s.queue.first(where: { $0.kind == "loss" && !ledger.isQuiet($0) }) {
             let account = loss.account.map { " em \($0)" } ?? ""
             out.append(Topic(text: "De olho: \(loss.campaign ?? "uma campanha")\(account) está −\(Format.money(loss.amount)) \(loss.period == "today" ? "hoje" : "em 3 dias").", target: lossTarget(loss)))
         }
-        if let a = s.accounts, a.counts.nearLimit > 0 { out.append(Topic(text: "\(a.counts.nearLimit) conta(s) perto do limite diário da Meta.")) }
+        if let a = s.accounts, a.counts.nearLimit > 0, !ledger.isQuiet(key: AttentionLedger.limitKey) { out.append(Topic(text: "\(a.counts.nearLimit) conta(s) perto do limite diário da Meta.")) }
         if let sh = s.shadow, sh.total > 0 {
             let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
             out.append(Topic(text: "Na sombra, hoje eu teria agido \(would) vez(es)\(first > 0 ? ", \(first) antes do gestor" : ""). Ainda não executo nada."))
         }
         out.append(Topic(text: "ROAS hoje \(Format.ratio(s.today.today?.roas)), ontem \(Format.ratio(s.today.yesterday?.roas))."))
+        if let p = s.pace, p.status != "nd" { out.append(Topic(text: "Ritmo do orçamento: \(Format.pace(p)) (\(Format.paceBase(p))).")) }
         if let e = s.activity.recent.first { out.append(Topic(text: "Última mudança: \(Format.who(e)) · \(e.campaign ?? "campanha") · \(Format.relative(e.at)).")) }
         if out.count <= 2 && s.approvals.count == 0 { out.append(Topic(text: "Tudo calmo por aqui. Sigo vigiando.")) }
         return out
@@ -235,7 +237,7 @@ struct BunkAvatar: View {
                 case .ended: notch.bunkHovering = false; withAnimation(DS.Motion.quick) { notch.bunkLook = 0 }
                 }
             }
-            .onTapGesture { if interactive { notch.bunkSpeak(BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing)) } }
+            .onTapGesture { if interactive { notch.bunkSpeak(BunkBrain.topics(store.summary, error: store.error, preparing: store.preparing, ledger: store.ledger)) } }
             .help(interactive ? "Bunk · clique para ele contar o que importa agora" : "Bunk")
     }
 }

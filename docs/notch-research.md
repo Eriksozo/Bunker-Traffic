@@ -39,6 +39,10 @@ Leitura web, sem clonar nem executar. Licenças lidas no arquivo LICENSE quando 
 7. Háptico leve ao entrar na ilha e em avisos, limitado a 0,5 s e desligável (NotchDrop/DynamicNotchKit, MIT).
 8. Gesto de deslizar para cima para fechar (só a ideia do boring.notch, GPL; implementar do zero).
 
+## Pacotes A–D (aplicados em 07/11)
+
+Pesquisa ampla (cerca de 50 projetos, licenças conferidas). Aplicado: dispensar por assinatura e aviso curto (notchd, Apache-2.0), adiar (Perch, MIT), silêncio em reunião (Repose, MIT), ritmo do orçamento (ILoveNotch, MIT; ideia de claude-notch, licença não comercial, só ideia), minigráfico (exelban/stats, MIT), idade do dado (FEXLY, MIT), hover por intenção (udeck, Apache-2.0; notchi, MIT), cadência com recuo (codex-pacer, MIT), telas por UUID, VoiceOver e Reduzir transparência. Ficou de fora: notificações com botões (exigem app assinado), arrastar link para o notch, código GPL.
+
 ## Evitar
 
 APIs privadas (SkyLight/CGS), permissão de Acessibilidade, leitura de `kCGWindowName` ou captura de tela (exige Gravação de Tela), CGWindowList a cada quadro, animação com painel oculto, dependências sem licença conferida, macros Swift (as Command Line Tools não têm).

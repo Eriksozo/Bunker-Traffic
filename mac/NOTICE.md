@@ -28,6 +28,8 @@ A forma da ilha (`IslandShape` em `NotchViews.swift`: ombros côncavos no topo q
 
 Molas assimétricas (abrir com leve elástico, fechar sem rebote) e a troca de texto por desfoque no rodízio do notch seguem valores e ideias do CodeIsland (MIT, Copyright (c) 2026 wxtsky) e do DynamicNotchKit (MIT), reescritos aqui.
 
+Ideias dos pacotes de atenção, leitura e robustez (07/11), todas reescritas aqui sem copiar código: dispensar por assinatura e aviso curto do notchd (Apache-2.0); adiar 30 min/2 h/amanhã do Perch (MIT); silêncio com câmera ou microfone em uso do Repose (MIT); vocabulário de minigráficos do exelban/stats (MIT); ritmo de consumo do ILoveNotch (MIT); abertura por intenção do udeck (Apache-2.0) e do notchi (MIT); cadência de atualização com recuo do codex-pacer (MIT). Projetos GPL (Ice, Ledge, boring.notch) serviram só como referência de ideia.
+
 Nenhum ativo de marca do Coucou é usado aqui: o nome "Coucou", o personagem e o nome "Mochi", ícones, sons e mídias pertencem ao autor e não fazem parte deste app.
 
 ## Segurança
