@@ -39,8 +39,14 @@ echo "Montado: $app ($version)"
 if [ "${1:-}" != "--no-install" ]; then
   dest="$HOME/Applications"
   mkdir -p "$dest"
+  # Reinstalling quits the running notch; reopen it afterwards so a rebuild never leaves the owner without it.
+  was_running=0; pgrep -x Bunker >/dev/null 2>&1 && was_running=1
   pkill -x Bunker 2>/dev/null || true
   rm -rf "$dest/Bunker.app"
   cp -R "$app" "$dest/Bunker.app"
   echo "Instalado: $dest/Bunker.app"
+  if [ "$was_running" = 1 ] && [ "${BUNKER_NO_RELAUNCH:-}" != 1 ]; then
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Bunker >/dev/null 2>&1 || break; sleep 0.3; done
+    open "$dest/Bunker.app" && echo "Reaberto: $dest/Bunker.app"
+  fi
 fi
