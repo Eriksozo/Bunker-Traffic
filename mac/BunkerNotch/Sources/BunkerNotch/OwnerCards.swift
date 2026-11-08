@@ -34,10 +34,21 @@ struct OwnerCards: Decodable, Equatable {
         var orderStatus: String? { orderSource?.status ?? status }
     }
     struct OrderSource: Decodable, Equatable { let kind: String; let at: String?; let status: String?; let dailyBudget: Double?; let currency: String? }
+    /// Owner direct order for one campaign, from the live Malva reading only (works without an analysis card).
+    struct DirectOrder: Decodable, Equatable {
+        let project: String; let adAccountId: String; let objectId: String
+        let available: Bool; let actions: Actions; let blockers: [String]
+        let source: OrderSource?; let campaign: String?; let account: String?
+        var budget: Double? { source?.dailyBudget }
+        var status: String? { source?.status }
+        var currency: String? { source?.currency }
+    }
     let revision: Int?
     let paused: Bool
     let cards: [Card]
     let approvals: [Proposal]
+    /// Older servers omit it.
+    var directOrder: DirectOrder? = nil
 }
 
 /// Which campaign (or the approvals list when campaignId is nil) the adjust view is about.
@@ -79,7 +90,7 @@ enum OwnerAdjust {
     static func newBudget(_ current: Double?, action: String, percent: Double?) -> Double? {
         guard let current, current > 0, let percent, action == "increase" || action == "reduce" else { return nil }
         let v = current * (1 + (action == "increase" ? 1 : -1) * percent / 100)
-        return (v * 100 + .ulpOfOne).rounded() / 100
+        return ((v + .ulpOfOne) * 100).rounded() / 100   // same as the server: Math.round((v+EPSILON)*100)/100
     }
     /// Owner feedback for the team: never an execution approval (approveExact false).
     static func intent(card: OwnerCards.Card, revision: Int, action: String, percent: Double?, reason: String, clientId: String) -> [String: Any] {
@@ -94,6 +105,32 @@ enum OwnerAdjust {
         var input = intent(card: card, revision: revision, action: action, percent: percent, reason: reason, clientId: clientId)
         input["ownerOrder"] = true
         return input
+    }
+    /// Owner direct order (op ownerDirectOrder): pause / increase % / reduce % of one Meta campaign, with the exact
+    /// values the owner saw. The server compares them with the live Malva row; the Cloudflare executor rereads Malva,
+    /// sends once and confirms. No analysis round, no card and no central revision involved.
+    static func directOrder(_ d: OwnerCards.DirectOrder, action: String, percent: Double?, reason: String, clientId: String) -> [String: Any] {
+        var expected: [String: Any] = ["status": d.status ?? NSNull(), "currency": d.currency ?? NSNull()]
+        expected["dailyBudget"] = d.budget ?? NSNull()
+        var input: [String: Any] = ["op": "ownerDirectOrder", "revision": 0, "clientId": clientId, "project": d.project, "adAccountId": d.adAccountId,
+                                    "objectId": d.objectId, "action": action, "expected": expected]
+        let r = reason.trimmingCharacters(in: .whitespacesAndNewlines); if !r.isEmpty { input["reason"] = r }
+        if action == "increase" || action == "reduce", let percent {
+            input["percent"] = percent
+            if let after = newBudget(d.budget, action: action, percent: percent) { input["after"] = ["dailyBudget": after] }
+        }
+        return input
+    }
+    static func canDirectOrder(_ d: OwnerCards.DirectOrder?, action: String) -> Bool {
+        guard let d, d.available, action != "keep" else { return false }
+        return allowed(d.actions, action)
+    }
+    /// "Pausar: ativa → pausada" or "Reduzir 20%: US$ 95,10 → US$ 76,08/dia" — screen and Touch ID prompt.
+    static func directLine(_ d: OwnerCards.DirectOrder, action: String, percent: Double?) -> String {
+        if action == "pause" { return "Pausar: " + Format.statusName(d.status) + " → pausada" }
+        let after = newBudget(d.budget, action: action, percent: percent)
+        return label(action) + (percent.map { " " + Format.percent($0, signed: false) } ?? "") + ": "
+            + Format.money(d.budget, currency: d.currency) + " → " + Format.money(after, currency: d.currency) + "/dia"
     }
     static func canOrder(_ card: OwnerCards.Card, action: String) -> Bool {
         guard action != "keep", let a = card.orderActions else { return false }

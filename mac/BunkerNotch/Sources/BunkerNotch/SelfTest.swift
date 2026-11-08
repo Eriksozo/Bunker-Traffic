@@ -242,6 +242,18 @@ enum SelfTest {
         let review = OwnerAdjust.review(p, revision: 9, decision: "approve", comment: nil, clientId: "notch-owner-test2")
         check(review["op"] as? String == "proposalReview" && review["version"] as? Int == 2 && review["comment"] == nil, #line)
         check(OwnerAdjust.change(p) == "orçamento diário " + Format.money(50, currency: "USD") + " → " + Format.money(75, currency: "USD"), #line)
+        // Direct order: exact values the owner saw, no revision dependency, no card needed.
+        let dJson = #"{"revision":9,"paused":false,"cards":[],"approvals":[],"directOrder":{"project":"p","adAccountId":"1","objectId":"2","available":true,"actions":{"increase":true,"reduce":true,"pause":true,"keep":false},"blockers":[],"source":{"kind":"live","at":"2026-11-08T12:00:00.000Z","status":"ACTIVE","dailyBudget":95.1,"currency":"USD"},"campaign":"C","account":"CA 1"}}"#
+        guard let dCards = try? JSONDecoder().decode(OwnerCards.self, from: Data(dJson.utf8)), let d = dCards.directOrder else { check(false, #line); return }
+        check(dCards.cards.isEmpty && OwnerAdjust.canDirectOrder(d, action: "pause") && !OwnerAdjust.canDirectOrder(d, action: "keep"), #line)
+        let order = OwnerAdjust.directOrder(d, action: "reduce", percent: 20, reason: " ", clientId: "notch-owner-test4")
+        let exp = order["expected"] as? [String: Any], after = order["after"] as? [String: Any]
+        check(order["op"] as? String == "ownerDirectOrder" && order["reason"] == nil && exp?["dailyBudget"] as? Double == 95.1 && exp?["status"] as? String == "ACTIVE" && after?["dailyBudget"] as? Double == 76.08, #line)
+        check(OwnerAdjust.newBudget(95.1, action: "reduce", percent: 12.5) == 83.21, #line)
+        let pause = OwnerAdjust.directOrder(d, action: "pause", percent: nil, reason: "", clientId: "notch-owner-test5")
+        check(pause["percent"] == nil && pause["after"] == nil && OwnerAdjust.directLine(d, action: "pause", percent: nil).hasPrefix("Pausar"), #line)
+        let noDirect = try? JSONDecoder().decode(OwnerCards.self, from: Data(#"{"revision":1,"paused":false,"cards":[],"approvals":[]}"#.utf8))
+        check(noDirect != nil && noDirect?.directOrder == nil && !OwnerAdjust.canDirectOrder(nil, action: "pause"), #line)
         let key = P256.Signing.PrivateKey()
         guard let body = try? OwnerKey.envelope(input: review, payloadSigner: { try key.signature(for: $0).rawRepresentation }, key: key.publicKey),
               let env = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let payload = Data(base64Encoded: env["payload"] as? String ?? ""),

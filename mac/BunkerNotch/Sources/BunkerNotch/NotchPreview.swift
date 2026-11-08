@@ -26,6 +26,8 @@ import SwiftUI
             ("13-aprovar", { adjust($0, cards: ownerCards(fresh: true, approvals: true), action: "", campaign: false) }),
             // The queue with its period ladder (no approvals or orders above it, so it is above the fold).
             ("14-fila", { $0.mode = .open; $0.tab = .now }),
+            // Direct order on a campaign outside the last analysis (live Malva value only).
+            ("15-ordem-direta", { adjust($0, cards: directOnly(), action: "pause") }),
         ]
         let queueFocus: Summary? = {
             guard var json = (try? JSONSerialization.jsonObject(with: Data(fixtureJSON().utf8))) as? [String: Any] else { return nil }
@@ -78,7 +80,18 @@ import SwiftUI
         {"revision":7,"paused":false,"approvals":\(approval),"cards":[{"id":"k","signature":"s","project":"p2","projectName":"Beta","campaign":"07/11 - [CBO] - [AVATAR] - Criativo 009","account":"Conta Exemplo 02","adAccountId":"a2","objectId":"c2","status":"ACTIVE","dailyBudget":95.1,"currency":"USD",
           "windows":{"today":{"spend":310,"roas":0.62,"roi":0.5,"frontOrders":1},"yesterday":{"spend":480,"roas":1.12,"roi":0.9,"frontOrders":3},"3d":{"spend":1450,"roas":0.94,"roi":0.8,"frontOrders":8},"7d":null},
           "suggestion":{"action":"keep","percent":null,"reason":"Diagnóstico: comparar aquisição, última edição e os quatro períodos.","origin":"diagnostic"},
-          "intentActions":{"increase":true,"reduce":true,"pause":true,"keep":true},"blockedReasons":\(blocked),"lastChoice":null,"proposal":null,"orderActions":\(order),"orderBlockers":\(orderBlockers)}]}
+          "intentActions":{"increase":true,"reduce":true,"pause":true,"keep":true},"blockedReasons":\(blocked),"lastChoice":null,"proposal":null,"orderActions":\(order),"orderBlockers":\(orderBlockers)}],
+          "directOrder":{"project":"p2","adAccountId":"a2","objectId":"c2","available":\(fresh),"actions":\(order),"blockers":\(fresh ? "[]" : "[\"Sem leitura ao vivo desta campanha nos últimos 10 minutos. A próxima leitura da Malva chega em poucos minutos: recarregue e tente de novo.\"]"),
+            "source":\(fresh ? "{\"kind\":\"live\",\"at\":\"2026-11-08T12:04:00.000Z\",\"status\":\"ACTIVE\",\"dailyBudget\":95.1,\"currency\":\"USD\"}" : "null"),"campaign":"07/11 - [CBO] - [AVATAR] - Criativo 009","account":"Conta Exemplo 02"}}
+        """
+        return try? JSONDecoder().decode(OwnerCards.self, from: Data(json.utf8))
+    }
+
+    /// Fictional campaign that started after the analysis: no card, only the direct order from the live reading.
+    private static func directOnly() -> OwnerCards? {
+        let json = """
+        {"revision":7,"paused":false,"approvals":[],"cards":[],"directOrder":{"project":"p2","adAccountId":"a2","objectId":"c2","available":true,"actions":{"increase":true,"reduce":true,"pause":true,"keep":false},"blockers":[],
+          "source":{"kind":"live","at":"2026-11-08T12:04:00.000Z","status":"ACTIVE","dailyBudget":95.1,"currency":"USD"},"campaign":"08/11 - [CBO] - [TESTE] - Criativo 012","account":"Conta Exemplo 02"}}
         """
         return try? JSONDecoder().decode(OwnerCards.self, from: Data(json.utf8))
     }
