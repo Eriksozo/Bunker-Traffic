@@ -33,5 +33,8 @@ test('the boundary checks the path secret before reading the body and strips ide
  const ok=await cloudflareAuth(new Request('https://b.example/api/webhooks/malva/'+'s'.repeat(48),{method:'POST',body:'{"amount":1}',headers:{'x-bunker-companion':'owner','oai-authenticated-user-id':'forged'}}),env);
  assert.ok(ok instanceof Request);assert.equal(new URL(ok.url).pathname,'/api/webhooks/malva');assert.equal(ok.headers.get('x-bunker-webhook'),'malva');
  assert.equal(ok.headers.has('x-bunker-companion'),false);assert.equal(ok.headers.has('oai-authenticated-user-id'),false);assert.equal(await ok.text(),'{"amount":1}');
+ assert.equal((await cloudflareAuth(new Request('https://b.example/api/webhooks/malva/%E0%A4%A',{method:'POST',body:'{}'}),env)).status,401,'malformed escape: 401, not 500');
+ assert.equal((await cloudflareAuth(new Request('https://b.example/api/webhooks/malva/short',{method:'POST',body:'{}'}),{...env,MALVA_WEBHOOK_SECRET:'short'})).status,503,'short secret fails closed');
+ assert.equal((await cloudflareAuth(new Request('https://b.example/api/webhooks/malva/'+'s'.repeat(48),{method:'POST',body:'{}'}),{...env,BUNKER_COMPANION_TOKEN:'s'.repeat(48)})).status,503,'secret reused from another credential fails closed');
  const big=await cloudflareAuth(new Request('https://b.example/api/webhooks/malva/'+'s'.repeat(48),{method:'POST',body:'x'.repeat(70000)}),env);assert.equal(big.status,413);
 });
