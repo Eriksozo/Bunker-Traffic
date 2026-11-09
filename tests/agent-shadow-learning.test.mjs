@@ -116,7 +116,9 @@ test('A real stage packet carries the Sombra reading, the prompt frames it, and 
  const reading={...agentLearningContext(summary(),{project:P,now:NOW}),at:new Date().toISOString()};
  const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{dispatch:async()=>{throw Error('No action authorized');}},ai:modelMock(seen),
   ops:{shadowLearning:async(_s,id)=>{asked.push(id);return reading;}}});
- assert.equal((await engine.step()).kind,'stage');
+ const result=await engine.step();
+ assert.equal(result.kind,'stage');
+ assert.equal(result.shadowLearning,'entregue','the runtime history says the reading reached the analyst');
  assert.deepEqual(asked,[project]);
  const packet=JSON.parse(seen[0].messages[1].content).context;
  assert.equal(packet.shadowLearning.interpretation,agentLearningInterpretation);
@@ -132,7 +134,8 @@ test('Without the Sombra reading (missing or failing) the analysts still run, an
  for(const shadowLearning of [async()=>null,async()=>{throw Error('DO down');},undefined]){
   const store=memory(fixture()),seen=[];
   const engine=createCloudEngine({read:async()=>({state:structuredClone(store.state),revision:1}),write:store.write,source:{dispatch:async()=>{throw Error('No action authorized');}},ai:modelMock(seen),ops:shadowLearning?{shadowLearning}:{}});
-  assert.equal((await engine.step()).kind,'stage');
+  const result=await engine.step();
+  assert.equal(result.kind,'stage');assert.equal(result.shadowLearning,'indisponível');
   assert.equal(JSON.parse(seen[0].messages[1].content).context.shadowLearning,undefined);
   assert.equal(store.state.collaborationMessages.find(m=>m.kind==='conclusion').learningInputs.shadowLearning.delivered,false);
  }
