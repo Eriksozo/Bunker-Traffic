@@ -56,3 +56,32 @@ Relato do proprietário: um gestor agiu antes do Bunker, e "nunca pode fazer pri
 - Os aumentos do gestor saem em lotes (≈09h–10h, ≈13h–15h e, uma vez, logo depois da meia-noite pelo ontem fechado), com passo mediano de +50%; só ~40% fecharam o dia seguinte com ROI ≥ 1,2. As reduções são de −20% ou −30% com o ROI de hoje < 1, mesmo com ontem bom.
 
 Por isso só a regra 5 (pausa abaixo de 0,8) pode marcar "executaria". As regras de orçamento (2, 4 em campanha nova, 6) ficam como sugestão até o próprio placar passar de 60% com 20+ avaliações (`scoreGatedRules`). Nada executa: a fase continua sombra. Testes: `tests/shadow-four-rules.test.mjs`.
+
+## Memória da Sombra (09/11/2026)
+
+Pedido do dono: o Bunk deve aprender continuamente com tudo o que acompanha. Antes, a Sombra apagava as decisões com mais de 7 dias, inclusive as notas do dia seguinte. O placar que libera as regras de orçamento nunca via mais do que ~5 dias avaliados.
+
+- **O que fica guardado** (`lib/shadow-learning.mjs`, Durable Object, chaves `learn:<dia>:<projeto>`, 90 dias): cada decisão com nota final (acertou, errou, parou; N/D continua aberto), só com identificadores e números. Também ficam os pontos cegos e a base do dia. **Ponto cego** é a pausa, redução ou aumento de gestor ou do dono num objeto que a Sombra não tinha apontado nas 36 h anteriores; um alerta conta como apontado. **Base do dia** é a fatia de campanhas ativas da Meta com gasto que deu prejuízo ou lucro naquele dia, pela janela fechada da Malva, sem aquecimento.
+- **Leitura** (`learningSummary`, refeito no máximo a cada 10 min quando há novidade ou a cada hora; leitura MCP `shadow` → `learning`; notch → linha "Memória"), por regra e por regra × projeto:
+  - acerto com faixa provável de 95% (Wilson);
+  - acerto ponderado pela recência (meia-vida de 21 dias);
+  - estimativa de projeto com pouca amostra puxada para a taxa da regra (empirical Bayes, peso de 10 decisões);
+  - **acerto contra não fazer nada**: corte comparado com a fatia de prejuízo do dia lido, aumento com a de lucro, mais a chance de a regra ser melhor que isso (posterior Beta de Jeffreys);
+  - últimos 7 dias contra os 7 anteriores;
+  - gasto mediano na decisão das pausas certas e erradas;
+  - quem agiu antes, o gestor ou a Sombra;
+  - lições curtas.
+- **Trava das regras de orçamento**: o critério do dono (≥ 60% com ≥ 20 avaliadas, decisão de 08/11) não mudou. Agora ele lê a memória da versão atual das regras, e nunca menos decisões do que os 7 dias da Sombra. Decisões de uma versão anterior das regras não contam.
+- **Não faz**: não muda limiar, não cria proposta, não aprova, não executa. Lição é leitura para o dono.
+- **Ponto para decisão do dono**: nas regras de aumento, 60% de acerto pode não superar a base. No backtest de 08/11, 60% dos dias seguintes já deram lucro. O critério "vencer a base com ≥ 90% de chance" está calculado (`base.chanceBetter`), mas só vale se o dono aprovar.
+- **Não há 100% de acerto.** O dia seguinte é ruidoso e a atribuição muda depois. O mercado também muda. Mesmo 20 acertos em 20 dão uma faixa provável a partir de ~84%. A meta é acerto calibrado e acima da base, dito com a faixa.
+
+Referências consultadas:
+- Intervalos de proporção para amostra pequena: Brown, Cai e DasGupta, 2001, [Statistical Science](https://projecteuclid.org/euclid.ss/1009213286).
+- Empirical Bayes com prior Beta: D. Robinson, [ebbr](https://rdrr.io/github/dgrtwo/ebbr/f/README.md).
+- Esquecimento com desconto: Raj e Kalyani, [Discounted Thompson](https://arxiv.org/abs/1707.09727).
+- Avaliação contínua sem inflar falsos positivos, possível próxima etapa:
+  - Johari et al., [always-valid p-values](https://arxiv.org/abs/1512.04922);
+  - Howard et al., [confidence sequences](https://arxiv.org/abs/1906.09712).
+- Atraso de atribuição na Meta, até ~72 h ([Aimerce](https://www.aimerce.ai/blogs/why-are-my-meta-ad-results-delayed-by-72-hours)): a nota do D+1 pode mudar depois. Uma nota provisória e outra final em D+3 ficam pendentes.
+- Descartados por escala: bandits e Thompson para alocar orçamento, porque a aprovação humana e o retorno atrasado quebram as premissas; e MMM (Robyn, Meridian), que pede anos de dados semanais.

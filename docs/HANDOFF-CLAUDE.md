@@ -750,3 +750,21 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - O dono aprovou no chat alinhar a sombra com as pausas dele: ponto de pausa mais cedo com 0–1 IC, limiar menor para 2+ IC e inclusão dos dois projetos que estavam fora.
 - Como `AUTONOMY_SHADOW_POLICY` não pode ser lido, a decisão foi gravada num secret à parte, `AUTONOMY_SHADOW_OWNER` (`ownerShadowPolicy` em `lib/autonomy-shadow.mjs`): só reduz valores, liga projetos listados e respeita projeto desligado. Campo novo `first24hLowIcPauseAt` em `lib/first-24h.mjs`.
 - Continua sombra: nada é executado sem o dono.
+
+## Memória da Sombra: aprender com tudo, além de 7 dias (registro escrito às 2026-11-09 15:57:07 UTC por `date -u`)
+
+- **Pedido do dono:** "aprimore a aprendizagem do bunk, ele deve ficar mais inteligente a cada hora, dia… a ponto de já vir com decisões precisas e prontas". Depois pediu também bases de conhecimento e repositórios externos.
+- **Achado:** a Sombra apagava as decisões com mais de 7 dias, inclusive as notas do dia seguinte. O placar que libera as regras de orçamento só via ~5 dias avaliados, ou seja, o Bunk esquecia toda semana. Também não havia comparação com a base ("não fazer nada"), nem registro do que gestor ou dono cortou sem aviso prévio da Sombra.
+- **Mudança:**
+  - `lib/shadow-learning.mjs` guarda por 90 dias as decisões com nota final, os pontos cegos e a base de cada dia × projeto, nas chaves `learn:<dia>:<projeto>` do Durable Object.
+  - O executor grava essa memória a cada passada da Sombra e monta o `learningSummary`. Ele inclui acerto com faixa provável, recência, estimativa de projeto pequeno puxada para a regra, acerto contra não fazer nada com a chance de ser melhor, tendência de 7 dias, gasto mediano das pausas certas e erradas, gestor antes ou depois, e lições.
+  - A trava 60%/20+ do dono lê a memória da versão atual das regras.
+  - A leitura MCP `shadow` devolve `learning` e `learningStatus`. O notch mostra a linha "Memória" e a primeira lição.
+  - Método e referências externas: `docs/autonomy-policy.md`, "Memória da Sombra".
+- **Testes:** `tests/shadow-learning.test.mjs` (9, incluindo o executor de ponta a ponta) e o harness de `tests/battery-fix-worker.test.mjs` com o módulo novo. Resultado: suíte 1368/1368, typecheck, build e autoteste do notch.
+- **Ponto para o dono (não aplicado):** nas regras de aumento, 60% de acerto pode empatar com a base, porque no backtest 60% dos dias seguintes deram lucro. A opção de exigir "vencer a base com ≥ 90% de chance" está calculada, mas só entra se o dono aprovar.
+- **Pendências:**
+  - Nota provisória em D+1 e final em D+3, por causa do atraso de atribuição.
+  - Usar as lições como contexto das análises dos agentes.
+  - Limiar de pausa por projeto aprendido do histórico (curva de primeira venda por gasto), sempre como proposta ao dono.
+- Continua sombra: nada é executado sem o dono.

@@ -678,6 +678,14 @@ struct NowTab: View {
                     Text(Format.shadowScore(sc)).font(DS.Font.caption).foregroundStyle(sc.right * 10 >= sc.graded * 6 ? DS.Color.good : DS.Color.warn)
                         .help("Cada decisão da sombra é conferida pelo resultado real do dia seguinte: corte acerta se o dia seguinte deu prejuízo; aumento acerta se deu lucro. Campanha que parou não entra.")
                 }
+                if let l = sh.learning, l.graded > 0 || (l.blindSpots ?? 0) > 0 {
+                    // What the Bunk has learned beyond the 7 days: score with an honest range and its top lesson.
+                    Text(Format.shadowMemory(l)).font(DS.Font.caption).foregroundStyle(.secondary)
+                        .help("Memória de até 90 dias: cada decisão conferida pelo dia seguinte, com a faixa provável de acerto (95%). Ponto cego: corte do gestor ou seu que a Sombra não tinha apontado.")
+                    if let lesson = l.lessons?.first {
+                        Text(lesson).font(DS.Font.caption).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                }
                 VStack(spacing: 2) {
                     ForEach(sh.recent.prefix(5)) { item in
                         ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil || item.owner != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),

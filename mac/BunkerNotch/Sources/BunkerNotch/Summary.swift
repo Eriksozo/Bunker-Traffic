@@ -111,8 +111,14 @@ struct Summary: Decodable, Equatable {
         let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem]
         /// Assertiveness over the retained days (lib/autonomy-shadow.mjs shadowGrades): graded by the real next day.
         var scorecard: ShadowScorecard? = nil
+        /// Long memory of the Sombra (lib/shadow-learning.mjs learningBrief): 90 days of graded decisions and lessons. Older servers omit it.
+        var learning: ShadowLearning? = nil
     }
     struct ShadowScorecard: Decodable, Equatable { let days: Int?; let graded: Int; let right: Int; let wrong: Int; let winnersCut: Int; let stopped: Int? }
+    struct ShadowLearning: Decodable, Equatable {
+        let days: Int; let graded: Int; let right: Int
+        var low: Double? = nil; var high: Double? = nil; var blindSpots: Int? = nil; var lessons: [String]? = nil
+    }
     /// New campaigns in their first 24h (lib/first-24h.mjs): scheduled, first day and 2nd day against the owner's ceiling.
     let first24h: First24h?
     struct First24hCounts: Decodable, Equatable { let scheduled: Int; let firstDay: Int; let secondDay: Int; let attention: Int }

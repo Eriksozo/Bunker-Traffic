@@ -171,6 +171,12 @@ enum SelfTest {
             check(Format.shadowScore(sc) == "Placar 7 dias: acertou 9 de 14 (64%) · 3 cortes em vencedores", #line)
         } else { check(false, #line) }
         check((try? JSONDecoder().decode(Summary.Shadow.self, from: Data(#"{"day":null,"total":0,"byRule":{},"recent":[]}"#.utf8)))?.scorecard == nil, #line)
+        let memJSON = #"{"day":"2026-11-09","total":1,"byRule":{},"recent":[],"learning":{"at":"2026-11-09T15:00:00Z","days":12,"from":"2026-10-29","graded":58,"right":40,"accuracy":0.69,"low":0.561,"high":0.793,"blindSpots":2,"lessons":["Projeto: 2 cortes"]}}"#
+        if let l = (try? JSONDecoder().decode(Summary.Shadow.self, from: Data(memJSON.utf8)))?.learning {
+            check(Format.shadowMemory(l) == "Memória 12 dias: acertou 40 de 58 (69%, faixa 56–79%) · 2 pontos cegos em 7 dias", #line)
+            check(l.lessons?.first == "Projeto: 2 cortes", #line)
+        } else { check(false, #line) }
+        check((try? JSONDecoder().decode(Summary.Shadow.self, from: Data(#"{"day":null,"total":0,"byRule":{},"recent":[],"learning":null}"#.utf8)))?.learning == nil, #line)
         check(Format.money(Double.nan) == "N/D" && Format.exactMoney(nil) == "N/D" && Format.compactMoney(.infinity) == "N/D", #line)
     }
 

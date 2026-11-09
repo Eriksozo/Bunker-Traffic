@@ -21,6 +21,7 @@ import {expiredAttribution,usableAttributions} from '../lib/change-attribution.m
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 import {ownerShadowPolicy,evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
+import {learningPolicy,learningRecords,blindSpots,dailyBases,learningKeys,mergeLearning,learningStats,gateAccuracy,learningBrief} from '../lib/shadow-learning.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {metaLiveTargets,overlayMetaItems,liveTodayState,liveRowIndex,freshMeta} from '../lib/meta-display.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
@@ -134,7 +135,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const events=activityLog(withAuthors,{since:now-26*3600000,now});
   const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()],meta=await this.ctx.storage.get<any>('metaLive');
   // Owner decisions 08/11/2026: budget rules only become executable after their own graded accuracy proves itself.
-  const accuracy=Object.fromEntries(scoreGatedRules.map(rule=>[rule,ruleAccuracy(prior,rule)]));
+  // The score is the long memory of the current rule version (lib/shadow-learning.mjs), never fewer decisions than the 7 days kept here.
+  const learned=await this.ctx.storage.get<any>('learningSummary');
+  const accuracy=Object.fromEntries(scoreGatedRules.map(rule=>[rule,gateAccuracy(learned,rule,ruleAccuracy(prior,rule))]));
   let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={},days:Record<string,string>={},batches:any[]=[];
   // Same as shadowLocalDay: the day of a pulse where every project was skipped (stale source), so "hoje" stays today.
   const fallbackDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -152,7 +155,33 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   for(let i=0;i<entries.length;i+=100)await this.ctx.storage.put(Object.fromEntries(entries.slice(i,i+100)));
   for(let i=0;i<stale.length;i+=128)await this.ctx.storage.delete(stale.slice(i,i+128));
   await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped,ms:Date.now()-now});
+  // The memory never blocks the shadow: a failure is recorded apart (code and short text only).
+  await this.storeLearning(state,merged,events,policy,now).catch(async(e:any)=>{await this.ctx.storage.put('learningStatus',{at:new Date().toISOString(),ok:false,code:'LEARNING_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   return merged;
+ }
+ /**
+  * Long memory of the Sombra (lib/shadow-learning.mjs, owner request of 09/11/2026): graded decisions, blind spots and
+  * daily bases kept for 90 days in `learn:<day>:<project>`. Only the touched shards are read and written each pass; the
+  * summary (scores, ranges, edge over doing nothing, lessons) is rebuilt at most every 10 min, or hourly when idle.
+  */
+ private async storeLearning(state:any,entries:any[],events:any[],policy:any,now:number){
+  const started=Date.now();
+  const projects=Object.keys(policy?.projects||{}).filter(p=>state?.config?.[p]&&policy.projects[p]?.enabled!==false);
+  const zones:Record<string,string>={};for(const s of state.snapshots||[])if(s?.projectId&&typeof s.timezone==='string'&&!zones[s.projectId])zones[s.projectId]=s.timezone;
+  const records=learningRecords(entries),misses=blindSpots(entries,events,{projects,timezoneOf:(p:string)=>zones[p],now}),bases=dailyBases(state.snapshots).filter((b:any)=>projects.includes(b.project));
+  const keys=learningKeys(records,misses,bases),existing=new Map<string,any>();
+  for(let i=0;i<keys.length;i+=128){const got=await this.ctx.storage.get<any>(keys.slice(i,i+128));if(got instanceof Map)for(const [k,v] of got)existing.set(k,v);}
+  const changed=Object.entries(mergeLearning(existing,records,misses,{now,bases}).put);
+  for(let i=0;i<changed.length;i+=100)await this.ctx.storage.put(Object.fromEntries(changed.slice(i,i+100)));
+  const prev=await this.ctx.storage.get<any>('learningSummary'),age=now-Date.parse(prev?.at||'');
+  if(prev&&age<learningPolicy.summaryMaxAgeMs&&!(changed.length&&age>=learningPolicy.summaryEveryMs)){
+   await this.ctx.storage.put('learningStatus',{at:new Date(now).toISOString(),ok:true,written:changed.length,summarized:false,ms:Date.now()-started});return;
+  }
+  const all=await this.ctx.storage.list<any>({prefix:'learn:'}),drop=mergeLearning(new Map(),[],[],{now,keys:[...all.keys()]}).drop,gone=new Set(drop);
+  for(let i=0;i<drop.length;i+=128)await this.ctx.storage.delete(drop.slice(i,i+128));
+  const names=Object.fromEntries(Object.entries(state.config||{}).map(([id,c]:[string,any])=>[id,c?.projectName||id]));
+  await this.ctx.storage.put('learningSummary',learningStats([...all].filter(([k])=>!gone.has(k)).map(([,v])=>v),{now,names}));
+  await this.ctx.storage.put('learningStatus',{at:new Date(now).toISOString(),ok:true,written:changed.length,dropped:drop.length,shards:all.size-drop.length,summarized:true,ms:Date.now()-started});
  }
  /**
   * "Primeiras 24h" board (docs/first-24h-protocol.md): scheduled and new campaigns of every configured project and
@@ -285,6 +314,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  /** Mac companion summaries built from the central state this pulse already read; served from this object, never re-reading the central. */
  private async storeCompanion(state:any,shadow:any[]=[]){
   if(!state)return;
+  const learned=await this.ctx.storage.get<any>('learningSummary');
   const shadowStatus=await this.ctx.storage.get<any>('shadowStatus'),shadowDay=shadowStatus?.day||shadowLocalDay(Date.now()),accountsPanel=await this.ctx.storage.get<any>('accountsPanel'),first24h=(await this.ctx.storage.get<any>('first24h'))?.boards||[];
   const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
    rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,limitSource:r.limitSource,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
@@ -293,7 +323,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Display only (lib/meta-display.mjs): the Malva live rows with the Meta read on top; today's numbers and the details
   // of the notch follow them, the queue and every decision keep the analysis.
   const live:any=overlayMetaItems(this.liveItems||[],await this.ctx.storage.get<any>('metaLive'),{now}),todayState=liveTodayState(withAuthors,live,{now}),liveRows=liveRowIndex(live,{now}),board=projectBoard(withAuthors,now,{live:live as never[],todayState});
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null,pulseAt:shadowStatus?.failed?null:shadowStatus?.at||null}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:{...shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null,pulseAt:shadowStatus?.failed?null:shadowStatus?.at||null}),learning:learningBrief(learned,{project})},first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
   await this.phoneAlerts(out['companion:all']).catch(()=>{});
  }
@@ -407,7 +437,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     // Same fields as the notch's recent list: an owner action, the next-day grade and the rule label stay visible here.
     ruleLabel:e.ruleLabel||null,limitations:e.limitations??null,owner:e.owner||null,grade:e.grade||null}));
    const first24h=await this.ctx.storage.get<any>('first24h'),meta=await this.ctx.storage.get<any>('metaLive');
-   return Response.json({status:status||null,live:await this.ctx.storage.get<any>('shadowLive')||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
+   return Response.json({status:status||null,live:await this.ctx.storage.get<any>('shadowLive')||null,summary:shadowSummary(all,{day}),
+    // Long memory (lib/shadow-learning.mjs): scores with ranges, edge over doing nothing, blind spots and lessons.
+    learning:await this.ctx.storage.get<any>('learningSummary')||null,learningStatus:await this.ctx.storage.get<any>('learningStatus')||null,entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
   }
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse'),phone=await this.ctx.storage.get<any>('phoneAlerts');return Response.json({...runtime,phone:{configured:!!(this.env.PUSHOVER_TOKEN&&this.env.PUSHOVER_USER),primed:!!phone?.primed,sent:phone?.sent||0,lastSentAt:phone?.lastSentAt||null,lastError:phone?.lastError||null,lastErrorAt:phone?.lastErrorAt||null},attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}

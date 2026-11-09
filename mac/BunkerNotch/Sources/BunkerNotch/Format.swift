@@ -232,6 +232,13 @@ enum Format {
         let cuts = sc.winnersCut > 0 ? " · " + count(sc.winnersCut, "corte em vencedor", "cortes em vencedores") : ""
         return "Placar \(sc.days ?? 7) dias: acertou \(sc.right) de \(sc.graded) (\(pct)%)" + cuts
     }
+    /// "Memória 12 dias: acertou 40 de 58 (69%, faixa 56–79%) · 2 pontos cegos em 7 dias" (a range, never a promise).
+    static func shadowMemory(_ l: Summary.ShadowLearning) -> String {
+        let pct = l.graded > 0 ? Int((Double(l.right) / Double(l.graded) * 100).rounded()) : 0
+        let range = (l.low != nil && l.high != nil) ? ", faixa \(Int((l.low! * 100).rounded()))–\(Int((l.high! * 100).rounded()))%" : ""
+        let blind = (l.blindSpots ?? 0) > 0 ? " · " + count(l.blindSpots ?? 0, "ponto cego", "pontos cegos") + " em 7 dias" : ""
+        return "Memória \(count(l.days, "dia", "dias")): acertou \(l.right) de \(l.graded) (\(pct)%\(range))" + blind
+    }
     static func shadowOutcome(_ item: Summary.ShadowItem) -> String {
         if item.owner != nil { return item.action == "status" ? (item.after?["status"]?.text == "PAUSED" ? "pausada por você" : "ativada por você") : "ajustada por você" }
         if let m = item.manager { let who = m.actor ?? "gestor"; let mins = m.minutesAfter ?? 0; return mins > 0 ? "\(who) fez \(mins) min depois" : "\(who) fez antes" }
