@@ -7,6 +7,8 @@ import {authorizeCloudDispatch} from '../lib/cloud-dispatch-guard.mjs';
 import {autonomousWorkPlan} from '../lib/autonomous-work.mjs';
 import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
 import {recordDirectOrder} from '../lib/owner-direct-order.mjs';
+import {authorizeCloudDispatch as edgeDispatch} from '../supabase/functions/malva-mcp/cloud-dispatch-guard.mjs';
+import {orderAlertTitle,phoneAlerts} from '../lib/phone-alerts.mjs';
 
 // Synthetic data only: no real project, account or campaign. Nothing here calls a provider.
 const now=Date.parse('2026-11-09T15:00:00Z'),date=n=>new Date(n).toISOString();
@@ -131,4 +133,24 @@ test('owner events and log: kill keeps permissions; the log does not repeat the 
  assert.match(s.events[0].text,/desligada/);
  const g=autonomyGrant(s,pause(),{now}),e=autonomyLogEntry(pause(),g,{kind:'blocked',blockers:g.blockers},now);
  assert.equal(mergeAutonomyLog(mergeAutonomyLog([],[e]),[{...e,at:date(now+60000)}]).length,1);
+});
+
+test('dispatch fence (Worker and Edge Function copies): a Bunk order needs the general switch still on',()=>{
+ for(const guard of [authorizeCloudDispatch,edgeDispatch]){
+  const s=withConfig(),p=recordAutonomyOrder(s,pause(),{live:live(),now}).proposal,t=now+2000;
+  const e=claimExecution(s,{proposalId:p.id,version:1,signature:p.signature,clientId:'c',executionRef:'cf'},t),lease={id:e.id,claimId:e.claimId,executionRef:'cf'};
+  const prepared=prepareExecution(s,{...lease,clientId:'p',observation:observation(row(),t+500)},t+1000);submitExecution(s,{...lease,clientId:'s'},t+2000);
+  const input={tool:'tracking_set_ad_status',args:prepared.command.arguments,execution:{id:e.id,submitClientId:'s'}};
+  assert.equal(guard(s,input,t+3000).proposalId,p.id);
+  killAutonomy(s,'web:owner',t+2500);
+  assert.throws(()=>guard(s,input,t+3000),/MCP_APPROVAL_REQUIRED/,'switched off between submit and dispatch: nothing is sent');
+ }
+});
+
+test('phone and notch alerts say when the order is the Bunk',()=>{
+ assert.equal(orderAlertTitle({stage:'confirmed'}),'Ordem confirmada na Meta');
+ assert.equal(orderAlertTitle({stage:'confirmed',by:'bunk'}),'Bunk (autonomia): ordem confirmada na Meta');
+ assert.equal(orderAlertTitle({stage:'verify',by:'bunk'}),'Bunk (autonomia): ordem enviada: conferir na Meta');
+ const out=phoneAlerts({orders:[{id:'x',stage:'failed',by:'bunk',campaign:'Exemplo',action:'status',before:{status:'ACTIVE'},after:{status:'PAUSED'}}]},{primed:true,seen:{}},{now});
+ assert.equal(out.fresh[0].title,'Bunk (autonomia): ordem não enviada');
 });

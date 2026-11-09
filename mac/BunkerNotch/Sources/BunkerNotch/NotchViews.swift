@@ -622,11 +622,12 @@ struct NowTab: View {
                 }
             }
             if let orders = s.orders, !orders.isEmpty {
-                SectionHeader(title: "Suas ordens · 24h", detail: "Touch ID → executor → Malva → releitura")
+                let bunk = orders.contains { $0.isBunk }
+                SectionHeader(title: bunk ? "Ordens · 24h" : "Suas ordens · 24h", detail: bunk ? "Suas (Touch ID) e do Bunk (autonomia) → executor → Malva → releitura" : "Touch ID → executor → Malva → releitura")
                 VStack(spacing: 2) {
                     ForEach(orders) { o in
                         ListRow(id: "or:" + o.id, symbol: Format.orderSymbols[o.stage] ?? "circle", tone: Format.orderTone(o.stage),
-                                title: o.campaign ?? "Campanha", subtitle: Format.orderChange(o) + (o.reason.map { " · " + $0 } ?? ""),
+                                title: (o.isBunk ? "Bunk · " : "") + (o.campaign ?? "Campanha"), subtitle: Format.orderChange(o) + (o.isBunk ? (o.rule.map { " · " + $0 } ?? " · autonomia") : "") + (o.reason.map { " · " + $0 } ?? ""),
                                 tag: Format.queueTag(project: showProject ? o.projectName : nil, account: o.account),
                                 value: o.label ?? o.stage, valueCaption: Format.relative(o.confirmedAt ?? o.sentAt ?? o.at))
                     }

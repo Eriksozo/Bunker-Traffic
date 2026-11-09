@@ -206,6 +206,11 @@ enum Format {
         }
     }
     /// "Reduzir · US$ 120,00 → US$ 90,00/dia" or "Pausar · ativa → pausada".
+    /// Alert title of an order receipt; a Bunk autonomy order says so first (same text as lib/phone-alerts.mjs).
+    static func orderAlertTitle(_ o: Summary.OrderReceipt) -> String {
+        let base = o.stage == "confirmed" ? "ordem confirmada na Meta" : o.stage == "failed" ? "ordem não enviada" : "ordem enviada: conferir na Meta"
+        return o.isBunk ? "Bunk (autonomia): " + base : base.prefix(1).uppercased() + base.dropFirst()
+    }
     static func orderChange(_ o: Summary.OrderReceipt) -> String {
         if o.action == "status" { return "Pausar · " + statusName(o.before?.status) + " → " + statusName(o.after?.status) }
         let b = o.before?.dailyBudget, a = o.after?.dailyBudget

@@ -164,6 +164,11 @@ enum SelfTest {
         check(receiptLine("100", "80")?.hasPrefix("Reduzir") == true, #line)
         check(receiptLine("100", "120")?.hasPrefix("Aumentar") == true, #line)
         check(receiptLine("null", "80")?.hasPrefix("Orçamento") == true, #line)
+        if let mine = try? JSONDecoder().decode(Summary.OrderReceipt.self, from: Data(#"{"id":"a","stage":"confirmed"}"#.utf8)),
+           let bunk = try? JSONDecoder().decode(Summary.OrderReceipt.self, from: Data(#"{"id":"b","stage":"failed","by":"bunk","rule":"Pausar campanha nova sem venda"}"#.utf8)) {
+            check(!mine.isBunk && Format.orderAlertTitle(mine) == "Ordem confirmada na Meta", #line)
+            check(bunk.isBunk && Format.orderAlertTitle(bunk) == "Bunk (autonomia): ordem não enviada", #line)
+        } else { check(false, #line) }
         let panelRect = CGRect(x: 500, y: 1000, width: 600, height: 80)
         check(NotchHover.near(CGPoint(x: 800, y: 1050), panel: panelRect) && NotchHover.near(CGPoint(x: 460, y: 960), panel: panelRect) && !NotchHover.near(CGPoint(x: 800, y: 500), panel: panelRect), #line)
         let scJSON = #"{"day":"2026-11-08","total":1,"byRule":{},"recent":[],"scorecard":{"days":7,"graded":14,"right":9,"wrong":5,"winnersCut":3,"stopped":2}}"#

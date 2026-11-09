@@ -318,12 +318,12 @@ final class Store: ObservableObject {
             }
         }
         if newSales > 0 && primed && !muted { saleTick &+= newSales }
-        // Receipts of the owner's direct orders: tell once when one ends (confirmed by the reread, failed or to verify).
+        // Receipts of the owner's direct orders and of Bunk autonomy orders: tell once when one ends (confirmed by the reread, failed or to verify).
         for o in s.orders ?? [] where ["confirmed", "failed", "verify"].contains(o.stage) {
             let key = "or:" + o.id + ":" + o.stage
             guard !seen.contains(key) else { continue }
             seen.insert(key)
-            let title = o.stage == "confirmed" ? "Ordem confirmada na Meta" : o.stage == "failed" ? "Ordem não enviada" : "Ordem enviada: conferir na Meta"
+            let title = Format.orderAlertTitle(o)
             fresh.append((key, title, (o.campaign ?? "Campanha") + " · " + Format.orderChange(o) + (o.reason.map { " · " + $0 } ?? ""), .order))
         }
         defer {

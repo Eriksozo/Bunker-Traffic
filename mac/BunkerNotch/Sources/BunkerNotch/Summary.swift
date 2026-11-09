@@ -156,6 +156,9 @@ struct Summary: Decodable, Equatable {
         /// queued · checking · sent · confirmed · verify · failed · expired
         let stage: String; let label: String?; let reason: String?; let source: String?
         let at: String?; let sentAt: String?; let confirmedAt: String?
+        /// "owner" (Touch ID) or "bunk" (autonomy order within the owner's permissions); rule label of a Bunk order.
+        let by: String?; let rule: String?
+        var isBunk: Bool { by == "bunk" }
     }
     struct Pace: Decodable, Equatable {
         let project: String?; let name: String?; let currency: String?
