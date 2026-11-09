@@ -233,6 +233,13 @@ enum SelfTest {
         _ = f.handle(.click); check(f.handle(.clickOutside) == .compact, #line)
         _ = f.handle(.click); check(f.handle(.idle) == .compact, #line)
         check(f.handle(.alert(a)) == .alert(a) && f.handle(.click) == .open, #line) // clicking an alert opens
+        _ = f.handle(.fix); check(f.fixed, #line)                     // pin button
+        check(f.handle(.clickOutside) == .open && f.handle(.idle) == .open && f.handle(.mouseLeft) == .open, #line)
+        check(f.handle(.alert(a)) == .open, #line)
+        check(f.handle(.escape) == .compact && !f.fixed, #line)      // closing unpins
+        _ = f.handle(.fix); check(!f.fixed, #line)                   // pin only applies to an open island
+        _ = f.handle(.click); _ = f.handle(.fix); _ = f.handle(.fix); check(!f.fixed && f.handle(.clickOutside) == .compact, #line)
+        _ = f.handle(.click); _ = f.handle(.fix); check(f.handle(.toggle) == .compact && !f.fixed, #line)
     }
 
     private static func testDisplayChoice() {

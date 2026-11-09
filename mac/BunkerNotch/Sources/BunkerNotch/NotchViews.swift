@@ -295,6 +295,9 @@ struct Header: View {
             IconButton(symbol: "arrow.clockwise", help: "Atualizar agora", spinning: store.loading) { Task { await store.refresh() } }
             // Quiet on purpose: each screen keeps a single accent action (e.g. "Ajustar aqui").
             ActionButton(title: "Abrir Bunker", icon: "arrow.up.right", help: "Abrir os cards de decisão no navegador") { store.open("#cards") }
+            IconButton(symbol: notch.fixed ? "pin.fill" : "pin",
+                       help: notch.fixed ? "Fixado: não fecha ao clicar fora · clique para soltar" : "Fixar aberto (não fecha ao clicar fora nem por inatividade)",
+                       active: notch.fixed) { notch.onFix() }
             IconButton(symbol: "xmark", help: "Fechar (Esc) · abrir de novo com \(HotKey.label)") { notch.onClose() }
         }
     }
@@ -313,7 +316,7 @@ struct Header: View {
 }
 
 struct IconButton: View {
-    let symbol: String; let help: String; var spinning = false; let action: () -> Void
+    let symbol: String; let help: String; var spinning = false; var active = false; let action: () -> Void
     var body: some View {
         Button(action: action) {
             // Reduce Motion: no endless spin; the dimmed icon still says it is working.
@@ -323,8 +326,8 @@ struct IconButton: View {
                 .animation(spin ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: spin)
                 .opacity(spinning && !spin ? 0.5 : 1)
                 .frame(width: 24, height: 24)
-                .foregroundStyle(DS.Color.inkSoft)
-                .background(DS.Color.surface, in: Circle())
+                .foregroundStyle(active ? DS.Color.accent : DS.Color.inkSoft)
+                .background(active ? DS.Color.accent.opacity(0.18) : DS.Color.surface, in: Circle())
                 .contentShape(Circle())
         }.buttonStyle(.plain).help(help)
         // VoiceOver reads the purpose, not the symbol name ("arrow.clockwise").

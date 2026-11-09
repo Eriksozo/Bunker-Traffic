@@ -94,6 +94,9 @@ final class NotchState: ObservableObject {
     /// Set by the controller: views call it for clicks on the resting/peek/alert island.
     var onClick: () -> Void = {}
     var onClose: () -> Void = {}
+    /// Pin: the open island stays open (outside clicks and inactivity no longer fold it).
+    @Published var fixed = false
+    var onFix: () -> Void = {}
     init(geometry: NotchGeometry) { self.geometry = geometry }
 
     var expanded: Bool { mode == .open }
@@ -161,6 +164,7 @@ final class NotchController {
         panel.orderFrontRegardless()
         state.onClick = { [weak self] in self?.send(.click) }
         state.onClose = { [weak self] in self?.send(.escape) }
+        state.onFix = { [weak self] in self?.toggleFixed() }
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in guard let self, self.fsm.state == .compact else { return }; withAnimation(DS.Motion.quick) { self.state.tick &+= 1 } } }.tolerance = 0.5
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.relocate(force: true) }
@@ -233,7 +237,7 @@ final class NotchController {
             store.islandOpen = true
             NSApp.activate(ignoringOtherApps: true)
             panel.makeKey()
-            scheduleIdle()
+            if !fsm.fixed { scheduleIdle() }
         case .alert(let a):
             Announce.alert(a.title + ". " + a.detail)
             let work = DispatchWorkItem { [weak self] in Task { @MainActor in self?.send(.alertExpired) } }
@@ -241,6 +245,7 @@ final class NotchController {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.alertSeconds, execute: work)
         case .compact:
             store.islandOpen = false
+            state.fixed = false
             state.selected = nil
             state.webTarget = nil
             state.adjust = nil
@@ -249,6 +254,14 @@ final class NotchController {
         case .peek: store.islandOpen = false
         }
         updatePoll()
+    }
+
+    private func toggleFixed() {
+        guard fsm.isOpen else { return }
+        fsm.handle(.fix)
+        withAnimation(DS.Motion.quick) { state.fixed = fsm.fixed }
+        idleWork?.cancel()
+        if !fsm.fixed { scheduleIdle() }
     }
 
     private func enqueue(_ alert: IslandAlert) {
@@ -263,7 +276,7 @@ final class NotchController {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.idleSeconds, execute: work)
     }
     private func idleCheck() {
-        guard fsm.isOpen else { return }
+        guard fsm.isOpen, !fsm.fixed else { return }
         if wasInside { scheduleIdle() } else { send(.idle) }
     }
 

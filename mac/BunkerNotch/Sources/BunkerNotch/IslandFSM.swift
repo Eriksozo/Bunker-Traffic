@@ -14,23 +14,27 @@ struct IslandAlert: Equatable, Identifiable {
 /// alerts expand for a few seconds. Studied from the MIT-licensed notch app credited in mac/NOTICE.md.
 struct IslandFSM: Equatable {
     enum State: Equatable { case compact, peek, open, alert(IslandAlert) }
-    enum Input: Equatable { case mouseEntered, mouseLeft, click, toggle, escape, clickOutside, alert(IslandAlert), alertExpired, idle }
+    enum Input: Equatable { case mouseEntered, mouseLeft, click, toggle, escape, clickOutside, alert(IslandAlert), alertExpired, idle, fix }
 
     private(set) var state: State = .compact
     /// Open by click/hotkey stays open while the pointer visits menus outside the island.
     private(set) var pinned = false
+    /// Owner's pin button: an open island ignores outside clicks and inactivity until closed (X, Esc, hotkey).
+    private(set) var fixed = false
 
     var isOpen: Bool { state == .open }
 
     @discardableResult
     mutating func handle(_ input: Input) -> State {
+        if fixed, state == .open, input == .clickOutside || input == .idle { return state }
         switch (state, input) {
+        case (.open, .fix): fixed.toggle()
         case (.compact, .mouseEntered): state = .peek
         case (.peek, .mouseLeft): state = .compact
         case (.compact, .click), (.peek, .click), (.alert, .click): state = .open; pinned = true
-        case (.open, .toggle): state = .compact; pinned = false
+        case (.open, .toggle): state = .compact; pinned = false; fixed = false
         case (_, .toggle): state = .open; pinned = true
-        case (.open, .escape), (.open, .clickOutside), (.open, .idle): state = .compact; pinned = false
+        case (.open, .escape), (.open, .clickOutside), (.open, .idle): state = .compact; pinned = false; fixed = false
         case (.open, .mouseLeft): if !pinned { state = .compact }
         case (.alert, .escape), (.alert, .alertExpired): state = .compact
         case (.alert, .mouseLeft): break // the expiry timer folds it; leaving never hides an alert early

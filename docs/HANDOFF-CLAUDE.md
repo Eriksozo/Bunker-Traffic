@@ -685,3 +685,11 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Pedido do dono: agir direto nas linhas antecipadas pelo Bunk (Agora › Sombra do Bunk) para ficar mais rápido.
 - `shadowSummary` (`lib/autonomy-shadow.mjs`) passa `projectId`, `adAccountId` e `objectId` em cada linha recente (só identificadores; a sombra continua sem executar nada).
 - Notch: cada linha ainda não tratada (sem ação do gestor nem do dono) ganha um botão "Pausar", "Aumentar N%" ou "Reduzir N%" (`AdjustPreset.from`, `ShadowActionButton`). O botão só abre a ordem direta da campanha com essa ação já escolhida. O valor ao vivo e os bloqueios aparecem como antes, e nada é enviado sem "Executar agora" com Touch ID (mesmo fluxo da ordem direta de 07/11). Ativação não ganha botão, e percentual fora dos limites do servidor também não.
+
+## Notch: fixar aberto (registro escrito às 2026-11-09 12:32:10 UTC por `date -u`)
+
+- Pedido do dono: poder deixar o notch expandido quando precisar.
+- Botão de alfinete no cabeçalho, ao lado do X. Fixado, o notch não fecha ao clicar fora nem após 45 s de inatividade; avisos novos esperam na fila.
+- X, Esc (com o notch em foco) ou ⌥⌘B fecham e soltam o alfinete; a próxima abertura volta ao comportamento normal.
+- Lógica em `IslandFSM` (entrada `.fix`, estado `fixed`) com casos no self-test. Somente leitura de interface: nenhuma mudança em campanhas, executor ou segredos.
+- Validação: `mac/build.sh` (self-test ok, app reinstalado e reaberto) e testes Node que leem o Swift. Conferência visual fica com o dono.
