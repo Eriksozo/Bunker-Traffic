@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {betaCdf,chanceAbove,wilson,learningRecords,dailyBases,blindSpots,mergeLearning,learningKeys,learningStats,gateAccuracy,learningBrief,learningKey,learningPolicy} from '../lib/shadow-learning.mjs';
+import {betaCdf,chanceAbove,wilson,learningRecords,dailyBases,blindSpots,shadowObjects,mergeLearning,learningKeys,learningStats,gateAccuracy,learningBrief,learningKey,learningPolicy} from '../lib/shadow-learning.mjs';
 import {shadowRulePolicy} from '../lib/autonomy-shadow.mjs';
 
 // Synthetic fixtures only (no operational data). Brasília noon of 09/11/2026 = 15:00Z.
@@ -49,6 +49,11 @@ test('Blind spots: a person cut the Bunk never flagged; warnings, the Bunker its
  const out=blindSpots([warned],[ev(),ev({id:'h2',objectId:'c8'}),ev({id:'h3',origin:'bunker'}),ev({id:'h4',actor:'Meta'}),ev({id:'h5',at:'2026-11-09T14:58:00Z'}),ev({id:'h6',project:'zz'}),ev({id:'h7',action:'activate'}),ev({id:'h8',origin:'owner',action:'reduce'})],{projects:[P],now:NOW});
  assert.deepEqual(out.map(m=>[m.kind,m.by,m.day]),[['pause','manager','2026-11-09'],['reduce','owner','2026-11-09']]);
  assert.equal(blindSpots([{...warned,objectId:'c9',firstAt:'2026-11-07T11:00:00Z'}],[ev()],{now:NOW}).length,1,'a warning older than 36h does not cover it');
+ assert.equal(blindSpots([],[ev({name:'[ENGAJAMENTO] perfil'})],{now:NOW}).length,0,'warm-up is out of the sales scope');
+ // Only what the shadow evaluates: Meta campaign rows outside warm-up, never an ad set, an ad or another provider.
+ const objects=shadowObjects([yesterday(P,'2026-11-08',[row({externalId:'c9'}),row({externalId:'k1',provider:'kwai'}),row({externalId:'w1',name:'AQUECIMENTO'})]),{...yesterday(P,'2026-11-08',[row({externalId:'s1'})]),level:'adset'}]);
+ assert.deepEqual([...objects],[JSON.stringify([P,'a1','c9'])]);
+ assert.deepEqual(blindSpots([],[ev(),ev({id:'k',objectId:'k1'}),ev({id:'s',objectId:'s1'})],{objects,now:NOW}).map(m=>m.objectId),['c9']);
 });
 
 test('Memory shards: upsert by id, a miss counts once, base updates, caps and retention',()=>{
@@ -74,7 +79,7 @@ test('Stats: accuracy with range, edge over doing nothing, small projects pulled
  // 6 increases in Q, 3 right, on days where 75% of campaigns made money anyway.
  const q=Array.from({length:6},(_,i)=>cut({id:'q'+i,rule:'morning-increase',project:Q,after:{dailyBudget:130},grade:{verdict:i<3?'acertou':'errou',basis:'next',next:{roi:1}}}));
  const bases=[{day:'2026-11-06',project:P,campaigns:4,loss:1,profit:3},{day:'2026-11-06',project:Q,campaigns:4,loss:1,profit:3}];
- const misses=[1,2,3].map(i=>({id:'m'+i,day:'2026-11-08',project:Q,kind:i<3?'pause':'reduce',by:'manager',at:'2026-11-08T12:00:00Z'}));
+ const misses=[1,2,3,4].map(i=>({id:'m'+i,day:'2026-11-08',project:Q,kind:i<3?'pause':i<4?'reduce':'increase',by:'manager',at:'2026-11-08T12:00:00Z'}));
  const shards=shardsOf(mergeLearning(new Map(),learningRecords([...p,...q]),misses,{now:NOW,bases}).put);
  const st=learningStats(shards,{now:NOW,names:{[Q]:'Projeto Q'}});
  const r=st.rules['bad-day-reduce'],m=st.rules['morning-increase'];
@@ -85,7 +90,8 @@ test('Stats: accuracy with range, edge over doing nothing, small projects pulled
  assert.deepEqual([m.accuracy,m.base.expected],[0.5,0.75]);
  assert.ok(m.base.chanceBetter<0.2,'raising here did worse than leaving it');
  assert.equal(r.projects[P].shrunk,r.accuracy,'one project: its own rate');
- assert.deepEqual([st.memory.days,st.memory.records,st.memory.misses,st.blindSpots.total],[2,18,3,3]);
+ assert.deepEqual([st.memory.days,st.memory.records,st.memory.misses,st.blindSpots.total,st.blindSpots.increases],[2,18,4,3,1],'blind spots are cuts; raises apart');
+ assert.equal(learningBrief(st,{project:Q}).blindSpots,3);
  assert.equal(st.overall.graded,18);
  const kinds=st.lessons.map(l=>l.kind);
  assert.ok(kinds.includes('vantagem')&&kinds.includes('sem-vantagem')&&kinds.includes('ponto-cego')&&kinds.includes('vencedor'),kinds.join(','));

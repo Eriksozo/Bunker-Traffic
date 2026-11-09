@@ -21,7 +21,7 @@ import {expiredAttribution,usableAttributions} from '../lib/change-attribution.m
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 import {ownerShadowPolicy,evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
-import {learningPolicy,learningRecords,blindSpots,dailyBases,learningKeys,mergeLearning,learningStats,gateAccuracy,learningBrief} from '../lib/shadow-learning.mjs';
+import {learningPolicy,learningRecords,blindSpots,shadowObjects,dailyBases,learningKeys,mergeLearning,learningStats,gateAccuracy,learningBrief} from '../lib/shadow-learning.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {metaLiveTargets,overlayMetaItems,liveTodayState,liveRowIndex,freshMeta} from '../lib/meta-display.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
@@ -168,7 +168,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const started=Date.now();
   const projects=Object.keys(policy?.projects||{}).filter(p=>state?.config?.[p]&&policy.projects[p]?.enabled!==false);
   const zones:Record<string,string>={};for(const s of state.snapshots||[])if(s?.projectId&&typeof s.timezone==='string'&&!zones[s.projectId])zones[s.projectId]=s.timezone;
-  const records=learningRecords(entries),misses=blindSpots(entries,events,{projects,timezoneOf:(p:string)=>zones[p],now}),bases=dailyBases(state.snapshots).filter((b:any)=>projects.includes(b.project));
+  const records=learningRecords(entries),misses=blindSpots(entries,events,{projects,objects:shadowObjects(state.snapshots),timezoneOf:(p:string)=>zones[p],now}),bases=dailyBases(state.snapshots).filter((b:any)=>projects.includes(b.project));
   const keys=learningKeys(records,misses,bases),existing=new Map<string,any>();
   for(let i=0;i<keys.length;i+=128){const got=await this.ctx.storage.get<any>(keys.slice(i,i+128));if(got instanceof Map)for(const [k,v] of got)existing.set(k,v);}
   const changed=Object.entries(mergeLearning(existing,records,misses,{now,bases}).put);

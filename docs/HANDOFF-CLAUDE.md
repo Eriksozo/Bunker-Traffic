@@ -767,4 +767,5 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Nota provisória em D+1 e final em D+3, por causa do atraso de atribuição.
   - Usar as lições como contexto das análises dos agentes.
   - Limiar de pausa por projeto aprendido do histórico (curva de primeira venda por gasto), sempre como proposta ao dono.
+- Pontos cegos contam só o que a Sombra avalia: campanhas Meta de vendas (`shadowObjects`). Ficam de fora conjunto, anúncio, aquecimento e outra plataforma. A contagem do notch soma só cortes; aumentos sem aviso ficam à parte (`blindSpots.increases`).
 - Continua sombra: nada é executado sem o dono.
