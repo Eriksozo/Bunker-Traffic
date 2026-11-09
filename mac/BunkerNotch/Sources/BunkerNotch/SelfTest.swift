@@ -313,6 +313,13 @@ enum SelfTest {
         check(pause["percent"] == nil && pause["after"] == nil && OwnerAdjust.directLine(d, action: "pause", percent: nil).hasPrefix("Pausar"), #line)
         let noDirect = try? JSONDecoder().decode(OwnerCards.self, from: Data(#"{"revision":1,"paused":false,"cards":[],"approvals":[]}"#.utf8))
         check(noDirect != nil && noDirect?.directOrder == nil && !OwnerAdjust.canDirectOrder(nil, action: "pause"), #line)
+        // Owner's daily-budget ceiling: older servers omit it; past it an increase is not executable, a reduce always is.
+        check(d.budgetCap == nil && OwnerAdjust.capProblem("increase", 200, cap: nil, current: 95.1) == nil, #line)
+        let cJson = dJson.replacingOccurrences(of: #""campaign":"C""#, with: #""budgetCap":{"dailyBudget":120,"currency":"USD","maxIncreasePercent":26},"campaign":"C""#)
+        guard let cd = (try? JSONDecoder().decode(OwnerCards.self, from: Data(cJson.utf8)))?.directOrder, let cap = cd.budgetCap else { check(false, #line); return }
+        check(cap.dailyBudget == 120 && OwnerAdjust.capProblem("increase", OwnerAdjust.newBudget(95.1, action: "increase", percent: 26), cap: cap, current: 95.1) == nil, #line)
+        check(OwnerAdjust.capProblem("increase", OwnerAdjust.newBudget(95.1, action: "increase", percent: 30), cap: cap, current: 95.1)?.hasSuffix("Aumento máximo agora: 26%.") == true, #line)
+        check(OwnerAdjust.capProblem("reduce", 200, cap: cap, current: 95.1) == nil && OwnerAdjust.capProblem("increase", 130, cap: cap, current: 120)?.contains("já está no teto") == true, #line)
         let key = P256.Signing.PrivateKey()
         guard let body = try? OwnerKey.envelope(input: review, payloadSigner: { try key.signature(for: $0).rawRepresentation }, key: key.publicKey),
               let env = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let payload = Data(base64Encoded: env["payload"] as? String ?? ""),

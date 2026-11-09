@@ -769,3 +769,10 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Limiar de pausa por projeto aprendido do histórico (curva de primeira venda por gasto), sempre como proposta ao dono.
 - Pontos cegos contam só o que a Sombra avalia: campanhas Meta de vendas (`shadowObjects`). Ficam de fora conjunto, anúncio, aquecimento e outra plataforma. A contagem do notch soma só cortes; aumentos sem aviso ficam à parte (`blindSpots.increases`).
 - Continua sombra: nada é executado sem o dono.
+
+## Teto do dono nas ordens digitadas à mão (registro escrito às 2026-11-09 16:24:40 UTC por `date -u`)
+
+- Decisão do proprietário de 09/11/2026 ("Yes, check the cap"): a ordem direta do notch e a ordem do card passam pelo mesmo teto de orçamento diário que a Sombra usa (`budgetCaps[conta]`, senão `budgetCap`). Regra em `lib/owner-budget-cap.mjs`; a política vem dos secrets do Worker por `lib/owner-policy.ts` (só leitura em memória, nunca impressa nem devolvida).
+- Aumento acima do teto: recusado antes de gravar (`DIRECT_ORDER_CAP` na ordem direta; erro com o mesmo texto no card), com o maior percentual possível. Redução, pausa, "Pedir à equipe" e "Já fiz" não são limitados. Sem teto configurado, sem limite (como antes). Reenvio de ordem já registrada devolve o recibo sem nova conferência.
+- O notch recebe `budgetCap` / `orderBudgetCap` (valor, moeda, aumento máximo), mostra "Seu teto" e desliga só "Executar agora"; no teto, "Aumentar" fica indisponível.
+- Pendente: conferir em produção quais projetos têm teto configurado (a leitura da Sombra mostra "Teto de orçamento do dono não definido" onde falta).

@@ -14,8 +14,9 @@ import {learningCyclePlan,recordLearningReview} from './learning-cycle.mjs';
 import {autonomousWorkPlan} from './autonomous-work.mjs';
 import {requestLiveRefresh} from './owner-applied.mjs';
 
-/** `opts.live`: the live campaign row the server read for an owner order (never taken from the request). */
-export function ownerAutonomy(state:any,input:any,ownerId:string,opts:{live?:any}={}){
+/** `opts.live`: the live campaign row the server read for an owner order (never taken from the request).
+ * `opts.policy`: the parsed private Sombra policy (Worker secrets), for the owner's daily-budget ceiling. */
+export function ownerAutonomy(state:any,input:any,ownerId:string,opts:{live?:any,policy?:any}={}){
  if(input.op==='reviewBatch')return requestReviewBatch(state,input,ownerId);
  if(['incidentReport','incidentUpdate'].includes(input.op)){const record=recordIncident(state,input,ownerId);invalidateIncidentContext(state,record);return record;}
  if(input.op==='cardReopen')return reopenDecision(state,input,ownerId);

@@ -9,6 +9,7 @@ import {liveOrderRow} from '@/lib/owner-order-live.mjs';
 import {recordDirectOrder,DirectOrderError} from '@/lib/owner-direct-order.mjs';
 import {decisionContingency} from '@/lib/decision-contingency.mjs';
 import {requestLiveRefresh} from '@/lib/owner-applied.mjs';
+import {ownerPolicy} from '@/lib/owner-policy';
 export const dynamic='force-dynamic';
 const response=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 /** Wakes the Cloudflare executor's fast lane (same object, same alarm): an approved order is sent in seconds instead of
@@ -37,7 +38,7 @@ async function directOrder(input:any,owner:string){
    if(!live)throw new DirectOrderError('Sem leitura ao vivo desta campanha nos últimos 10 minutos. O Bunker pediu uma releitura agora; tente de novo em 30 segundos.','DIRECT_ORDER_NO_LIVE');
    const guard=decisionContingency({state,project,row:live.row,proposal:null,action:input.action,percent:input.percent,liveItems:latest.items});
    if(guard.blocked){const text=guard.blockers.join(' ');throw new DirectOrderError(text.startsWith('Contingência')?text:'Contingência: '+text,'DIRECT_ORDER_CONTINGENCY');}
-   const proposal=recordDirectOrder(state,input,owner,{live});
+   const proposal=recordDirectOrder(state,input,owner,{live,policy:ownerPolicy(state)});
    const saved=await commit(state,cur.revision) as any;
    await wakeExecutor(proposal.status==='Aprovada',[project]);
    return response({ok:true,op:input.op,status:proposal.status,id:proposal.id,revision:saved?.revision??null,before:proposal.payload.before,after:proposal.payload.after,currency:proposal.payload.currency,expiresAt:proposal.expiresAt});
@@ -66,7 +67,7 @@ export async function POST(req:Request){
   const cur=await readState() as any;
   if(input.revision!==cur.revision)return response({error:'Os dados mudaram desde que você abriu. Confira de novo e confirme.',code:'CONFLICT'},409);
   const context:any=await assertCurrentDecisionContext(cur.state,input);
-  const record=ownerAutonomy(cur.state,input,owner,{live:context?.live||null});
+  const record=ownerAutonomy(cur.state,input,owner,{live:context?.live||null,policy:ownerPolicy(cur.state)});
   const saved=await commit(cur.state,cur.revision) as any;
   const proposal=input.op==='proposalReview'?record:null;
   await wakeExecutor(proposal?.status==='Aprovada',[record?.project??input.project]);

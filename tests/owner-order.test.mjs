@@ -70,3 +70,17 @@ test('Only the Mac (Touch ID) may give a direct order; a web session cannot',()=
  assert.throws(()=>recordOwnerChoice(s,{project,cardId:c.id,signature:c.signature,choice:'pause',clientId:'web',ownerOrder:true},'owner@example.com',now),/Touch ID/);
  assert.equal(s.proposals?.length??0,0);
 });
+
+test('A card order increase past the owner ceiling is refused before anything is recorded; reduce stays possible',()=>{
+ const s=fixture(),c=card(s),policy={projects:{[project]:{budgetCaps:{account:120}}}};
+ const args={project,cardId:c.id,signature:c.signature,choice:'increase',percent:35,clientId:'order-cap',ownerOrder:true};
+ assert.throws(()=>recordOwnerChoice(s,args,'mac-touchid:test',now,{policy}),/teto de orçamento diário.*Aumento máximo agora: 20%/);
+ assert.equal((s.proposals||[]).length,0);assert.equal((s.ownerChoices||[]).length,0);
+ const ok=recordOwnerChoice(s,{...args,percent:20,clientId:'order-cap-ok'},'mac-touchid:test',now,{policy});
+ assert.equal(s.proposals.find(x=>x.id===ok.proposalId).payload.after.dailyBudget,120);
+ const cards=companionCards(fixture(),{project},1,now,{policy});
+ assert.deepEqual(cards.cards[0].orderBudgetCap,{dailyBudget:120,currency:'USD',maxIncreasePercent:20});
+ // An intent ("Pedir à equipe") is not an execution: the ceiling does not block it.
+ const t=fixture(),tc=card(t);
+ assert.doesNotThrow(()=>recordOwnerChoice(t,{project,cardId:tc.id,signature:tc.signature,choice:'increase',percent:35,clientId:'intent-cap'},'mac-touchid:test',now,{policy}));
+});

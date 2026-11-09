@@ -4,6 +4,7 @@ import {companionCards} from '@/lib/companion-cards.mjs';
 import {readLiveData} from '@/lib/live-data.mjs';
 import {storage} from '@/lib/storage';
 import {ALL_PROJECTS} from '@/lib/project-scope.mjs';
+import {ownerPolicy} from '@/lib/owner-policy';
 export const dynamic='force-dynamic';
 const response=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 /** Owner session or the Mac read credential (checked at the Cloudflare boundary). Read on demand when the owner opens an adjustment. */
@@ -24,6 +25,6 @@ export async function GET(req:Request){
    const hits=(all?.items||[]).filter((i:any)=>state.config?.[i.projectId]&&(i.snapshot?.rows||[]).some((r:any)=>r.adAccountId===account&&r.externalId===campaign));
    if(hits.length===1){project=hits[0].projectId;live={items:hits};}
   }
-  return response(companionCards(state,{project,adAccountId:account,objectId:campaign},revision,Date.now(),{liveItems:live?.items||[]}));
+  return response(companionCards(state,{project,adAccountId:account,objectId:campaign},revision,Date.now(),{liveItems:live?.items||[],policy:ownerPolicy(state)}));
  }catch{return response({error:'Cards indisponíveis agora.'},503);}
 }

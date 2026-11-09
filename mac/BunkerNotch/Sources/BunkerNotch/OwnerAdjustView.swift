@@ -119,9 +119,11 @@ struct OwnerAdjustView: View {
         let preview = OwnerAdjust.newBudget(budget, action: m.action, percent: percent)
         let percentProblem = OwnerAdjust.percentProblem(m.action, percent, current: budget)
         let validInput = !m.busy && !m.action.isEmpty && OwnerAdjust.validPercent(m.action, percent) && percentProblem == nil
+        let cap = direct?.budgetCap ?? card?.orderBudgetCap
+        let capProblem = OwnerAdjust.capProblem(m.action, preview, cap: cap, current: budget)
         // Older server without the direct order: keep the card-based order.
         let legacy = direct == nil && card != nil
-        let canOrder = validInput && (legacy ? revision != nil && OwnerAdjust.canOrder(card!, action: m.action) : OwnerAdjust.canDirectOrder(direct, action: m.action))
+        let canOrder = validInput && capProblem == nil && (legacy ? revision != nil && OwnerAdjust.canOrder(card!, action: m.action) : OwnerAdjust.canDirectOrder(direct, action: m.action))
         let canAsk = validInput && revision != nil && card.map { OwnerAdjust.allowed($0.intentActions, m.action) && OwnerAdjust.canDecide($0) } == true
         let canApplied = validInput && revision != nil && card.map { OwnerAdjust.allowed($0.intentActions, m.action) && OwnerAdjust.canReportApplied($0, action: m.action) } == true
         let blockers = direct?.blockers ?? card.map { $0.orderBlockers ?? $0.blockedReasons.filter { !OwnerAdjust.advisory($0) } } ?? []
@@ -194,6 +196,10 @@ struct OwnerAdjustView: View {
                         Spacer(minLength: 0)
                     }
                     if let problem = percentProblem { Text(problem).font(DS.Font.caption).foregroundStyle(DS.Color.bad) }
+                    else if let problem = capProblem { Text(problem).font(DS.Font.caption).foregroundStyle(DS.Color.bad) }
+                    else if m.action == "increase", let cap {
+                        Text("Seu teto: " + Format.money(cap.dailyBudget, currency: cap.currency) + "/dia").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                    }
                 }
             }
             // 2 · Exactly what changes (the same line Touch ID shows).

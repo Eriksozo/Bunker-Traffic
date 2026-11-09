@@ -29,16 +29,20 @@ struct OwnerCards: Decodable, Equatable {
         let orderActions: Actions?; let orderBlockers: [String]?
         /// Where a direct order takes its "before" value: the live reading (minutes old) or the analysis.
         let orderSource: OrderSource?
+        var orderBudgetCap: BudgetCap? = nil
         /// Current values for a direct order: the live reading when there is one.
         var orderBudget: Double? { orderSource?.dailyBudget ?? dailyBudget }
         var orderStatus: String? { orderSource?.status ?? status }
     }
     struct OrderSource: Decodable, Equatable { let kind: String; let at: String?; let status: String?; let dailyBudget: Double?; let currency: String? }
+    /// The owner's daily-budget ceiling for this campaign (same as the Sombra's). Older servers omit it.
+    struct BudgetCap: Decodable, Equatable { let dailyBudget: Double; let currency: String?; let maxIncreasePercent: Double? }
     /// Owner direct order for one campaign, from the live Malva reading only (works without an analysis card).
     struct DirectOrder: Decodable, Equatable {
         let project: String; let adAccountId: String; let objectId: String
         let available: Bool; let actions: Actions; let blockers: [String]
         let source: OrderSource?; let campaign: String?; let account: String?
+        var budgetCap: BudgetCap? = nil
         var budget: Double? { source?.dailyBudget }
         var status: String? { source?.status }
         var currency: String? { source?.currency }
@@ -106,6 +110,15 @@ enum OwnerAdjust {
         if action == "reduce", p >= 100 { return "Redução precisa ser menor que 100% (para parar, use Pausar)." }
         if let current, current > 0, newBudget(current, action: action, percent: p) == (current * 100).rounded() / 100 { return "Esse percentual não muda o orçamento em centavos." }
         return nil
+    }
+    /// An increase past the owner's ceiling cannot be executed (the server refuses it too). Asking the team or
+    /// reporting "Já fiz" stay possible: neither changes the Meta from here.
+    static func capProblem(_ action: String, _ preview: Double?, cap: OwnerCards.BudgetCap?, current: Double?) -> String? {
+        guard action == "increase", let cap, let preview, preview > cap.dailyBudget + 0.0005 else { return nil }
+        let money = Format.money(cap.dailyBudget, currency: cap.currency)
+        var max = 0.0
+        if let current, current > 0, current < cap.dailyBudget { max = min(1000, ((cap.dailyBudget / current - 1) * 100 + 1e-9).rounded(.down)) }
+        return "Acima do seu teto de orçamento diário (\(money)). " + (max >= 1 ? "Aumento máximo agora: \(Int(max))%." : "O orçamento atual já está no teto: só reduzir ou pausar.")
     }
     static func validPercent(_ action: String, _ p: Double?) -> Bool {
         guard action == "increase" || action == "reduce" else { return true }

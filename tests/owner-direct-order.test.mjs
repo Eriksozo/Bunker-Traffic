@@ -124,3 +124,35 @@ test('old finished direct orders leave the central after a week; unconfirmed dis
  assert.deepEqual(s.proposals.map(p=>p.id),[b.id]);
  assert.ok(a.id);
 });
+
+// Owner decision of 09/11/2026 ("Yes, check the cap"): hand-typed increases are held to the owner's daily-budget ceiling.
+test('a direct increase past the owner ceiling is refused with the largest allowed percent; reduce and pause are not limited',()=>{
+ const policy={projects:{[project]:{budgetCap:150}}};
+ const up=(pct,next,extra={})=>base({clientId:'notch-cap-'+pct,action:'increase',percent:pct,after:{dailyBudget:next},...extra});
+ const s=state();
+ assert.throws(()=>recordDirectOrder(s,up(60,160),owner,{live:live(),now,policy}),e=>e.code==='DIRECT_ORDER_CAP'&&/teto de orçamento diário/.test(e.message)&&/Aumento máximo agora: 50%/.test(e.message)&&e.detail.cap===150&&e.detail.maxIncreasePercent===50);
+ assert.equal(s.proposals.length,0,'nothing recorded');
+ assert.equal(recordDirectOrder(s,up(50,150),owner,{live:live(),now,policy}).payload.after.dailyBudget,150,'exactly at the ceiling is allowed');
+ assert.equal(recordDirectOrder(state(),base({clientId:'notch-cap-r',action:'reduce',percent:20,after:{dailyBudget:80}}),owner,{live:live(row({dailyBudget:100})),now,policy:{projects:{[project]:{budgetCap:50}}}}).payload.after.dailyBudget,80,'a reduce is never limited');
+ assert.equal(recordDirectOrder(state(),base({clientId:'notch-cap-p'}),owner,{live:live(),now,policy:{projects:{[project]:{budgetCap:50}}}}).payload.after.status,'PAUSED');
+ assert.equal(recordDirectOrder(state(),up(60,160),owner,{live:live(),now}).payload.after.dailyBudget,160,'no ceiling configured: no limit, as before');
+});
+
+test('the account ceiling wins over the project one; at the ceiling the notch view turns increase off and shows it',()=>{
+ const policy={projects:{[project]:{budgetCap:1000,budgetCaps:{[row().adAccountId]:120}}}};
+ assert.throws(()=>recordDirectOrder(state(),base({clientId:'notch-cap-a',action:'increase',percent:30,after:{dailyBudget:130}}),owner,{live:live(),now,policy}),e=>e.code==='DIRECT_ORDER_CAP'&&/máximo agora: 20%/.test(e.message));
+ const v=directOrderView(state(),{project,adAccountId:row().adAccountId,objectId:row().externalId},liveItems(),now,policy);
+ assert.deepEqual(v.budgetCap,{dailyBudget:120,currency:'USD',maxIncreasePercent:20});assert.equal(v.actions.increase,true);
+ const at=directOrderView(state(),{project,adAccountId:row().adAccountId,objectId:row().externalId},liveItems(row({dailyBudget:120})),now,policy);
+ assert.equal(at.actions.increase,false);assert.equal(at.actions.reduce,true);assert.equal(at.budgetCap.maxIncreasePercent,0);
+ assert.throws(()=>recordDirectOrder(state(),base({clientId:'notch-cap-b',action:'increase',percent:10,expected:{status:'ACTIVE',dailyBudget:120,currency:'USD'},after:{dailyBudget:132}}),owner,{live:live(row({dailyBudget:120})),now,policy}),/já está no teto: só reduzir ou pausar/);
+ assert.equal(directOrderView(state(),{project,adAccountId:row().adAccountId,objectId:row().externalId},liveItems(),now).budgetCap,null,'no policy: no ceiling shown');
+ const cards=companionCards(state(),{project,adAccountId:row().adAccountId,objectId:row().externalId},1,now,{liveItems:liveItems(),policy});
+ assert.equal(cards.directOrder.budgetCap.dailyBudget,120);
+});
+
+test('a resend of an order recorded before the ceiling changed gets its receipt back, never a new check',()=>{
+ const s=state(),input=base({clientId:'notch-cap-replay',action:'increase',percent:60,after:{dailyBudget:160}});
+ const p=recordDirectOrder(s,input,owner,{live:live(),now});
+ assert.equal(recordDirectOrder(s,input,owner,{live:null,now,policy:{projects:{[project]:{budgetCap:120}}}}).id,p.id);
+});
