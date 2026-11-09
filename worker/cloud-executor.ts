@@ -268,7 +268,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Display only (lib/meta-display.mjs): the Malva live rows with the Meta read on top; today's numbers and the details
   // of the notch follow them, the queue and every decision keep the analysis.
   const live:any=overlayMetaItems(this.liveItems||[],await this.ctx.storage.get<any>('metaLive'),{now}),todayState=liveTodayState(withAuthors,live,{now}),liveRows=liveRowIndex(live,{now}),board=projectBoard(withAuthors,now,{live:live as never[],todayState});
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null,pulseAt:shadowStatus?.failed?null:shadowStatus?.at||null}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
   await this.phoneAlerts(out['companion:all']).catch(()=>{});
  }
@@ -417,6 +417,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   try{
    // Every alarm: the fast lane (edit watch, woken owner orders, touched/stale live reads). A failure never blocks the pulse.
    await this.runLane();
+   // The lane does network I/O: an owner pause sent meanwhile must win over the copy read before it.
+   setting=await this.setting();if(!setting.enabled)return;
    const lastHeavy=await this.ctx.storage.get<number>('lastHeavyAt')||0;
    if(Date.now()-lastHeavy<changeWatchPolicy.heavyMs)return;
    const lane=()=>this.runLane();
@@ -424,7 +426,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // order or a status read. Same object and alarm; writes are serialized; the timer stops before the alarm ends.
    laneTimer=setInterval(()=>{void this.runLane();},changeWatchPolicy.laneMs);
    await this.ctx.storage.put('lastHeavyAt',Date.now());
-   await this.ctx.storage.put('runtime',{...setting,lastPulseAt:new Date().toISOString()});const engine=this.engine();
+   // A fresh read: the lane's history entries and a concurrent check result are kept, never overwritten.
+   await this.ctx.storage.put('runtime',{...(await this.setting()),lastPulseAt:new Date().toISOString()});const engine=this.engine();
    // Bounded work prevents one large project from owning a whole alarm forever.
    try{
    const started=Date.now();for(let n=0;n<4&&Date.now()-started<90000;n++){

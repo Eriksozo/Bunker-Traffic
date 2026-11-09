@@ -104,6 +104,8 @@ struct Summary: Decodable, Equatable {
         let owner: ShadowManager?
         /// Campaign ids so the owner can order the anticipated action himself (Touch ID). Older servers omit them.
         var projectId: String? = nil; var adAccountId: String? = nil; var objectId: String? = nil
+        /// Re-emitted by the latest shadow pass (false: the rule no longer proposes it). Alert-only rows never act.
+        var current: Bool? = nil; var alertOnly: Bool? = nil
     }
     struct Shadow: Decodable, Equatable {
         let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem]

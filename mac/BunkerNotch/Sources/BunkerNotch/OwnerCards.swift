@@ -63,9 +63,12 @@ struct AdjustPreset: Equatable {
     let action: String; let percent: Double?
 
     /// The shadow's anticipated move as the owner's own order, or nil when the notch cannot offer it:
-    /// already done (owner or manager), missing ids, activation, or a percent outside the server limits.
+    /// already done (owner or manager), missing ids, activation, or a percent outside the server limits; and only a
+    /// move the Bunk would actually make now: would execute, nothing blocking it (owner cap, a pause winning, alert only)
+    /// and re-emitted by the latest shadow pass (an older server without that mark gets no button).
     static func from(_ item: Summary.ShadowItem) -> AdjustPreset? {
         guard item.owner == nil, item.manager == nil, item.projectId != nil, item.adAccountId != nil, item.objectId != nil else { return nil }
+        guard item.wouldExecute == true, (item.blockedBy ?? []).isEmpty, item.alertOnly != true, item.current == true else { return nil }
         if item.action == "status" { return item.after?["status"]?.text == "PAUSED" ? AdjustPreset(action: "pause", percent: nil) : nil }
         guard item.action == "budget", let b = item.before?["dailyBudget"]?.number, let a = item.after?["dailyBudget"]?.number, b > 0, a != b else { return nil }
         let pct = (abs(a - b) / b * 1000).rounded() / 10

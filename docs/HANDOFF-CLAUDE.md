@@ -728,12 +728,10 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - A hora de pagamento vence a de criação.
   - Moeda ausente no painel de contas aparece como "moeda N/D", não US$. Texto vazio vira N/D, não 0.
   - Janelas novas exigem data ISO com fuso; em produção todas já vêm com Z.
-- **Não corrigido aqui (entregue à outra sessão, arquivos dela):**
-  - Executor: uma pausa enviada durante a faixa rápida é desfeita pelo `put('runtime',{...setting})` do pulso pesado.
-  - Notch, ação rápida:
-    - o botão "Pausar" aparece em linha só de alerta;
-    - o preset ignora `blockedBy` e `wouldExecute`, o que permite aumento acima do teto do dono;
-    - linhas antigas mantêm o botão.
+- **Segundo lote (a outra sessão publicou 7dde4d9 e liberou os arquivos):**
+  - Executor: depois da faixa rápida do alarme, a configuração é relida; uma pausa enviada nesse meio-tempo vence (nada pesado roda, o alarme não é reagendado) e o pulso grava \`runtime\` a partir de uma leitura nova, sem apagar o histórico da faixa. Teste em \`tests/executor-fast-lane.test.mjs\`.
+  - Notch, ação rápida: o botão só aparece quando o Bunk executaria agora — \`wouldExecute\`, \`blockedBy\` vazio (teto do dono, pausa que prevalece), sem "só alerta" e reemitido pela última passada da sombra (\`current\`, a partir de \`shadowStatus.at\`; servidor antigo, sem a marca, não ganha botão). O resumo passou a trazer \`lastAt\`, \`current\` e \`alertOnly\`.
+  - Ponto para o dono: \`recordDirectOrder\` não confere o teto de orçamento do dono (a sombra confere). O botão não oferece mais esse caso, mas uma ordem digitada à mão acima do teto ainda passa.
 - **Desfeito de propósito:** o incidente encerrado mais recente da própria campanha continua valendo sobre um incidente geral aberto, como manda o teste existente. A contingência segue conservadora.
 - **Limites conhecidos:** a pesquisa recomenda não mexer agora (som fora dos 12 mais recentes: depois, com o próximo build do Mac; data no nome a 61–182 dias: não vale; fila entre meia-noite e a análise: coberta por "Primeiras 24h").
 - **Pendências:**

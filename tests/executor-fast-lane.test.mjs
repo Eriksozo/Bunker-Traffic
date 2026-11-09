@@ -13,7 +13,7 @@ import {cloudNext} from '../lib/cloud-engine.mjs';
 const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 function executor({steps=[],fastSteps=[],enabled=true,policy={}}={}){
  const exports={},values=new Map([['runtime',{enabled,history:[]}]]),alarms=[];
- const storage={get:async k=>values.get(k),put:async(k,v)=>{if(typeof k==='object'){for(const [a,b] of Object.entries(k))values.set(a,b);}else values.set(k,v);},delete:async k=>values.delete(k),setAlarm:async at=>alarms.push(at)};
+ const storage={get:async k=>values.get(k),put:async(k,v)=>{if(typeof k==='object'){for(const [a,b] of Object.entries(k))values.set(a,b);}else values.set(k,v);},delete:async k=>values.delete(k),setAlarm:async at=>alarms.push(at),deleteAlarm:async()=>{alarms.length=0;}};
  class DurableObject{constructor(ctx,env){this.ctx=ctx;this.env=env;}}
  vm.runInNewContext(compiled,{exports,require:name=>name==='cloudflare:workers'?{DurableObject}:name.includes('cloud-failure-diagnostics')?{runtimeFailure}:name.includes('change-watch')?{...changeWatch,changeWatchPolicy:{...changeWatch.changeWatchPolicy,...policy}}:name.includes('owner-orders')?ownerOrders:name.includes('sales-feed')?salesFeed:{},Date,Response,setInterval,clearInterval});
  const e=new exports.BunkerCloudExecutor({storage},{}),calls=[];
@@ -86,4 +86,16 @@ test('the fast lane never asks the engine for model work',()=>{
  assert.deepEqual([...changeWatch.fastLaneKinds],['verify','followUp','execution']);
  const s={config:{},jobs:[],agents:{},snapshots:[],proposals:[],executions:[],messages:[{id:'q',project:'a',status:'Pendente',agentId:'traffic'}],collaborationRounds:[]};
  assert.equal(cloudNext(s,[],Date.now(),{only:changeWatch.fastLaneKinds}),null,'an owner question or stage is left to the heavy pulse');
+});
+test('a pause sent while the alarm fast lane runs wins: no heavy unit, no reschedule, lane history kept',async()=>{
+ const ctx=executor();const {e,calls,values,alarms}=ctx;let paused=false;
+ e.engine=()=>({step:async opts=>{
+  if(opts?.only){calls.push('fast');if(!paused){paused=true;await ctx.call({action:'pause'});return {kind:'execution',project:'proj-a',status:'confirmed'};}return {kind:'idle'};}
+  calls.push('heavy');return {kind:'idle'};
+ }});
+ await e.alarm();
+ assert.equal(values.get('runtime').enabled,false,'the pause is not undone');
+ assert.equal(calls.includes('heavy'),false,'no heavy unit after the pause');
+ assert.equal(alarms.length,0,'the alarm is not rescheduled');
+ assert.ok((values.get('runtime').history||[]).some(h=>h.kind==='execution'&&h.lane==='fast'),'the lane record survives');
 });

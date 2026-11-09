@@ -84,7 +84,7 @@ enum SelfTest {
         } else { check(false, #line) }
         // Quick action from the Bunk's anticipated move: only with the campaign ids and inside the server limits.
         func shadowItem(_ json: String) -> Summary.ShadowItem? { try? JSONDecoder().decode(Summary.ShadowItem.self, from: Data(json.utf8)) }
-        let ids = #""projectId":"p","adAccountId":"a","objectId":"1","wouldExecute":true"#
+        let ids = #""projectId":"p","adAccountId":"a","objectId":"1","wouldExecute":true,"current":true"#
         if let pause = shadowItem(#"{"action":"status","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"# + ids + "}"),
            let up = shadowItem(#"{"action":"budget","before":{"dailyBudget":236.24},"after":{"dailyBudget":354.36},"# + ids + "}"),
            let down = shadowItem(#"{"action":"budget","before":{"dailyBudget":100},"after":{"dailyBudget":87.5},"# + ids + "}"),
@@ -98,6 +98,19 @@ enum SelfTest {
             check(AdjustPreset.from(down)?.label == "Reduzir 12,5%" && AdjustPreset.from(down)?.percentText == "12.5", #line)
             check(OwnerAdjust.parsePercent(AdjustPreset.from(down)?.percentText ?? "") == 12.5, #line)
             check(AdjustPreset.from(activate) == nil && AdjustPreset.from(noIds) == nil && AdjustPreset.from(managed) == nil, #line)
+        } else { check(false, #line) }
+        // Only a move the Bunk would make now: blocked (owner cap, a pause winning), alert-only, stale or unmarked rows get no button.
+        let pauseRow = #"{"action":"status","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"projectId":"p","adAccountId":"a","objectId":"1""#
+        let upRow = #"{"action":"budget","before":{"dailyBudget":100},"after":{"dailyBudget":150},"projectId":"p","adAccountId":"a","objectId":"1""#
+        if let capped = shadowItem(upRow + #","wouldExecute":true,"current":true,"blockedBy":["Acima do teto do dono (120 BRL)"]}"#),
+           let alert = shadowItem(pauseRow + #","wouldExecute":true,"current":true,"alertOnly":true}"#),
+           let notExec = shadowItem(pauseRow + #","wouldExecute":false,"current":true}"#),
+           let stale = shadowItem(pauseRow + #","wouldExecute":true,"current":false}"#),
+           let unmarked = shadowItem(pauseRow + #","wouldExecute":true}"#),
+           let ok = shadowItem(upRow + #","wouldExecute":true,"current":true,"blockedBy":[]}"#) {
+            check(AdjustPreset.from(capped) == nil && AdjustPreset.from(alert) == nil && AdjustPreset.from(notExec) == nil, #line)
+            check(AdjustPreset.from(stale) == nil && AdjustPreset.from(unmarked) == nil, #line)
+            check(AdjustPreset.from(ok) == AdjustPreset(action: "increase", percent: 50), #line)
         } else { check(false, #line) }
         let f24JSON = #"{"ceiling":110,"counts":{"scheduled":1,"firstDay":2,"secondDay":0,"attention":1},"items":[{"projectName":"P","account":"A","adAccountId":"a","objectId":"1","campaign":"07/11 - [PRE]","stage":"first-day","stageLabel":"Primeiras 24h","level":"pause","spend":100,"checkouts":1,"limit":110,"pauseAt":99,"reason":"x","awaitingDelivery":false},{"campaign":"07/11 - [TESTE]","stage":"first-day","level":"sold","spend":80,"checkouts":3,"limit":null}],"scheduled":[{"campaign":"08/11 - [PRE]","project":"P","account":"A","startsOn":"08/11"}]}"#
         if let f = try? JSONDecoder().decode(Summary.First24h.self, from: Data(f24JSON.utf8)) {
