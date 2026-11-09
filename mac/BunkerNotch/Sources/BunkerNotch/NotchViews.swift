@@ -291,7 +291,7 @@ struct Header: View {
                 StatusDot(tone: freshnessTone, size: 6)
                 Text(freshness).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
             }
-            .help(store.summary?.analysisAt.map { "Base de análise: " + Format.stamp($0) } ?? "")
+            .help(Format.dataSources(store.summary))
             IconButton(symbol: "arrow.clockwise", help: "Atualizar agora", spinning: store.loading) { Task { await store.refresh() } }
             // Quiet on purpose: each screen keeps a single accent action (e.g. "Ajustar aqui").
             ActionButton(title: "Abrir Bunker", icon: "arrow.up.right", help: "Abrir os cards de decisão no navegador") { store.open("#cards") }
@@ -854,6 +854,7 @@ struct SystemTab: View {
             SectionHeader(title: "Dados")
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text("Base de análise: " + (s.analysisAt.map(Format.stamp) ?? "N/D")).font(DS.Font.body)
+                if s.liveAt != nil { Text(Format.dataSources(s)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted) }
                 Text("Resumo gerado " + Format.relative(s.generatedAt) + " · atualiza a cada 1 min com a ilha aberta, 2 min recolhida; espera mais após falhas e para com a tela bloqueada").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 if s.paused { Pill(text: "Escritório pausado", tone: .warn) }
             }.padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
@@ -964,6 +965,10 @@ struct CampaignDetailView: View {
                         if let p = item.project { Pill(text: p, tone: .tag) }
                         Pill(text: Format.statusName(item.detail?.status), tone: item.detail?.status == "ACTIVE" ? .good : .neutral)
                         Text("diário " + Format.money(item.detail?.dailyBudget, currency: item.detail?.budgetCurrency)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                        if let m = item.detail?.metaLiveAt {
+                            Text("Meta ao vivo " + Format.relative(m)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                                .help("Hoje, status e orçamento lidos direto da Meta e juntados à linha do Malva. Vendas e receita continuam do Malva; a ordem confere o valor do Malva.")
+                        }
                     }
                 }
                 Spacer()

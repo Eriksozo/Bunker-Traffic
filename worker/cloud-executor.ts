@@ -22,6 +22,7 @@ import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} fr
 import {evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
+import {metaLiveTargets,overlayMetaItems,liveTodayState,liveRowIndex,freshMeta} from '../lib/meta-display.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
 import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} from '../lib/account-limits.mjs';
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
@@ -140,30 +141,55 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.ctx.storage.put('first24h',{at:new Date(now).toISOString(),boards});
  }
  /**
-  * Live Meta read (docs/connections.md): schedule and today's delivery of new/scheduled campaigns, read-only,
-  * through the `meta-read` Edge Function (the token never leaves Supabase). Every 2 minutes; stored here only.
-  * A failure keeps the last read, which expires for the first-24h logic after 10 minutes.
+  * Live Meta read (docs/connections.md, owner decisions of 08/11 and 09/11/2026): status, daily budget and today's
+  * delivery of every active Meta campaign of the configured projects (new and scheduled ones first), read-only,
+  * through the `meta-read` Edge Function (the token never leaves Supabase). Every minute from the fast lane, and right
+  * after an owner order (`force`); stored here only, shown joined to the Malva rows (lib/meta-display.mjs).
+  * A failure keeps the last read, which stops being shown after 10 minutes; a rate-limit answer waits 10 minutes.
+  * Returns true when a new read was stored.
   */
- private async syncMetaLive(state:any){
-  if(!state||state.paused)return;
+ private metaReading=false;
+ private async syncMetaLive(state:any,{force=false}:{force?:boolean}={}):Promise<boolean>{
+  if(!state||state.paused||this.metaReading)return false;
   const now=Date.now(),prior=await this.ctx.storage.get<any>('metaLive'),last=Math.max(Date.parse(prior?.at||'')||0,Date.parse(prior?.failedAt||'')||0);
-  if(now-last<metaLivePolicy.refreshMs)return;
-  // Ad accounts Meta refused for this token (another business, no access) are skipped for 6 hours.
-  const skip=Object.fromEntries(Object.entries<any>(prior?.skip||{}).filter(([,at])=>now-Date.parse(at)<metaLivePolicy.skipMs));
-  const links=(await this.ctx.storage.get<any>('metaAccountLinks'))?.links||{};
-  const picks=metaLiveCandidates(this.liveItems||[],{now,limit:metaLivePolicy.maxIds});
-  const accounts=groupMetaAccounts(picks,links,{skip:new Set(Object.keys(skip)),maxAccounts:metaLivePolicy.maxAccounts});
-  const ids=accounts.flatMap((a:any)=>a.ids);
-  if(!ids.length){await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:new Date(now).toISOString(),items:{},requested:0,read:0,unlinked:picks.length,skip,errors:[]});return;}
+  if(now<(Date.parse(prior?.backoffUntil||'')||0))return false;
+  if(now-last<(force?10000:metaLivePolicy.refreshMs))return false;
+  this.metaReading=true;
   try{
-   const r:any=await this.db().rpc('metaRead',{accounts});
-   const items=Object.fromEntries((Array.isArray(r?.items)?r.items:[]).filter((i:any)=>typeof i?.id==='string').map((i:any)=>[i.id,i]));
-   for(const acc of Array.isArray(r?.skippedAccounts)?r.skippedAccounts:[])if(typeof acc==='string')skip[acc]=new Date(now).toISOString();
-   await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:typeof r?.at==='string'?r.at:new Date(now).toISOString(),items,requested:ids.length,accounts:accounts.length,unlinked:picks.length-ids.length,read:Object.keys(items).length,requests:r?.requests??null,fields:typeof r?.fields==='string'?r.fields:null,diagnostic:r?.diagnostic&&typeof r.diagnostic==='object'?{code:r.diagnostic.code??null,subcode:r.diagnostic.subcode??null,type:typeof r.diagnostic.type==='string'?r.diagnostic.type.slice(0,40):null,message:typeof r.diagnostic.message==='string'?r.diagnostic.message.slice(0,180):null}:null,skip,errors:Array.isArray(r?.errors)?r.errors.slice(0,10):[]});
-  }catch(e:any){
-   const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_READ_FAILED';
-   await this.ctx.storage.put('metaLive',{...(prior||{version:metaLivePolicy.version,items:{}}),failedAt:new Date(now).toISOString(),error:code});
-  }
+   // Ad accounts Meta refused for this token (another business, no access) are skipped for 6 hours.
+   const skip=Object.fromEntries(Object.entries<any>(prior?.skip||{}).filter(([,at])=>now-Date.parse(at)<metaLivePolicy.skipMs));
+   const links=(await this.ctx.storage.get<any>('metaAccountLinks'))?.links||{};
+   const picks=metaLiveTargets(this.liveItems||[],{now,limit:metaLivePolicy.maxIds});
+   const accounts=groupMetaAccounts(picks,links,{skip:new Set(Object.keys(skip)),maxAccounts:metaLivePolicy.maxAccounts});
+   const ids=accounts.flatMap((a:any)=>a.ids);
+   if(!ids.length){await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:new Date(now).toISOString(),items:{},requested:0,read:0,unlinked:picks.length,skip,errors:[]});return true;}
+   try{
+    const r:any=await this.db().rpc('metaRead',{accounts});
+    const items=Object.fromEntries((Array.isArray(r?.items)?r.items:[]).filter((i:any)=>typeof i?.id==='string').map((i:any)=>[i.id,i]));
+    for(const acc of Array.isArray(r?.skippedAccounts)?r.skippedAccounts:[])if(typeof acc==='string')skip[acc]=new Date(now).toISOString();
+    await this.ctx.storage.put('metaLive',{version:metaLivePolicy.version,at:typeof r?.at==='string'?r.at:new Date(now).toISOString(),items,requested:ids.length,accounts:accounts.length,unlinked:picks.length-ids.length,read:Object.keys(items).length,requests:r?.requests??null,direct:r?.direct??null,ms:Date.now()-now,forced:force,
+     backoffUntil:r?.rateLimited===true?new Date(now+metaLivePolicy.backoffMs).toISOString():null,
+     fields:typeof r?.fields==='string'?r.fields:null,diagnostic:r?.diagnostic&&typeof r.diagnostic==='object'?{code:r.diagnostic.code??null,subcode:r.diagnostic.subcode??null,type:typeof r.diagnostic.type==='string'?r.diagnostic.type.slice(0,40):null,message:typeof r.diagnostic.message==='string'?r.diagnostic.message.slice(0,180):null}:null,skip,errors:Array.isArray(r?.errors)?r.errors.slice(0,10):[]});
+    return true;
+   }catch(e:any){
+    const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_READ_FAILED';
+    await this.ctx.storage.put('metaLive',{...(prior||{version:metaLivePolicy.version,items:{}}),failedAt:new Date(now).toISOString(),error:code});
+    return false;
+   }
+  }finally{this.metaReading=false;}
+ }
+ /** A new Meta read reaches the notch and the web at once: summaries rebuilt from a fresh central read, then the pulse. */
+ private async metaTick(force=false){
+  if(!(await this.setting()).enabled||!this.liveItems?.length||this.metaReading)return;
+  // Cheap check first: the central is read only when a Meta read is due.
+  const prior=await this.ctx.storage.get<any>('metaLive'),now=Date.now(),last=Math.max(Date.parse(prior?.at||'')||0,Date.parse(prior?.failedAt||'')||0);
+  if(now<(Date.parse(prior?.backoffUntil||'')||0)||now-last<(force?10000:metaLivePolicy.refreshMs))return;
+  const central=await this.read();if(central.state.paused)return;
+  if(!(await this.syncMetaLive(central.state,{force}).catch(()=>false)))return;
+  const latest=await this.read();if(latest.state.paused)return;
+  await this.storeFirst24h(latest.state).catch(()=>{});
+  await this.storeCompanion(latest.state,await this.storedShadow()).catch(()=>{});
+  await this.bumpLive([]);
  }
  /**
   * Ad-account panel (docs/connections.md): Malva accounts per configured project plus the daily spending
@@ -238,8 +264,11 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
    rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,limitSource:r.limitSource,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
-  const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},live:any=this.liveItems||[],board=projectBoard(withAuthors,now,{live:live as never[]});
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[]}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={};
+  // Display only (lib/meta-display.mjs): the Malva live rows with the Meta read on top; today's numbers and the details
+  // of the notch follow them, the queue and every decision keep the analysis.
+  const live:any=overlayMetaItems(this.liveItems||[],await this.ctx.storage.get<any>('metaLive'),{now}),todayState=liveTodayState(withAuthors,live,{now}),liveRows=liveRowIndex(live,{now}),board=projectBoard(withAuthors,now,{live:live as never[],todayState});
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
   await this.phoneAlerts(out['companion:all']).catch(()=>{});
  }
@@ -278,6 +307,13 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   * never a model call, never a second executor); then a live reread of only the touched projects, or of the stalest one.
   */
  private async fastLane(){
+  this.laneOrderRan=false;
+  try{await this.fastLaneWork();}
+  // The Meta read runs after the lane's own work, every minute, and at once after an owner order went through it.
+  finally{await this.metaTick(this.laneOrderRan).catch(()=>{});}
+ }
+ private laneOrderRan=false;
+ private async fastLaneWork(){
   if(!(await this.setting()).enabled)return;
   const wake=await this.ctx.storage.get<any>('wake'),watchDue=Date.now()-this.lastWatchAt>=changeWatchPolicy.tickMs;
   // Order work belongs to the fast lane only (the heavy pulse skips it): a wake, or a sweep each minute for orders
@@ -294,7 +330,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     if(!(await this.setting()).enabled)break;
     let result:any;try{result=await this.engine().step({only:fastLaneKinds});}catch(e:any){await this.ctx.storage.put('runtime',runtimeFailure(await this.setting(),e));break;}
     if(['idle','blocked'].includes(result.kind))break;
-    ran=true;this.laneExecuted=true;await this.recordUnit({...result,lane:'fast'});if(result.project)touched.add(result.project);
+    ran=true;this.laneExecuted=true;this.laneOrderRan=true;await this.recordUnit({...result,lane:'fast'});if(result.project)touched.add(result.project);
    }
   }
   // The stalest live project always joins the reads once it is older than liveStaleMs, also when edits keep arriving
@@ -317,6 +353,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
   const runtime=await this.setting();
   if(input.action==='pulse'){const pulse=await this.ctx.storage.get<any>('syncPulse'),watch=await this.ctx.storage.get<any>('watchStatus');return Response.json({pulse:pulse||{version:0,at:null,last:null},watchedAt:watch?.at||null});}
+  // Read-only: the last Meta read while it is still fresh enough to show (lib/meta-display.mjs), for the web's live rows.
+  if(input.action==='metaLive'){const meta=freshMeta(await this.ctx.storage.get<any>('metaLive'));return Response.json({meta:meta?{at:new Date(meta.at).toISOString(),items:meta.items}:null});}
   if(input.action==='companion'){const project=typeof input.project==='string'&&input.project?input.project:'all',key='companion:'+project;const summary:any=await this.ctx.storage.get(key);
    // Sales arrive between pulses (webhook): merged at read time so the notch sees them at once.
    return Response.json(summary?{summary:{...summary,sales:salesView(await this.ctx.storage.get<any[]>('salesFeed'),{project,now:Date.now()})}}:{summary:null});}

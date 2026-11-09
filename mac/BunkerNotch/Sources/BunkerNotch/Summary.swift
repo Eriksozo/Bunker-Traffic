@@ -39,6 +39,9 @@ struct Summary: Decodable, Equatable {
         let projectId: String?; let malvaObjectId: String?; let status: String?; let dailyBudget: Double?; let budgetCurrency: String?; let reason: String?
         let windows: [String: Window?]
         let changes: [Activity]
+        /// Set when today, the status and the budget came from the live reading (Malva) with the Meta read on top
+        /// (lib/meta-display.mjs). Display only: an order still uses the Malva value checked by the server.
+        var liveAt: String? = nil; var metaLiveAt: String? = nil
     }
     struct BoardRow: Decodable, Equatable, Identifiable {
         let id: String; let name: String; let spend: Double?; let roas: Double?; let roi: Double?; let roasYesterday: Double?
@@ -67,6 +70,8 @@ struct Summary: Decodable, Equatable {
     let projects: [Project]
     let paused: Bool
     let analysisAt: String?
+    /// Today's numbers from the live readings: the oldest Malva reading and the oldest Meta read among them (nil: analysis).
+    var liveAt: String? = nil; var metaLiveAt: String? = nil
     let today: Today
     /// Today's spend pace against active daily budgets (lib/budget-pace.mjs). Reading aid, never a proposal.
     let pace: Pace?

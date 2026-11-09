@@ -693,3 +693,12 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - X, Esc (com o notch em foco) ou ⌥⌘B fecham e soltam o alfinete; a próxima abertura volta ao comportamento normal.
 - Lógica em `IslandFSM` (entrada `.fix`, estado `fixed`) com casos no self-test. Somente leitura de interface: nenhuma mudança em campanhas, executor ou segredos.
 - Validação: `mac/build.sh` (self-test ok, app reinstalado e reaberto) e testes Node que leem o Swift. Conferência visual fica com o dono.
+
+## Meta ao vivo junto do Malva no web e no notch (registro escrito às 2026-11-09 12:39:54 UTC por `date -u`)
+
+- Pedido do dono (09/11/2026): usar o token da Meta junto do Malva, associando a campanha pelo id, para os números do tráfego e a atualização depois de pausar ficarem mais rápidos, no web e no notch. Medido antes: o Malva estava cerca de 7 min atrás (`lastSyncAt` 12:17 numa leitura das 12:24); 526 campanhas ativas em ~130 contas.
+- Leitura (`lib/meta-live.mjs`, cópia na Edge Function `meta-read`): somente GET; agora todas as campanhas Meta ativas (novas e programadas primeiro, depois maior gasto), com status, orçamento diário, cliques e cliques no link; 8 contas em paralelo, até 600 campanhas/160 contas; campanha que saiu da lista de ativas é lida pelo id (até 40); limite de chamadas da Meta suspende 10 min.
+- Executor: a leitura saiu do ciclo pesado de 2 min para a via rápida, a cada 1 min e logo após uma ordem do dono (mín. 10 s); a cada leitura nova reconstrói o resumo do notch e move o pulso (o web recarrega). Ação `metaLive` do objeto serve a última leitura ainda válida (10 min).
+- Exibição (`lib/meta-display.mjs`): status/orçamento da Meta quando a leitura dela é mais nova que a do Malva; gasto, impressões e cliques quando à frente no mesmo dia; razões recalculadas com as fórmulas do Malva (ROAS = receita líquida/gasto; ROI = receita líquida − custos ÷ gasto + custos de anúncio); IC, pedidos e receita continuam do Malva, IC/compras do pixel à parte. Web: `/api/live` e o relógio "Meta ao vivo · HH:MM". Notch: números do dia, placar e detalhe da campanha ("Meta ao vivo há X min"); a fila continua na análise.
+- Fora do alcance de propósito: análise, propostas, aprovações, contingência e conferência de ordem continuam só com o Malva (teste garante). CLAUDE.md e `docs/connections.md` atualizados com a decisão.
+- Pendente: confirmar em produção a duração e o número de chamadas de uma leitura completa (`metaLive.ms`, `requests`) e que a Meta não devolve limite de chamadas no ritmo de 1 min.

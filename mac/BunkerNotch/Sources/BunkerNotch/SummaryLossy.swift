@@ -22,7 +22,7 @@ extension KeyedDecodingContainer {
 }
 
 extension Summary {
-    private enum Keys: String, CodingKey { case generatedAt, project, projectName, projects, paused, analysisAt, today, pace, orders, sales, queue, queueSize, board, approvals, activity, agents, executor, notice, shadow, first24h, accounts, storage }
+    private enum Keys: String, CodingKey { case generatedAt, project, projectName, projects, paused, analysisAt, liveAt, metaLiveAt, today, pace, orders, sales, queue, queueSize, board, approvals, activity, agents, executor, notice, shadow, first24h, accounts, storage }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         // Core: without these there is no reading to show.
@@ -32,6 +32,8 @@ extension Summary {
         projects = c.lossyList(Project.self, forKey: .projects) ?? []
         paused = c.optional(Bool.self, forKey: .paused) ?? false
         analysisAt = c.optional(String.self, forKey: .analysisAt)
+        liveAt = c.optional(String.self, forKey: .liveAt)
+        metaLiveAt = c.optional(String.self, forKey: .metaLiveAt)
         today = try c.decode(Today.self, forKey: .today)
         queue = c.lossyList(QueueItem.self, forKey: .queue) ?? []
         queueSize = c.optional(Int.self, forKey: .queueSize) ?? queue.count

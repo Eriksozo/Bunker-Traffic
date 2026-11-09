@@ -95,6 +95,14 @@ enum Format {
         guard let d = date(value) else { return "N/D" }
         return clockFormatter.string(from: d)
     }
+    /// Where today's numbers come from: "Hoje: Malva ao vivo 15:40 · Meta 15:42 · Base de análise: 09/11 15:10".
+    static func dataSources(_ s: Summary?) -> String {
+        guard let s else { return "" }
+        let base = "Base de análise: " + stamp(s.analysisAt)
+        guard let live = s.liveAt else { return base }
+        let meta = s.metaLiveAt.map { " · Meta " + clock($0) } ?? ""
+        return "Hoje: Malva ao vivo " + clock(live) + meta + " · " + base
+    }
     /// Short pace line: "no ritmo", "esgota 15:40", "sobra 30%", "orçamento do dia gasto" or "ritmo N/D".
     static func pace(_ p: Summary.Pace?) -> String {
         guard let p else { return "ritmo N/D" }

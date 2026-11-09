@@ -9,7 +9,7 @@ Deno.serve(async(req:Request)=>{
  if(!await authenticateServer(req,{service:Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||'',secretKeys:Deno.env.get('SUPABASE_SECRET_KEYS')}))return result({error:'META_SERVER_AUTH_REQUIRED'},401);
  if(req.method!=='POST')return result({error:'META_METHOD_NOT_ALLOWED'},405);
  try{
-  const raw=await req.text();if(raw.length>20000)return result({error:'META_REQUEST_LIMIT'},400);
+  const raw=await req.text();if(raw.length>40000)return result({error:'META_REQUEST_LIMIT'},400);
   const input=JSON.parse(raw),token=Deno.env.get('Meta_Acess_Token')||'';
   if(input&&typeof input==='object'&&input.action==='accounts'&&Object.keys(input).length===1){
    try{const list:any=await readMetaAccounts(fetch,token,{version:metaLivePolicy.graphVersion});return result({at:new Date().toISOString(),accounts:[...list],dropped:list.dropped||[],limitVersion:list.limitVersion||null,limitTried:list.limitTried||[]});}
