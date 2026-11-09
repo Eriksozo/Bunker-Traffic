@@ -30,7 +30,8 @@ test('Panel joins Malva projects with Meta by account id, flags near-limit and r
  const c=panel.rows.find(r=>r.accountId==='333');assert.equal(c.group,'FB Max');assert.ok(c.alerts.includes('Ativa sem gasto em 7 dias'));
  assert.equal(panel.rows[0].accountId,'111','active accounts first, highest use first');
  const json=JSON.stringify(panel);for(const leak of ['Pessoa','Rua','Alguém','nunca'])assert.equal(json.includes(leak),false);
- assert.deepEqual(panel.counts,{total:3,active:2,running:1,disabled:1,nearLimit:1,withLimit:1,listed:3});
+ assert.deepEqual(panel.counts,{total:3,active:2,running:1,disabled:1,nearLimit:1,withLimit:1,limitFromMalva:0,listed:3});
+ assert.equal('malvaLimit' in a,false);
 });
 test('Without the Meta token the panel still works and every limit is N/D',()=>{
  const panel=buildAccountPanel({projects:[{id:'p',name:'John',items:[malva('111','CA 1',{spendToday:1,spend7d:1,active:1})]}],meta:null,metaError:'META_TOKEN_MISSING',now});
@@ -100,4 +101,16 @@ test('Account search matches the name without accents or case, or the id with or
  assert.ok(accountMatches(r,''));assert.ok(accountMatches(r,'fbflix'));assert.ok(accountMatches(r,'ACAO'));assert.ok(accountMatches(r,'1137 brl'));
  assert.ok(accountMatches(r,'4567'));assert.ok(accountMatches(r,'act_1234567890'));
  assert.ok(!accountMatches(r,'alfa'));assert.ok(!accountMatches(r,'fbflix 999'));assert.ok(!accountMatches({name:'X',accountId:'1'},'act_'));
+});
+
+test('Malva daily limit fills the gap when Meta has none; Meta wins when both exist',()=>{
+ const m=(id,limit)=>{const x=malva(id,'CA '+id,{spendToday:1,spend7d:1,active:1});x.meta.dailyLimit=limit;return x;};
+ const panel=buildAccountPanel({projects:[{id:'p',name:'John',items:[m('111',500),m('222',400),m('333',null)]}],meta:[graph('111',undefined,450),graph('222',300,10),graph('333',undefined,5)],now});
+ const by=id=>panel.rows.find(r=>r.accountId===id);
+ assert.equal(by('111').dailyLimit,500);assert.equal(by('111').limitSource,'Malva');assert.equal(by('111').usedPct,90);assert.deepEqual(by('111').alerts,['Perto do limite diário']);
+ assert.equal(by('222').dailyLimit,300);assert.equal(by('222').limitSource,'Meta');
+ assert.equal(by('333').dailyLimit,null);assert.equal(by('333').limitSource,'N/D');
+ assert.equal(panel.counts.withLimit,2);assert.equal(panel.counts.limitFromMalva,1);
+ const off=buildAccountPanel({projects:[{id:'p',name:'John',items:[m('111',500)]}],meta:null,metaError:'META_TOKEN_MISSING',now});
+ assert.equal(off.rows[0].dailyLimit,500);assert.equal(off.rows[0].usedPct,null,'no Meta spend in the account currency, no use %');
 });

@@ -186,7 +186,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
      const via=typeof r?.limitVersion==='string'&&/^v\d{1,2}\.\d$/.test(r.limitVersion)?r.limitVersion:null;
      metaDiagnostic={code:null,subcode:null,limitVersion:via,message:via?`Limite diário lido pela versão ${via} da Meta (a atual não oferece mais: ${gone}).`:`Campos que a Meta não oferece mais: ${gone}${tried?'. Versões anteriores: '+tried:''}.`};}}}
   catch(e:any){metaError=/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'META_FAILED';metaDiagnostic=e?.diagnostic&&typeof e.diagnostic==='object'?{code:e.diagnostic.code??null,subcode:e.diagnostic.subcode??null,message:typeof e.diagnostic.message==='string'?e.diagnostic.message.slice(0,180):null}:null;}
-  await this.ctx.storage.put('accountsPanel',{...buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),projectErrors,metaDiagnostic});
+  const built:any=buildAccountPanel({projects,running:runningAccounts(state),meta,metaError}),fromMalva=built.counts?.limitFromMalva||0;
+  if(fromMalva&&metaDiagnostic?.message&&!metaDiagnostic.limitVersion)metaDiagnostic={...metaDiagnostic,message:`Limite diário vindo do Malva em ${fromMalva} ${fromMalva===1?'conta':'contas'}; a API da Meta não entrega mais esse campo.`};
+  await this.ctx.storage.put('accountsPanel',{...built,projectErrors,metaDiagnostic});
   // Malva account id → Meta ad account number, for the live Meta read of new campaigns (no other use).
   const links:Record<string,string>={};for(const p of projects)for(const a of p.items)if(a?.provider==='meta'&&typeof a.id==='string'&&/^(act_)?\d{5,25}$/.test(String(a.accountId??'')))links[a.id]=String(a.accountId).replace(/^act_/,'');
   if(Object.keys(links).length)await this.ctx.storage.put('metaAccountLinks',{at:new Date().toISOString(),links});
@@ -229,7 +231,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   if(!state)return;
   const shadowDay=(await this.ctx.storage.get<any>('shadowStatus'))?.day||undefined,accountsPanel=await this.ctx.storage.get<any>('accountsPanel'),first24h=(await this.ctx.storage.get<any>('first24h'))?.boards||[];
   const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
-   rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
+   rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,limitSource:r.limitSource,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
   const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},live:any=this.liveItems||[],board=projectBoard(withAuthors,now,{live:live as never[]});
   for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[]}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:shadowDay}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};

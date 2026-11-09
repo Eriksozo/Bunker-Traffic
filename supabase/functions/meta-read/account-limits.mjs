@@ -1,11 +1,11 @@
 /**
  * Ad-account panel: which accounts run which project, today's spend against the daily spending
  * limit Meta sets for each account, balance and alerts. Read-only, built from:
- * - Malva tracking_ad_accounts per configured project (status, balance, project usage);
+ * - Malva tracking_ad_accounts per configured project (status, balance, project usage, and `meta.dailyLimit` when Malva fills it);
  * - Meta Graph `/me/adaccounts` with a read-only token (`adtrust_dsl` and today's spend in the account currency).
  * Personal data from Malva (registered address, people with access, tokens) never enters the panel.
  */
-export const accountPanelPolicy=Object.freeze({version:6,refreshMs:30*60000,maxAccounts:250,nearLimit:0.8,graphVersion:'v23.0',
+export const accountPanelPolicy=Object.freeze({version:7,refreshMs:30*60000,maxAccounts:250,nearLimit:0.8,graphVersion:'v23.0',
  // Older Graph versions still served by Meta, tried in order only for the daily limit when the current one refuses it.
  limitFallback:Object.freeze(['v25.0','v24.0','v23.0','v22.0'])});
 export const metaAccountFields='account_id,name,account_status,disable_reason,currency,adtrust_dsl,timezone_name,insights.date_preset(today){spend}';
@@ -92,9 +92,11 @@ export function buildAccountPanel({projects=[],running=null,meta=null,metaError=
  const byId=new Map();
  for(const p of arr(projects))for(const a of arr(p.items)){
   if(a?.provider!=='meta')continue;const accountId=text(String(a.accountId??''),40);if(!accountId)continue;
-  const usage=a.usage||{},m=a.meta||{},row=byId.get(accountId)||{accountId,name:text(a.label),group:groupOf(a.label),projects:[],status:malvaStatus(m.statusKind),statusChangedAt:text(m.statusChangedAt,40),balance:num(m.balance),spendCap:num(m.spendCap),adsRunning:num(m.adsRunning),spend7dBrl:null,spendTodayBrl:null};
+  const usage=a.usage||{},m=a.meta||{},row=byId.get(accountId)||{accountId,name:text(a.label),group:groupOf(a.label),projects:[],status:malvaStatus(m.statusKind),statusChangedAt:text(m.statusChangedAt,40),balance:num(m.balance),spendCap:num(m.spendCap),adsRunning:num(m.adsRunning),malvaLimit:null,spend7dBrl:null,spendTodayBrl:null};
   const own=running?.[p.name],runs=own?(own instanceof Set?own.has(a.id):arr(own).includes(a.id)):!running&&(num(usage.spendToday)>0||num(usage.spend7d)>0||num(usage.activeCampaigns)>0);
   if(runs&&!row.projects.includes(p.name))row.projects.push(p.name);
+  // Meta's own daily limit as Malva reports it (account currency); used only when the Graph read has none.
+  if(row.malvaLimit===null&&num(m.dailyLimit)>0)row.malvaLimit=num(m.dailyLimit);
   // Account-level values: the same in every project that lists the account, never summed.
   if(num(usage.spendToday)!==null)row.spendTodayBrl=Math.max(row.spendTodayBrl??0,num(usage.spendToday));
   if(num(usage.spend7d)!==null)row.spend7dBrl=Math.max(row.spend7dBrl??0,num(usage.spend7d));
@@ -102,21 +104,21 @@ export function buildAccountPanel({projects=[],running=null,meta=null,metaError=
  }
  const metaById=new Map(arr(meta).map(normalizeMetaAccount).filter(Boolean).map(r=>[r.accountId,r]));
  const rows=[...byId.values()].map(r=>{
-  const mm=metaById.get(r.accountId),status=mm?.status||r.status,limit=mm?.dailyLimit??null,spend=mm?mm.todaySpend:null;
+  const {malvaLimit,...base}=r,mm=metaById.get(r.accountId),status=mm?.status||r.status,limit=mm?.dailyLimit??malvaLimit??null,spend=mm?mm.todaySpend:null;
   const used=limit&&finite(spend)?spend/limit:null,changed=Date.parse(r.statusChangedAt||'');
   const alerts=[];
   if(used!==null&&used>=accountPanelPolicy.nearLimit)alerts.push(used>=1?'Limite diário atingido':'Perto do limite diário');
   if(status&&status!=='active'&&finite(changed)&&now-changed<=86400000)alerts.push('Caiu nas últimas 24h');
   if(status==='active'&&!r.projects.length)alerts.push('Ativa sem gasto em 7 dias');
-  return {...r,status,statusLabel:statusLabels[status]||'N/D',currency:mm?.currency||null,timezone:mm?.timezone||null,dailyLimit:limit,todaySpend:spend,usedPct:used===null?null:Math.round(used*1000)/10,
-   limitSource:mm?'Meta':'N/D',runningLabel:status==='active'?(r.projects.length?'Rodando · '+r.projects.join(', '):'Sem gasto'):statusLabels[status]||'N/D',alerts};
+  return {...base,status,statusLabel:statusLabels[status]||'N/D',currency:mm?.currency||null,timezone:mm?.timezone||null,dailyLimit:limit,todaySpend:spend,usedPct:used===null?null:Math.round(used*1000)/10,
+   limitSource:mm?.dailyLimit!=null?'Meta':malvaLimit!=null&&limit!==null?'Malva':'N/D',runningLabel:status==='active'?(r.projects.length?'Rodando · '+r.projects.join(', '):'Sem gasto'):statusLabels[status]||'N/D',alerts};
  }).sort((a,b)=>(a.status==='active'?0:1)-(b.status==='active'?0:1)||(b.usedPct??-1)-(a.usedPct??-1)||a.group.localeCompare(b.group)||String(a.name).localeCompare(String(b.name)));
  const active=rows.filter(r=>r.status==='active');
  // Counters cover every account; the stored list keeps all active ones and only recent falls of the rest.
  const recent=r=>{const t=Date.parse(r.statusChangedAt||'');return finite(t)&&now-t<=7*86400000;};
  const kept=rows.filter(r=>r.status==='active'||recent(r)).slice(0,accountPanelPolicy.maxAccounts);
  return {version:accountPanelPolicy.version,generatedAt:new Date(now).toISOString(),metaConnected:Array.isArray(meta),metaError:metaError||null,
-  counts:{total:rows.length,active:active.length,running:active.filter(r=>r.projects.length).length,disabled:rows.filter(r=>r.status==='disabled').length,nearLimit:rows.filter(r=>r.alerts.some(a=>/limite/.test(a))).length,withLimit:rows.filter(r=>r.dailyLimit!==null).length,listed:kept.length},
+  counts:{total:rows.length,active:active.length,running:active.filter(r=>r.projects.length).length,disabled:rows.filter(r=>r.status==='disabled').length,nearLimit:rows.filter(r=>r.alerts.some(a=>/limite/.test(a))).length,withLimit:rows.filter(r=>r.dailyLimit!==null).length,limitFromMalva:rows.filter(r=>r.limitSource==='Malva').length,listed:kept.length},
   rows:kept};
 }
 
