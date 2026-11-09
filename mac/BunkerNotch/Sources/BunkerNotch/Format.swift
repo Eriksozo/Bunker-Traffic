@@ -239,9 +239,11 @@ enum Format {
     }
     /// "Memória 12 dias: acertou 40 de 58 (69%, faixa 56–79%) · 2 pontos cegos em 7 dias" (a range, never a promise).
     static func shadowMemory(_ l: Summary.ShadowLearning) -> String {
-        let pct = l.graded > 0 ? Int((Double(l.right) / Double(l.graded) * 100).rounded()) : 0
-        let range = (l.low != nil && l.high != nil) ? ", faixa \(Int((l.low! * 100).rounded()))–\(Int((l.high! * 100).rounded()))%" : ""
         let blind = (l.blindSpots ?? 0) > 0 ? " · " + count(l.blindSpots ?? 0, "ponto cego", "pontos cegos") + " em 7 dias" : ""
+        // Nothing graded yet: the accuracy is N/D, never 0%.
+        guard l.graded > 0 else { return "Memória: nenhuma decisão avaliada ainda" + blind }
+        let pct = Int((Double(l.right) / Double(l.graded) * 100).rounded())
+        let range = (l.low.map { $0.isFinite } ?? false) && (l.high.map { $0.isFinite } ?? false) ? ", faixa \(Int((l.low! * 100).rounded()))–\(Int((l.high! * 100).rounded()))%" : ""
         return "Memória \(count(l.days, "dia", "dias")): acertou \(l.right) de \(l.graded) (\(pct)%\(range))" + blind
     }
     static func shadowOutcome(_ item: Summary.ShadowItem) -> String {

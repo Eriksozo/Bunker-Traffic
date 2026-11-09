@@ -19,9 +19,10 @@ import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
-import {ownerShadowPolicy,evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
+import {ownerShadowPolicy,evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,shadowRulePolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
-import {learningPolicy,learningRecords,blindSpots,shadowObjects,dailyBases,learningKeys,mergeLearning,learningStats,gateAccuracy,learningBrief} from '../lib/shadow-learning.mjs';
+import {learningPolicy,learningRecords,shadowObjects,dailyBases,learningKeys,mergeLearning,learningStats,gateAccuracy,learningBrief} from '../lib/shadow-learning.mjs';
+import {teamActions,teamKey,recentTeamKeys,mergeTeam,gradeTeamShard} from '../lib/team-learning.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {metaLiveTargets,overlayMetaItems,liveTodayState,liveRowIndex,freshMeta} from '../lib/meta-display.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
@@ -174,9 +175,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const events=activityLog(withAuthors,{since:now-26*3600000,now});
   const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()],meta=await this.ctx.storage.get<any>('metaLive');
   // Owner decisions 08/11/2026: budget rules only become executable after their own graded accuracy proves itself.
-  // The score is the long memory of the current rule version (lib/shadow-learning.mjs), never fewer decisions than the 7 days kept here.
-  const learned=await this.ctx.storage.get<any>('learningSummary');
-  const accuracy=Object.fromEntries(scoreGatedRules.map(rule=>[rule,gateAccuracy(learned,rule,ruleAccuracy(prior,rule))]));
+  // The owner's 7-day count of the current rule version decides; the long memory (lib/shadow-learning.mjs) can only keep a
+  // rule as a suggestion (20+ graded decisions below 60%), never open it earlier.
+  // A memory whose last rebuild failed after this summary is not trusted: the gate then keeps proven rules as suggestions.
+  const learnedRaw=await this.ctx.storage.get<any>('learningSummary'),learnedStatus=await this.ctx.storage.get<any>('learningStatus');
+  const learned=learnedStatus?.ok===false&&Date.parse(learnedStatus.at||'')>Date.parse(learnedRaw?.at||'')?null:learnedRaw;
+  const accuracy=Object.fromEntries(scoreGatedRules.map(rule=>[rule,gateAccuracy(learned,rule,ruleAccuracy(prior,rule),{now})]));
   let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={},days:Record<string,string>={},batches:any[]=[];
   // Same as shadowLocalDay: the day of a pulse where every project was skipped (stale source), so "hoje" stays today.
   const fallbackDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -199,32 +203,72 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Autonomy (owner permissions): only decisions of this very pass; a failure never blocks the shadow.
   await this.autonomyAct(state,batches,now).catch(async(e:any)=>{await this.ctx.storage.put('autonomyStatus',{at:new Date().toISOString(),ok:false,error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   // The memory never blocks the shadow: a failure is recorded apart (code and short text only).
-  await this.storeLearning(state,merged,events,policy,now).catch(async(e:any)=>{await this.ctx.storage.put('learningStatus',{at:new Date().toISOString(),ok:false,code:'LEARNING_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
+  const evaluated=Object.keys(policy?.projects||{}).filter(p=>state.config?.[p]&&policy.projects[p]?.enabled!==false&&!skipped[p]);
+  await this.storeLearning(withAuthors,merged,events,policy,now,evaluated).catch(async(e:any)=>{await this.ctx.storage.put('learningStatus',{at:new Date().toISOString(),ok:false,code:'LEARNING_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   return merged;
  }
+ /** The names the owner acts under in Malva: the Malva connection's person (lib/team-learning.mjs). Read at most daily. */
+ private async ownerNames(now:number):Promise<string[]>{
+  const cur=await this.ctx.storage.get<any>('ownerIdentity'),known=Array.isArray(cur?.names)?cur.names:[];
+  // A good read is kept a day; a failed one is retried after an hour.
+  if(cur&&now-Date.parse(cur.at||'')<(cur.failed?3600000:24*3600000))return known;
+  let names=known,failed=false;
+  try{
+   const id:any=await Promise.race([this.engine().identity(),new Promise((_,reject)=>setTimeout(()=>reject(Error('OWNER_IDENTITY_TIMEOUT')),5000))]);
+   const n=id?.who?.person?.name;if(typeof n==='string'&&n.trim())names=[n.trim()];
+  }catch{failed=true;}
+  await this.ctx.storage.put('ownerIdentity',{names,at:new Date(now).toISOString(),...(failed?{failed:true}:{})});
+  return names;
+ }
  /**
-  * Long memory of the Sombra (lib/shadow-learning.mjs, owner request of 09/11/2026): graded decisions, blind spots and
-  * daily bases kept for 90 days in `learn:<day>:<project>`. Only the touched shards are read and written each pass; the
-  * summary (scores, ranges, edge over doing nothing, lessons) is rebuilt at most every 10 min, or hourly when idle.
+  * The UTC hours in which the Sombra really evaluated each project (a pass that was not skipped), kept 35 days: blind
+  * spots and anticipation are only claimed for moves made while it was watching.
   */
- private async storeLearning(state:any,entries:any[],events:any[],policy:any,now:number){
+ private async coverage(evaluated:string[],now:number){
+  const cur=(await this.ctx.storage.get<any>('learningCoverage'))||{},hour=new Date(now).toISOString().slice(0,13),oldest=new Date(now-35*86400000).toISOString().slice(0,13);
+  const next:Record<string,string[]>={};let changed=false;
+  for(const [p,list] of Object.entries(cur))if(Array.isArray(list)){const kept=list.filter((h:any)=>typeof h==='string'&&h>=oldest);next[p]=kept;if(kept.length!==list.length)changed=true;}
+  for(const p of evaluated){const list=next[p]||[];if(!list.includes(hour)){next[p]=[...list,hour];changed=true;}}
+  if(changed)await this.ctx.storage.put('learningCoverage',next);
+  return next;
+ }
+ /**
+  * Long memory of the Sombra and of people's moves (lib/shadow-learning.mjs, lib/team-learning.mjs; owner requests of
+  * 09/11/2026), 90 days in `learn:<day>:<project>` and `learn:<day>:<project>:team`. Only touched shards (plus the last 3
+  * days of team shards, for next-day grades) are read and written each pass. The summary (scores, ranges, edge, team
+  * patterns, proposals, lessons) is rebuilt at most every 10 min while there is news, at once after a rule or memory
+  * version change, and hourly otherwise. Read-only for everything outside this object: never a proposal or a command.
+  */
+ private async storeLearning(state:any,entries:any[],_events:any[],policy:any,now:number,evaluated:string[]=[]){
   const started=Date.now();
-  const projects=Object.keys(policy?.projects||{}).filter(p=>state?.config?.[p]&&policy.projects[p]?.enabled!==false);
-  const zones:Record<string,string>={};for(const s of state.snapshots||[])if(s?.projectId&&typeof s.timezone==='string'&&!zones[s.projectId])zones[s.projectId]=s.timezone;
-  const records=learningRecords(entries),misses=blindSpots(entries,events,{projects,objects:shadowObjects(state.snapshots),timezoneOf:(p:string)=>zones[p],now}),bases=dailyBases(state.snapshots).filter((b:any)=>projects.includes(b.project));
-  const keys=learningKeys(records,misses,bases),existing=new Map<string,any>();
-  for(let i=0;i<keys.length;i+=128){const got=await this.ctx.storage.get<any>(keys.slice(i,i+128));if(got instanceof Map)for(const [k,v] of got)existing.set(k,v);}
-  const changed=Object.entries(mergeLearning(existing,records,misses,{now,bases}).put);
-  for(let i=0;i<changed.length;i+=100)await this.ctx.storage.put(Object.fromEntries(changed.slice(i,i+100)));
-  const prev=await this.ctx.storage.get<any>('learningSummary'),age=now-Date.parse(prev?.at||'');
-  if(prev&&age<learningPolicy.summaryMaxAgeMs&&!(changed.length&&age>=learningPolicy.summaryEveryMs)){
-   await this.ctx.storage.put('learningStatus',{at:new Date(now).toISOString(),ok:true,written:changed.length,summarized:false,ms:Date.now()-started});return;
+  const projects=Object.keys(policy?.projects||{}).filter(p=>state?.config?.[p]&&policy.projects[p]?.enabled!==false),configured=Object.keys(state?.config||{});
+  const records=learningRecords(entries),bases=dailyBases(state.snapshots).filter((b:any)=>projects.includes(b.project));
+  const ownerNames=await this.ownerNames(now),coverage=await this.coverage(evaluated,now),paramsOf=(p:string)=>policy?.projects?.[p]||{};
+  // Campaigns only the live cut knows yet are in scope too (their context comes from that cut).
+  const objects=shadowObjects([...(state.snapshots||[]),...(this.liveItems||[]).map((i:any)=>i?.snapshot).filter(Boolean)]);
+  const team=teamActions({attributions:state.changeAttributions||[],state,entries,objects,ownerNames,liveItems:this.liveItems||[],paramsOf,now});
+  const zone=(p:string)=>(this.liveItems||[]).find((i:any)=>i.projectId===p)?.snapshot?.timezone||(state.snapshots||[]).find((x:any)=>x?.projectId===p&&x.timezone)?.timezone||'America/Sao_Paulo';
+  const teamKeys=[...new Set([...team.actions.map((a:any)=>teamKey(a.day,a.project)),...recentTeamKeys(configured,now,3,zone)])];
+  const keys=[...new Set([...learningKeys(records,bases),...teamKeys])],existing=new Map<string,any>();
+  for(let i=0;i<keys.length;i+=128){const got:any=await this.ctx.storage.get<any>(keys.slice(i,i+128));if(got&&typeof got[Symbol.iterator]==='function')for(const [k,v] of got)existing.set(k,v);}
+  const put:Record<string,any>={...mergeLearning(existing,records,{now,bases}).put,...mergeTeam(existing,team.actions,{drop:team.drop,aliases:team.aliases,dropMoves:team.dropMoves}).put};
+  for(const k of teamKeys){const g=gradeTeamShard(put[k]||existing.get(k),state.snapshots);if(g)put[k]=g;}
+  const changed=Object.entries(put);
+  // The news marker rides in the same write as the shards, so a skipped rebuild is never forgotten.
+  for(let i=0;i<changed.length;i+=100)await this.ctx.storage.put({...Object.fromEntries(changed.slice(i,i+100)),learningDirty:new Date(now).toISOString()});
+  const prev=await this.ctx.storage.get<any>('learningSummary'),age=now-Date.parse(prev?.at||''),dirty=changed.length>0||!!(await this.ctx.storage.get('learningDirty'));
+  // A new grade of a score-gated rule reaches the gate at once (no 10-min wait): the veto must never lag behind it.
+  const gatedNews=changed.some(([k,v]:[string,any])=>!k.endsWith(':team')&&Object.values(v?.records||{}).some((r:any)=>scoreGatedRules.includes(r.rule)&&(r.verdict==='acertou'||r.verdict==='errou')&&existing.get(k)?.records?.[r.id]?.verdict!==r.verdict));
+  const outdated=!prev||prev.version!==learningPolicy.version||prev.ruleVersion!==shadowRulePolicy.version||gatedNews;
+  if(!outdated&&age<learningPolicy.summaryMaxAgeMs&&!(dirty&&age>=learningPolicy.summaryEveryMs)){
+   await this.ctx.storage.put('learningStatus',{at:new Date(now).toISOString(),ok:true,written:changed.length,pending:dirty,team:team.actions.length,summarized:false,ms:Date.now()-started});return;
   }
-  const all=await this.ctx.storage.list<any>({prefix:'learn:'}),drop=mergeLearning(new Map(),[],[],{now,keys:[...all.keys()]}).drop,gone=new Set(drop);
+  const all=await this.ctx.storage.list<any>({prefix:'learn:'}),drop=mergeLearning(new Map(),[],{now,keys:[...all.keys()]}).drop,gone=new Set(drop);
   for(let i=0;i<drop.length;i+=128)await this.ctx.storage.delete(drop.slice(i,i+128));
   const names=Object.fromEntries(Object.entries(state.config||{}).map(([id,c]:[string,any])=>[id,c?.projectName||id]));
-  await this.ctx.storage.put('learningSummary',learningStats([...all].filter(([k])=>!gone.has(k)).map(([,v])=>v),{now,names}));
-  await this.ctx.storage.put('learningStatus',{at:new Date(now).toISOString(),ok:true,written:changed.length,dropped:drop.length,shards:all.size-drop.length,summarized:true,ms:Date.now()-started});
+  await this.ctx.storage.put('learningSummary',learningStats([...all].filter(([k])=>!gone.has(k)).map(([,v])=>v),{now,names,coverage,paramsOf}));
+  await this.ctx.storage.delete('learningDirty');
+  await this.ctx.storage.put('learningStatus',{at:new Date(now).toISOString(),ok:true,written:changed.length,dropped:drop.length,shards:all.size-drop.length,team:team.actions.length,ownerKnown:ownerNames.length>0,summarized:true,ms:Date.now()-started});
  }
  /**
   * "Primeiras 24h" board (docs/first-24h-protocol.md): scheduled and new campaigns of every configured project and
@@ -493,6 +537,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const identity=results[0],model=results[1],malva=identity.status==='fulfilled',ai=model.status==='fulfilled'&&model.value===true;
    const who=malva?identity.value.who:null;const error=!malva&&identity.status==='rejected'&&/^[A-Z_]{3,80}$/.test(identity.reason?.code||'')?identity.reason.code:!malva?'CLOUD_MALVA_UNAVAILABLE':!ai?'CLOUD_AI_UNAVAILABLE':null;
    const check={at:new Date().toISOString(),malva,ai,ads:!!who?.platforms.some((p:any)=>p.platform==='tracking'&&p.ads),workspaceId:who?.workspace.id||null,projects:malva?identity.value.projects.map((p:any)=>({id:p.id,name:p.name})):[],durationMs:Date.now()-started,...(error?{error}:{})};
+   // The Malva connection's person is the owner: his own Malva edits are learned as his (lib/team-learning.mjs). DO only.
+   const person=who?.person?.name;if(typeof person==='string'&&person.trim())await this.ctx.storage.put('ownerIdentity',{names:[person.trim()],at:new Date().toISOString()});
    const latest=await this.setting();await this.ctx.storage.put('runtime',{...latest,check,lastError:error});return Response.json(error?{error,check}:{ok:true,check},{status:error?503:200});
   }
   if(input.action==='enable'){

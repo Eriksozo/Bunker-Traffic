@@ -18,9 +18,11 @@ function state({today=[],closed={}}={}){
 const params={pauseTestMinSpend:200,pauseTestMinSpendNoCheckout:120,ticketFront:300,budgetCap:5000};
 const run=(s,opts={})=>evaluateShadow(s,{project:'p',params,now,...opts}).decisions;
 
-test('ruleAccuracy counts only graded right/wrong of that rule',()=>{
- const e=[{rule:'bad-day-reduce',grade:{verdict:'acertou'}},{rule:'bad-day-reduce',grade:{verdict:'errou'}},{rule:'bad-day-reduce',grade:{verdict:'N/D'}},{rule:'bad-day-reduce'},{rule:'morning-increase',grade:{verdict:'acertou'}}];
+test('ruleAccuracy counts only graded right/wrong of that rule, under the current rule version',()=>{
+ const v=shadowRulePolicy.version,e=[{rule:'bad-day-reduce',ruleVersion:v,grade:{verdict:'acertou'}},{rule:'bad-day-reduce',ruleVersion:v,grade:{verdict:'errou'}},{rule:'bad-day-reduce',ruleVersion:v,grade:{verdict:'N/D'}},{rule:'bad-day-reduce',ruleVersion:v},{rule:'morning-increase',ruleVersion:v,grade:{verdict:'acertou'}}];
  assert.deepEqual(ruleAccuracy(e,'bad-day-reduce'),{graded:2,right:1,accuracy:0.5});
+ // Decisions born under other rules (or before the version stamp) never count: the score restarts with the rules.
+ assert.deepEqual(ruleAccuracy([{rule:'bad-day-reduce',grade:{verdict:'acertou'}},{rule:'bad-day-reduce',ruleVersion:v-1,grade:{verdict:'acertou'}}],'bad-day-reduce'),{graded:0,right:0,accuracy:null});
  assert.deepEqual(ruleAccuracy([], 'bad-day-reduce'),{graded:0,right:0,accuracy:null});
 });
 

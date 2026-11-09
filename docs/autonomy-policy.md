@@ -15,7 +15,7 @@ Decisão do proprietário em 07/11/2026, depois do estudo das ações de um gest
 Código: `lib/autonomy-shadow.mjs`. Limiares por projeto ficam na configuração privada `AUTONOMY_SHADOW_POLICY` (secret do Worker), nunca no repositório. Projeto sem configuração não é avaliado.
 
 1. **Pausar campanha nova sem venda** (primeiras 24h e 2º dia; testes e programadas de um dia para o outro): sem front, sem pedidos e sem receita desde o início. Com 0–1 IC vale o teto geral do proprietário de R$110 (pausa a partir de R$99, alerta a partir de R$77); com 2+ IC, o limiar privado do projeto. No 2º dia, venda só de ontem não protege hoje: gasto de hoje sem venda é conferido sozinho contra o mesmo teto (08/11/2026). O mesmo vale quando a venda de um dia anterior está N/D e a de hoje é zero conhecido (registro "venda de ontem N/D, hoje sem venda"). No 2º dia de campanha que começou anteontem, o gasto desde o início soma anteontem (janela fechada de 3 dias) a ontem e hoje; sem essa janela, o registro declara "anteontem não lido" em vez de "desde o início" (correção de 09/11/2026). Detalhes em `first-24h-protocol.md`.
-2. **Reduzir em dia ruim** (−20%, ou −30% se o orçamento foi aumentado hoje): campanha com ROI de 3 dias ≥ 1,3, ou campanha de 1 a 3 dias (nunca no dia do lançamento) com ROI de ontem ≥ 1,2 e venda hoje; a partir das 10h, gasto relevante e ROI do dia < 0,9 (ou zero pedidos, só no primeiro caso). Orçamento diário próprio (CBO). ESCALA/COST-CAP/BID-CAP ficam só como sugestão. **Decisão do proprietário de 08/11/2026:** fica só como sugestão até o placar da própria regra (avaliação pelo dia seguinte, janela de 7 dias da sombra) chegar a ≥ 60% de acerto com ≥ 20 decisões avaliadas.
+2. **Reduzir em dia ruim** (−20%, ou −30% se o orçamento foi aumentado hoje): campanha com ROI de 3 dias ≥ 1,3, ou campanha de 1 a 3 dias (nunca no dia do lançamento) com ROI de ontem ≥ 1,2 e venda hoje; a partir das 10h, gasto relevante e ROI do dia < 0,9 (ou zero pedidos, só no primeiro caso). Orçamento diário próprio (CBO). ESCALA/COST-CAP/BID-CAP ficam só como sugestão. **Decisão do proprietário de 08/11/2026:** fica só como sugestão até o placar da própria regra (avaliação pelo dia seguinte, janela de 7 dias da sombra, só decisões da versão atual das regras) chegar a ≥ 60% de acerto com ≥ 20 decisões avaliadas. Desde 09/11/2026 a memória longa pode vetar, nunca liberar antes (ver "Memória da Sombra").
 3. **Pausar campanha sem entrega** (organização): sem gasto verificado nos últimos 3 dias e sem impressão hoje, depois das 12h; nunca para campanha nova ou datada de ontem em diante (programada).
 4. **Aumentar por vendas desde a meia-noite**: a partir das 9h, ≥ 3 pedidos com ≥ 2 front, ROI parcial ≥ 2,5 e gasto relevante. **Decisão do proprietário de 08/11/2026:** exige histórico de 3 dias com ROI ≥ 1,3 (sem ele, só sugestão); dia forte (ROI do dia ≥ 3) é o gatilho preferencial e leva +50%; os demais casos levam +30%. Sem teto do proprietário por objeto/conta, o aumento nunca executaria. Campanha nova (1º e 2º dia) não precisa de histórico: com ≥ 2 front e ROI parcial ≥ 2 leva +30%, só como sugestão até o placar da regra provar (08/11/2026).
 5. **Pausar campanha nova com venda e prejuízo** (1º e 2º dia): vendeu hoje, gasto de hoje ≥ R$300 e ROI de hoje < 0,8 → pausaria; ROI de 0,8 a 1,0 → só alerta.
@@ -59,32 +59,74 @@ Por isso só a regra 5 (pausa abaixo de 0,8) pode marcar "executaria". As regras
 
 ## Memória da Sombra (09/11/2026)
 
-Pedido do dono: o Bunk deve aprender continuamente com tudo o que acompanha. Antes, a Sombra apagava as decisões com mais de 7 dias, inclusive as notas do dia seguinte. O placar que libera as regras de orçamento nunca via mais do que ~5 dias avaliados.
+Pedido do dono: o Bunk deve aprender continuamente com tudo o que acompanha e com cada ação dele, do Jorge e do Leonardo. Antes, a Sombra apagava as decisões com mais de 7 dias, inclusive as notas do dia seguinte, e não guardava o que as pessoas faziam.
 
-- **O que fica guardado** (`lib/shadow-learning.mjs`, Durable Object, chaves `learn:<dia>:<projeto>`, 90 dias): cada decisão com nota final (acertou, errou, parou; N/D continua aberto), só com identificadores e números. Também ficam os pontos cegos e a base do dia. **Ponto cego** é a pausa, redução ou aumento de gestor ou do dono num objeto que a Sombra não tinha apontado nas 36 h anteriores; um alerta conta como apontado. **Base do dia** é a fatia de campanhas ativas da Meta com gasto que deu prejuízo ou lucro naquele dia, pela janela fechada da Malva, sem aquecimento.
-- **Leitura** (`learningSummary`, refeito no máximo a cada 10 min quando há novidade ou a cada hora; leitura MCP `shadow` → `learning`; notch → linha "Memória"), por regra e por regra × projeto:
-  - acerto com faixa provável de 95% (Wilson);
-  - acerto ponderado pela recência (meia-vida de 21 dias);
-  - estimativa de projeto com pouca amostra puxada para a taxa da regra (empirical Bayes, peso de 10 decisões);
-  - **acerto contra não fazer nada**: corte comparado com a fatia de prejuízo do dia lido, aumento com a de lucro, mais a chance de a regra ser melhor que isso (posterior Beta de Jeffreys);
-  - últimos 7 dias contra os 7 anteriores;
-  - gasto mediano na decisão das pausas certas e erradas;
-  - quem agiu antes, o gestor ou a Sombra;
-  - lições curtas.
-- **Trava das regras de orçamento**: o critério do dono (≥ 60% com ≥ 20 avaliadas, decisão de 08/11) não mudou. Agora ele lê a memória da versão atual das regras, e nunca menos decisões do que os 7 dias da Sombra. Decisões de uma versão anterior das regras não contam.
-- **Não faz**: não muda limiar, não cria proposta, não aprova, não executa. Lição é leitura para o dono.
-- **Ponto para decisão do dono**: nas regras de aumento, 60% de acerto pode não superar a base. No backtest de 08/11, 60% dos dias seguintes já deram lucro. O critério "vencer a base com ≥ 90% de chance" está calculado (`base.chanceBetter`), mas só vale se o dono aprovar.
-- **Não há 100% de acerto.** O dia seguinte é ruidoso e a atribuição muda depois. O mercado também muda. Mesmo 20 acertos em 20 dão uma faixa provável a partir de ~84%. A meta é acerto calibrado e acima da base, dito com a faixa.
+### O que fica guardado
 
-Referências consultadas:
+Tudo fica no Durable Object, por 90 dias. Nada vai para o repositório. Os nomes de quem agiu ficam só lá, como já ficam no histórico de edições.
+
+**Decisões da Sombra** (`lib/shadow-learning.mjs`, chaves `learn:<dia>:<projeto>`): cada decisão com nota final (acertou, errou ou parou; N/D continua aberto). Cada decisão leva:
+- a versão das regras em que nasceu (`ruleVersion`, carimbada em `mergeShadow` e nunca reescrita; decisão sem carimbo nunca conta como da versão atual);
+- o gasto do primeiro aviso, na Malva.
+
+**Base do dia:** entre as campanhas ativas da Meta que já rodavam antes daquele dia (gasto de 3 dias acima do de ontem, sem aquecimento), a fatia que deu prejuízo e a fatia que deu lucro. É o quanto acertaria cortar ou aumentar uma campanha qualquer do projeto naquele dia. A base é guardada na primeira leitura, a mesma que congelou as notas. Sem janela de 3 dias alinhada, não há base.
+
+**Ações das pessoas** (`lib/team-learning.mjs`, chaves `learn:<dia>:<projeto>:team`): cada pausa, ativação, aumento ou redução de orçamento diário feita por você ou por um gestor numa campanha Meta de vendas. Cada ação leva:
+- **Quem fez.** Você: ordens pelo notch, "Já fiz" (junto com o rastro dela no Gerenciador) e suas edições na Malva, reconhecidas pelo nome da pessoa da conexão Malva. Gestores: pelo nome na Malva. Edições feitas direto no Gerenciador chegam como "Fora da Malva Dash", sem a pessoa.
+- **Os números do momento**, só da Malva (a leitura ao vivo da Meta é só para exibição). Inclui a hora da leitura, para marcar número lido depois da ação.
+- **O que a Sombra tinha apontado.** Qualquer corte da Sombra cobre pausa ou redução, e conta o último aviso nas 36 h anteriores. Fica registrado com quantos minutos de antecedência.
+- **O ponto de pausa da Sombra para aquele gasto**, em teste ou campanha nova sem venda.
+- **A nota do dia seguinte**, para aumentos, reduções e ativações. Uma ação até 00:30 é avaliada pelo próprio dia.
+
+Ficam de fora:
+- as ordens automáticas do Bunk e o eco delas na Malva (o Bunk não aprende consigo mesmo);
+- as mudanças da própria Meta, as automações e as ações sem autor.
+
+### O que é lido (`learningSummary`)
+
+O resumo é refeito a cada 10 min quando há novidade, na hora após mudança de versão das regras e, fora isso, a cada hora. Aparece na leitura MCP `shadow` → `learning` e no notch. Por regra e por regra × projeto, mostra:
+- acerto com faixa provável de 95% (Wilson);
+- acerto ponderado pela recência (meia-vida de 21 dias);
+- estimativa de projeto pequeno puxada para a taxa da regra (empirical Bayes, peso de 10 decisões);
+- acerto contra cortar ou aumentar uma campanha qualquer no mesmo dia, com a chance de a regra escolher melhor (posterior Beta de Jeffreys). A vantagem só é afirmada com 10 ou mais decisões, 5 ou mais campanhas e 3 ou mais dias, sempre com a faixa;
+- os últimos 7 dias contra os 7 anteriores;
+- quem agiu primeiro: o gestor antes do aviso; a Sombra antes, mas ainda só como sugestão; ou a Sombra antes, já executável.
+
+Da equipe, nos últimos 30 dias, por pessoa:
+- testes sem venda pausados, com o gasto mediano;
+- ajustes com resultado no dia seguinte;
+- quantos cortes a Sombra apontou antes, nos 7 dias, comparado com a semana anterior.
+
+**Pontos cegos:** cortes de pessoas que a Sombra não tinha apontado, contados só onde ela já avaliava o projeto (`learningCoverage`). Aumentos sem sugestão da Sombra são contados à parte.
+
+**Propostas de limiar:** surgem quando a equipe pausa testes sem venda claramente antes do ponto de pausa da Sombra. Exigem 5 ou mais pausas em 30 dias, 3 ou mais antes do ponto e mediana pelo menos 15% abaixo dele. São texto para o dono decidir, nunca aplicadas. Se aprovada, a mudança entra pela camada do dono (`AUTONOMY_SHADOW_OWNER`) e passa a ser medida nos casos seguintes.
+
+### Trava das regras de orçamento
+
+O critério do dono de 08/11 (≥ 60% com ≥ 20 avaliadas) continua sendo lido na contagem de 7 dias, agora só com decisões da versão atual das regras. A memória longa só pode vetar: com 20 ou mais decisões avaliadas da versão atual abaixo de 60%, a regra continua sugestão mesmo depois de uma semana boa. Ela nunca libera antes. Memória de outra versão, de outro formato ou com mais de 2 h é ignorada, e a conta é exata, sem arredondar.
+
+Isso importa porque o modo Automático (registro do dono de 09/11) envia ordens reais a partir do "executaria" da Sombra.
+
+**Decisões pendentes do dono:**
+- se a trava deve exigir também "vencer a base com ≥ 90% de chance", já calculado em `base.chanceBetter`;
+- se deve exigir uma condição de recência.
+
+### O que não faz
+
+Não muda limiar, não cria proposta no sistema, não aprova e não executa. Lição e proposta são leituras para o dono.
+
+**Não há 100% de acerto.** O dia seguinte é ruidoso, a atribuição muda depois (até ~72 h) e o mercado muda. Mesmo 20 acertos em 20 dão uma faixa provável a partir de ~84%. A meta é acerto calibrado e acima da base, sempre dito com a faixa.
+
+### Referências consultadas
+
 - Intervalos de proporção para amostra pequena: Brown, Cai e DasGupta, 2001, [Statistical Science](https://projecteuclid.org/euclid.ss/1009213286).
 - Empirical Bayes com prior Beta: D. Robinson, [ebbr](https://rdrr.io/github/dgrtwo/ebbr/f/README.md).
 - Esquecimento com desconto: Raj e Kalyani, [Discounted Thompson](https://arxiv.org/abs/1707.09727).
-- Avaliação contínua sem inflar falsos positivos, possível próxima etapa:
-  - Johari et al., [always-valid p-values](https://arxiv.org/abs/1512.04922);
-  - Howard et al., [confidence sequences](https://arxiv.org/abs/1906.09712).
-- Atraso de atribuição na Meta, até ~72 h ([Aimerce](https://www.aimerce.ai/blogs/why-are-my-meta-ad-results-delayed-by-72-hours)): a nota do D+1 pode mudar depois. Uma nota provisória e outra final em D+3 ficam pendentes.
-- Descartados por escala: bandits e Thompson para alocar orçamento, porque a aprovação humana e o retorno atrasado quebram as premissas; e MMM (Robyn, Meridian), que pede anos de dados semanais.
+- Avaliação contínua sem inflar falsos positivos, possível próxima etapa: Johari et al., [always-valid p-values](https://arxiv.org/abs/1512.04922); Howard et al., [confidence sequences](https://arxiv.org/abs/1906.09712).
+- Atraso de atribuição na Meta, até ~72 h ([Aimerce](https://www.aimerce.ai/blogs/why-are-my-meta-ad-results-delayed-by-72-hours)): a nota do D+1 pode mudar depois. Nota provisória e outra final em D+3 continuam pendentes.
+- Descartados por escala:
+  - bandits e Thompson para alocar orçamento, porque a aprovação humana e o retorno atrasado quebram as premissas;
+  - MMM (Robyn, Meridian), que pede anos de dados semanais.
 
 ## Módulo de autonomia (09/11/2026)
 

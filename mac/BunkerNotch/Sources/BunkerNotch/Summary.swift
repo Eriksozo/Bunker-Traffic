@@ -118,6 +118,10 @@ struct Summary: Decodable, Equatable {
     struct ShadowLearning: Decodable, Equatable {
         let days: Int; let graded: Int; let right: Int
         var low: Double? = nil; var high: Double? = nil; var blindSpots: Int? = nil; var lessons: [String]? = nil
+        /// What the Bunk learned from the owner's and the managers' own moves (lib/team-learning.mjs), pre-rendered lines.
+        var team: [String]? = nil
+        /// Threshold proposals for the owner (nothing changes without him), pre-rendered lines.
+        var proposals: [String]? = nil
     }
     /// New campaigns in their first 24h (lib/first-24h.mjs): scheduled, first day and 2nd day against the owner's ceiling.
     let first24h: First24h?

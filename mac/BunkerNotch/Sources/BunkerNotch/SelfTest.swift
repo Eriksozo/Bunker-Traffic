@@ -182,6 +182,12 @@ enum SelfTest {
             check(l.lessons?.first == "Projeto: 2 cortes", #line)
         } else { check(false, #line) }
         check((try? JSONDecoder().decode(Summary.Shadow.self, from: Data(#"{"day":null,"total":0,"byRule":{},"recent":[],"learning":null}"#.utf8)))?.learning == nil, #line)
+        // Nothing graded: N/D, never 0%; team lines and proposals decode as text.
+        let quietJSON = #"{"day":"2026-11-09","total":0,"byRule":{},"recent":[],"learning":{"days":0,"graded":0,"right":0,"low":null,"high":null,"blindSpots":2,"lessons":[],"team":["Testes sem venda pausados (30 dias): Ana 4 · mediana R$70."],"proposals":["Projeto: proposta"],"ownerLabel":"Você"}}"#
+        if let q = (try? JSONDecoder().decode(Summary.Shadow.self, from: Data(quietJSON.utf8)))?.learning {
+            check(Format.shadowMemory(q) == "Memória: nenhuma decisão avaliada ainda · 2 pontos cegos em 7 dias", #line)
+            check(q.team?.first?.hasPrefix("Testes sem venda") == true && q.proposals?.count == 1, #line)
+        } else { check(false, #line) }
         check(Format.money(Double.nan) == "N/D" && Format.exactMoney(nil) == "N/D" && Format.compactMoney(.infinity) == "N/D", #line)
     }
 

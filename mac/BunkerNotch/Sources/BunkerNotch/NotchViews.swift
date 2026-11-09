@@ -671,7 +671,8 @@ struct NowTab: View {
                     }
                 }
             }
-            if let sh = s.shadow, sh.total > 0 {
+            // Also on a quiet day: the 7-day score and the memory stay visible when there is something to show.
+            if let sh = s.shadow, sh.total > 0 || (sh.learning.map { $0.graded > 0 || ($0.blindSpots ?? 0) > 0 } ?? false) {
                 let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
                 SectionHeader(title: "Sombra do Bunk · hoje", detail: "\(would) executaria · \(first) antes do gestor · não executa nada")
                 if let sc = sh.scorecard, sc.graded > 0 {
@@ -741,6 +742,19 @@ struct ManagersTab: View {
             SectionHeader(title: "Gestores · últimas \(s.activity.hours)h", detail: "clique numa caixa para filtrar quem, quando e quanto")
             HStack(alignment: .top, spacing: DS.Space.s) {
                 ForEach(keys, id: \.self) { key in box(key) }
+            }
+            if let l = s.shadow?.learning, !(l.team ?? []).isEmpty || !(l.proposals ?? []).isEmpty {
+                // What the Bunk learned from your moves and the managers' (lib/team-learning.mjs). Readings only.
+                SectionHeader(title: "O que o Bunk aprendeu com vocês", detail: "30 dias · só leitura, nada muda sozinho")
+                    .help("Cada pausa, aumento ou redução sua e dos gestores fica guardada com os números do momento e com o que a Sombra tinha apontado. Propostas de limiar só valem com o seu sim.")
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(Array((l.team ?? []).prefix(3).enumerated()), id: \.offset) { _, line in
+                        Text(line).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(2)
+                    }
+                    ForEach(Array((l.proposals ?? []).prefix(2).enumerated()), id: \.offset) { _, line in
+                        Text(line).font(DS.Font.caption).foregroundStyle(DS.Color.warn).lineLimit(3)
+                    }
+                }
             }
             let list = s.activity.recent.filter { notch.activityFilter == nil || $0.action == notch.activityFilter }
             SectionHeader(title: notch.activityFilter.map { (Format.actionLabels[$0] ?? $0) + " recentes" } ?? "Mais recentes", detail: Format.count(list.count, "registro", "registros") + " no resumo")

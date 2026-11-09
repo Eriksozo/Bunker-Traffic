@@ -785,3 +785,51 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Antes do primeiro Automático (pendente):** registro explícito do dono no `CLAUDE.md` (regra atual exige), rótulo "Bunk" nos recibos do notch e aviso no iPhone para ordens do Bunk, conferência do interruptor também na Edge Function `malva-mcp`. Reativar não tem regra na Sombra ainda. Dois projetos configurados seguem fora da política privada da Sombra: ali nenhum nível age.
 - **Registro no CLAUDE.md (2026-11-09 16:38:15 UTC):** o dono respondeu "Sim, registrar". A regra de autonomia do `CLAUDE.md` agora libera a ordem do Bunk só no modo Automático, com o interruptor geral ligado e dentro das ações e limites salvos pelo dono. O interruptor continua desligado; ligar é decisão dele no painel.
 - **Ajustes de segurança antes do primeiro Automático (2026-11-09 16:42:21 UTC, pedido do dono "Sim, fazer agora"):** (1) guarda de envio (`lib/cloud-dispatch-guard.mjs` e a cópia da Edge Function) recusa ordem do Bunk com o interruptor desligado; Edge Function `malva-mcp` publicada como v12 (mesmos arquivos da v11 mais essa checagem, `verify_jwt` mantido). (2) Avisos de ordem do iPhone (`orderAlertTitle` em `lib/phone-alerts.mjs`) e do Mac (`Format.orderAlertTitle`) dizem "Bunk (autonomia): …". O envio ao iPhone depende do Pushover, que segue sem configurar (`phone.configured:false`). (3) Notch: recibo do Bunk aparece como "Bunk · campanha" com a regra, e a seção vira "Ordens · 24h" quando há ordem do Bunk. Testes 1383 ok, typecheck ok, `mac/build.sh` com self-test ok e app reinstalado.
+
+## Aprendizado com as ações do dono e dos gestores; memória revisada (registro escrito às 2026-11-09 19:03:16 UTC por `date -u`)
+
+- **Pedido do dono:** "toda ação que eu for fazendo, Jorge e Leonardo, ele deve ir aprendendo junto para melhorar as sugestões". Ele pediu também bases externas, cuja síntese está em `docs/autonomy-policy.md`, "Memória da Sombra".
+- **Contexto novo:** desde `0419c1e` o modo Automático envia ordens reais a partir do "executaria" da Sombra. Por isso, esta rodada passou por duas revisões adversariais (49 e 39 agentes; 37 e 31 achados confirmados, todos tratados) antes de publicar.
+- **Trava das regras de orçamento:** a contagem de 7 dias decide, e só conta decisões da versão atual das regras.
+  - A versão vem do carimbo `ruleVersion`, gravado em `mergeShadow`. Decisão sem carimbo é v2 quando nasceu depois de 08/11 18:48 UTC (`entryRuleVersion`).
+  - A memória longa só pode vetar. Memória ausente, de outra versão ou com mais de 2 h mantém a regra como sugestão nessa passada: falha fechado.
+  - As mensagens da trava dizem o motivo.
+- **Aprendizado com pessoas** (`lib/team-learning.mjs`, chaves `learn:<dia>:<projeto>:team`, 90 dias, no DO): cada pausa, ativação ou mudança de orçamento diário, sua ou de gestor, é guardada com:
+  - quem fez: "Você" pelo notch, pelo "Já fiz" ou pelo seu nome Malva (lido da identidade da conexão, só no DO); gestores pelo nome; "Fora da Malva Dash" quando a edição foi feita no Gerenciador;
+  - os números Malva do momento, de leitura com até 45 min de distância;
+  - o que a Sombra tinha apontado e com quantos minutos de antecedência;
+  - o ponto de pausa da Sombra, para campanha nova no 1º ou 2º dia;
+  - a nota do dia seguinte, para orçamento e ativação.
+- **O que fica de fora:** as ordens automáticas do Bunk e o eco delas. Um eco guardado por uma passada com estado antigo é removido por descrição na passada seguinte. Ficam de fora também a Meta, as automações e as mudanças sem autor.
+- **O que o Bunk mostra:**
+  - Por pessoa: pausas de campanhas novas sem venda com gasto mediano, ajustes confirmados pelo dia seguinte e antecipação da Sombra contra a semana anterior.
+  - Pontos cegos: cortes que a Sombra não apontou, contados só nas horas em que ela avaliou o projeto (`learningCoverage`).
+  - Propostas de limiar, só texto para o dono. Exigem 5 ou mais pausas em 5 ou mais campanhas e 3 ou mais dias, e comparam com o ponto de pausa em vigor.
+  - No notch: aba Gestores, "O que o Bunk aprendeu com vocês"; e a linha Memória, que mostra N/D em vez de 0% e aparece também em dia sem decisão.
+- **Memória (`learningPolicy` v2):**
+  - a base só conta campanhas que já rodavam antes do dia, e é congelada na primeira leitura;
+  - lições e números do notch usam só a versão atual das regras;
+  - a vantagem exige 10 ou mais decisões, 5 ou mais campanhas e 3 ou mais dias;
+  - a tendência só aparece com diferença significativa;
+  - o texto compara com "uma campanha qualquer do mesmo dia", não com "não fazer nada".
+- **Testes:**
+  - `tests/shadow-learning.test.mjs`: 12 testes, incluindo o executor de ponta a ponta com veto, retenção, ponto cego e segunda passada;
+  - `tests/team-learning.test.mjs`: 10 testes;
+  - suíte 1396/1396, typecheck, build e autoteste do notch.
+- **Decisões do dono pendentes:**
+  - se a trava deve exigir também "vencer a base com ≥ 90% de chance" ou uma condição de recência;
+  - se edições "Fora da Malva Dash" podem ser atribuídas a pessoas pelo perfil da Meta. Hoje não são, por desenho.
+- **Pendências técnicas:**
+  - nota provisória em D+1 e final em D+3;
+  - lições da Sombra como contexto das análises dos agentes de IA;
+  - o pulso pesado ainda passa à Sombra o estado lido no início. A autocorreção cobre os ecos, mas uma releitura antes da Sombra seria mais limpa.
+- Continua: nada muda limiar e nada é executado por causa do aprendizado.
+- **Terceira verificação (2 céticos, antes de publicar).** O cético da trava rodou 20 mil cenários contra o HEAD anterior: as decisões não mudam, só o texto da trava. Corrigido depois:
+  - **Aprendizado lê as fontes brutas:** feed de edições da Malva, "Já fiz" e execuções. Não usa mais o `activityLog` fundido, que dobrava um "Já fiz" dentro da edição de um gestor com nome e absorvia a ação de uma pessoa numa ordem do Bunk dentro de ±3 h.
+  - **Eco de ordem:** só a transição exata, de ordem enviada, dentro da janela de envio e pela sua conexão Malva ou sem nome. Gestor com nome nunca é eco. Suas ordens contam pela execução.
+  - **"Já fiz":** casa com a edição sem nome ou com o seu nome mais próxima antes do toque. O apelido (alias) vale por projeto.
+  - **Trava:**
+    - decisão de campanha compartilhada entre projetos conta uma vez, e prevalece o erro;
+    - nota nova de regra travada refaz a memória na hora;
+    - uma falha da memória mais nova que o resumo mantém as regras como sugestão.
+  - **Avisado à sessão "Módulo de autonomia do Bunk":** a ordem do Bunk pode sair duplicada quando a mesma campanha está em dois projetos (código de autonomia, já existente; não alterado aqui). E, por desenho do dono, `morning-increase` só passa pela trava em campanha nova.
