@@ -834,3 +834,11 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
     - nota nova de regra travada refaz a memória na hora;
     - uma falha da memória mais nova que o resumo mantém as regras como sugestão.
   - **Avisado à sessão "Módulo de autonomia do Bunk":** a ordem do Bunk pode sair duplicada quando a mesma campanha está em dois projetos (código de autonomia, já existente; não alterado aqui). E, por desenho do dono, `morning-increase` só passa pela trava em campanha nova.
+- **Publicação e conferência em produção.** Commit `7fb5702`, versão Cloudflare `adf3aa06`, depois `406cd12c`/`721dcdd1` da sessão de autonomia por cima (contêm este commit). `/health` 200. Notch reinstalado (`7fb5702`, autoteste ok).
+  - Depois de três reinícios seguidos do DO (19:36–19:40 UTC), a Sombra ficou ~12 min sem passar. Ela só volta depois que o pulso pesado termina as etapas de modelo e a leitura ao vivo, porque `liveItems` some no reinício e o `metaTick` depende dele. É um comportamento anterior a esta rodada. Voltou às 19:48:48.
+  - Leitura MCP `shadow` às 19:49 UTC:
+    - `learning` v2 (`ruleVersion` 2);
+    - 174 ações de pessoas guardadas, 136 únicas em 30 dias, distribuídas entre o dono, dois gestores e "Fora da Malva Dash";
+    - placar da versão atual 0/0: as 53 decisões avaliadas são de antes da v2 e não contam;
+    - pontos cegos 1, agora só em horas observadas.
+  - Pendente de observar: as primeiras notas da v2 (a partir de 10/11) e a primeira proposta de limiar, quando houver ≥ 5 pausas em ≥ 5 campanhas e 3 dias.
