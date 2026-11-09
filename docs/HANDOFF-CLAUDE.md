@@ -863,3 +863,12 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
     - `CLOUD_AI_INVALID` (21:30), por repetição de espaços que estoura o limite de saída;
     - `CLOUD_MEMORY_REVIEW_EVIDENCE` (21:39), por `not_in_reflection`.
   - Pendente: acompanhar se a taxa de truncamento muda com a leitura no pacote.
+
+## Diários fora da central (registro escrito às 2026-11-09 22:58:52 UTC por `date -u`)
+
+- Relato do dono em 09/11: o notch avisou "Armazenamento central em 87% do limite" — "isso nunca deve acontecer".
+- Causa: os diários só de acréscimo (`decisionHistory`, `decisionHistoryImports`, `campaignChanges`, `externalHistoryMeasurements`) viajavam dentro do registro `central` e cresciam a cada importação.
+- Correção (`lib/history-storage.mjs`, `journalStorage`): cada diário é cortado em segmentos de tamanho fixo por posição, selados por SHA-256 em `history-journal:<hash>`, gravados na mesma transação do compare-and-swap da central. Segmentos antigos não são reenviados; nada é apagado; registro ausente ou alterado falha fechado (`STORAGE_INTEGRITY`); itens gravados inline por uma versão antiga ao lado do índice são preservados (mesmo id fica com a cópia indexada).
+- Rollout em dois passos: leitor publicado primeiro (`5542242`) e confirmado no executor (`status.storageFormat.journalReader`) antes de ligar a gravação.
+- Simulação com a central real: diários idênticos na volta; a central compactada cai para pouco mais da metade do limite.
+- Pendente com o dono: as cópias antigas de leituras (`snapshots:<digest>`) não referenciadas se acumulam no banco a cada gravação; limpar é apagar dados e exige decisão dele.

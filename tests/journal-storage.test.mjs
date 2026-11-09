@@ -62,10 +62,13 @@ test('Missing, swapped or unknown journal records fail closed, never an empty li
  await assert.rejects(packHistoryState(packed.state,now,{journals:true}),e=>e.code==='STORAGE_INTEGRITY','a packed state is never packed again');
 });
 
-test('Two-step rollout: the default writes inline (readers first); the reader already understands the index',async()=>{
- assert.equal(journalStorage.write,false);
+test('Writing is on (the reader shipped and ran in production first); journals:false still writes inline',async()=>{
+ assert.equal(journalStorage.write,true);
  const packed=await packHistoryState(logical(),now);
- assert.equal(packed.state.journalStorage,undefined);
- assert.equal(packed.state.decisionHistory.length,230);
- const view=historyView(logical(),packed.state);assert.equal(view.decisionHistory.length,230);
+ assert.equal(packed.state.decisionHistory,undefined);
+ assert.ok(packed.state.journalStorage);
+ const inline=await packHistoryState(logical(),now,{journals:false});
+ assert.equal(inline.state.journalStorage,undefined);
+ assert.equal(inline.state.decisionHistory.length,230);
+ const view=historyView(logical(),packed.state);assert.equal(view.decisionHistory.length,230,'the next commit keeps the logical journals');
 });
