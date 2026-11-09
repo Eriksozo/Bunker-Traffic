@@ -44,12 +44,14 @@ final class Store: ObservableObject {
     /// Counts new sales; Bunk celebrates on each one. Island alert per sale only when the owner turns it on.
     @Published private(set) var saleTick = 0
     static let saleAlertKey = "alertEachSale"
-    /// Alerts and notifications held while the owner is in a call; shown when it ends (at most three).
+    /// Alerts and notifications held while the owner is in a call; shown when it ends (at most three, the highest priority).
     private var held: [(String, String, String, IslandAlert.Kind)] = []
     /// Adjustment kinds that arrived during a call: their sound plays when it ends, beyond the three held alerts.
     private var heldSounds = Set<String>()
     /// Latest time seen per change key: the same transition later again (pause, reactivate, pause) rings again.
     private var changeAt: [String: Date] = [:]
+    /// Last 24h counters per kind that decoded, with their project: a read whose counters did not decode is unknown, never zero.
+    private var lastCounts: AdjustSound.Counters?
 
     /// Dismissed (until the state changes) and snoozed items: they stop interrupting but stay in the lists.
     @Published private(set) var ledger = AttentionLedger.load()
@@ -284,9 +286,8 @@ final class Store: ObservableObject {
             guard !seen.contains(k) || again else { continue }
             seen.insert(k); fresh.append((again ? k + "@" + (e.at ?? "") : k, Format.who(e), (e.campaign ?? "Campanha") + " · " + Format.change(e), .manager))
         }
-        let counts = s.activity.summary.mapValues(\.count)
-        let rise = AdjustSound.countRise(previous: summary?.project == s.project ? summary?.activity.summary.mapValues(\.count) : nil, current: counts,
-                                         alreadyNew: Set(fresh.compactMap { AdjustSound.action(fromKey: $0.0) }))
+        let step = AdjustSound.counterStep(last: lastCounts, project: s.project, activity: s.activity, alreadyNew: Set(fresh.compactMap { AdjustSound.action(fromKey: $0.0) }))
+        let rise = step.rise; lastCounts = step.last
         // A loss alerts once. One the owner dismissed alerts once more when its state changed, then the dismissal ends.
         for q in s.queue where q.kind == "loss" {
             let key = AttentionLedger.key(q), came = ledger.cameBack(q)
@@ -330,10 +331,11 @@ final class Store: ObservableObject {
             if changeAt.count > Store.seenLimit { changeAt = changeAt.filter { seen.contains($0.key) } }
         }
         guard primed, !muted else { return }
-        // In a call: hold them (newest three) until it ends; every adjustment kind is kept for its sound.
+        // In a call: hold the three of highest priority (a later read first within a kind) until it ends, so routine
+        // changes never push out an order, an approval or a loss; every adjustment kind is kept for its sound.
         if CallWatch.shared.inCall {
             heldSounds.formUnion(AdjustSound.kinds(forKeys: fresh.map(\.0), extra: rise).map(\.rawValue))
-            held = Array((held + fresh).suffix(3)); return
+            held = Store.keepHeld(held, fresh); return
         }
         deliver(fresh, soundsAlso: rise)
     }
@@ -358,16 +360,28 @@ final class Store: ObservableObject {
         if !muted { deliver(items, soundsAlso: sounds) }
     }
 
-    private func deliver(_ fresh: [(String, String, String, IslandAlert.Kind)], soundsAlso extra: Set<String> = []) {
-        // Approvals first, then losses, then manager changes; at most three alerts per refresh.
+    /// Orders first, then approvals, losses, manager changes and sales; the same kind keeps its arrival order.
+    nonisolated static func byPriority<C: Sequence>(_ items: C) -> [(String, String, String, IslandAlert.Kind)] where C.Element == (String, String, String, IslandAlert.Kind) {
         let order: [IslandAlert.Kind: Int] = [.order: 0, .approval: 1, .loss: 2, .manager: 3, .sale: 4]
-        for item in fresh.sorted(by: { order[$0.3]! < order[$1.3]! }).prefix(3) { alert = IslandAlert(id: item.0, kind: item.3, title: item.1, detail: item.2) }
+        return items.enumerated().sorted { (order[$0.1.3] ?? 9, $0.0) < (order[$1.1.3] ?? 9, $1.0) }.map(\.1)
+    }
+
+    /// What stays held during a call: the three of highest priority; within a kind a later read goes first, and one
+    /// read keeps its own order (the server lists changes newest first), the same three deliver would show for it.
+    nonisolated static func keepHeld(_ held: [(String, String, String, IslandAlert.Kind)], _ fresh: [(String, String, String, IslandAlert.Kind)]) -> [(String, String, String, IslandAlert.Kind)] {
+        Array(byPriority(fresh + held).prefix(3))   // held is already ranked
+    }
+
+    private func deliver(_ fresh: [(String, String, String, IslandAlert.Kind)], soundsAlso extra: Set<String> = []) {
+        // Orders, approvals and losses before manager changes: at most three island alerts and four notifications per refresh.
+        let ranked = Store.byPriority(fresh)
+        for item in ranked.prefix(3) { alert = IslandAlert(id: item.0, kind: item.3, title: item.1, detail: item.2) }
         guard Bundle.main.bundleIdentifier != nil else { return }
         // Increase, reduction and pause have their own sound (every new kind, not only the first alerts); their
         // notifications then go silent so the same change never rings twice. Another notification that rings in
         // the same batch goes first. The app's sound switch in System Settings › Notifications also silences it.
         let sounds = AdjustSound.enabled ? AdjustSound.kinds(forKeys: fresh.map(\.0), extra: extra) : []
-        let notes = fresh.prefix(4).map { ($0, AdjustSound.silenced(id: $0.0, isOrder: $0.3 == .order, playing: sounds)) }
+        let notes = ranked.prefix(4).map { ($0, AdjustSound.silenced(id: $0.0, isOrder: $0.3 == .order, playing: sounds)) }
         if !sounds.isEmpty {
             let othersRing = notes.contains { !$0.1 }
             Task { @MainActor in

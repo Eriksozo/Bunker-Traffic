@@ -45,6 +45,12 @@ export async function readMetaAccounts(fetchImpl,token,{version=accountPanelPoli
  return Object.assign(out,{limitVersion,limitTried});
 }
 
+// Graph error text may echo the credential: drop the token itself and anything token-shaped before storing or returning it.
+export function redactGraphText(text,token){
+ let t=String(text??'');const k=typeof token==='string'?token.trim():'';if(k.length>=8)t=t.split(k).join('[redacted]');
+ return t.replace(/Bearer\s+\S+/gi,'Bearer [redacted]').replace(/(access_token|token)=[^&\s"']+/gi,'$1=[redacted]').replace(/EAA[A-Za-z0-9_-]{8,}/g,'[redacted]');
+}
+
 async function readMetaPages(fetchImpl,token,version,fieldList,maxPages,allowDrop=true){
  if(typeof token!=='string'||!token.trim())throw Object.assign(new Error('META_TOKEN_MISSING'),{code:'META_TOKEN_MISSING'});
  if(!/^v\d{1,2}\.\d$/.test(version))throw Object.assign(new Error('META_VERSION_INVALID'),{code:'META_VERSION_INVALID'});
@@ -58,7 +64,7 @@ async function readMetaPages(fetchImpl,token,version,fieldList,maxPages,allowDro
   if(allowDrop&&body?.error&&num(body.error.code)===100&&gone&&fields.includes(gone)&&gone!=='account_id'&&dropped.length<3){fields=fields.filter(f=>f!==gone);dropped.push(gone);page--;continue;}
   if(!response.ok||body?.error){const c=num(body?.error?.code),e=body?.error;throw Object.assign(new Error('META_ERROR'),{code:c?`META_${c}`:`META_HTTP_${response.status}`,
    // Graph text with long numbers masked (ids), never the token: lets the owner see why Meta refused.
-   diagnostic:e&&typeof e==='object'?{code:c,subcode:num(e.error_subcode),message:typeof e.message==='string'?e.message.replace(/\d{5,}/g,'#').slice(0,180):null}:null});}
+   diagnostic:e&&typeof e==='object'?{code:c,subcode:num(e.error_subcode),message:typeof e.message==='string'?redactGraphText(e.message,token).replace(/\d{5,}/g,'#').slice(0,180):null}:null});}
   out.push(...arr(body?.data));
   after=typeof body?.paging?.cursors?.after==='string'&&body?.paging?.next?body.paging.cursors.after:null;
   if(!after)break;

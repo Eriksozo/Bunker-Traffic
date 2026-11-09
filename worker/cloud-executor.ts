@@ -30,6 +30,8 @@ import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
 import {deliverPhoneAlerts} from '../lib/phone-alerts.mjs';
 
+/** Local day of the shadow's default timezone: the "hoje" of a pulse that evaluated no project keeps being today. */
+const shadowLocalDay=(now:number)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
 type Runtime={enabled:boolean;lastPulseAt?:string;lastUnitAt?:string;lastError?:string|null;lastErrorDetail?:string|null;lastResult?:any;check?:any;history?:any[]};
 export class BunkerCloudExecutor extends DurableObject<any>{
  private running=false;
@@ -107,20 +109,23 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()],meta=await this.ctx.storage.get<any>('metaLive');
   // Owner decisions 08/11/2026: budget rules only become executable after their own graded accuracy proves itself.
   const accuracy=Object.fromEntries(scoreGatedRules.map(rule=>[rule,ruleAccuracy(prior,rule)]));
-  let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={};
+  let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={},days:Record<string,string>={},batches:any[]=[];
+  // Same as shadowLocalDay: the day of a pulse where every project was skipped (stale source), so "hoje" stays today.
+  const fallbackDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   for(const project of Object.keys(state.config||{})){
    const params=policy?.projects?.[project];if(!params||params.enabled===false)continue;
    const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now,meta,accuracy:accuracy as any});
-   if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;
+   if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;if(out.day)days[project]=out.day;batches.push([out.decisions,out.day||fallbackDay]);
   }
+  // Each project's decisions keep that project's own local day (id and grading window), never the first project's.
   // Each decision is graded by the real next day once the closed windows cover it (assertiveness, read-only).
-  const merged=shadowGrades(shadowOutcomes(mergeShadow(prior,decisions,{now,day:day||new Date(now).toISOString().slice(0,10)}),events),state.snapshots);
+  const merged=shadowGrades(shadowOutcomes(batches.reduce((m,[list,d])=>mergeShadow(m,list,{now,day:d}),mergeShadow(prior,[],{now,day:fallbackDay})),events),state.snapshots);
   const keep=new Set(merged.map((e:any)=>'shadow:'+e.id)),stale=prior.map((e:any)=>'shadow:'+e.id).filter((k:string)=>!keep.has(k));
   const before=new Map(prior.map((e:any)=>[e.id,JSON.stringify(e)]));
   const entries=merged.filter((e:any)=>before.get(e.id)!==JSON.stringify(e)).map((e:any)=>['shadow:'+e.id,e] as [string,any]);
   for(let i=0;i<entries.length;i+=100)await this.ctx.storage.put(Object.fromEntries(entries.slice(i,i+100)));
   for(let i=0;i<stale.length;i+=128)await this.ctx.storage.delete(stale.slice(i,i+128));
-  await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped});
+  await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped});
   return merged;
  }
  /**
@@ -229,12 +234,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  /** Mac companion summaries built from the central state this pulse already read; served from this object, never re-reading the central. */
  private async storeCompanion(state:any,shadow:any[]=[]){
   if(!state)return;
-  const shadowDay=(await this.ctx.storage.get<any>('shadowStatus'))?.day||undefined,accountsPanel=await this.ctx.storage.get<any>('accountsPanel'),first24h=(await this.ctx.storage.get<any>('first24h'))?.boards||[];
+  const shadowStatus=await this.ctx.storage.get<any>('shadowStatus'),shadowDay=shadowStatus?.day||shadowLocalDay(Date.now()),accountsPanel=await this.ctx.storage.get<any>('accountsPanel'),first24h=(await this.ctx.storage.get<any>('first24h'))?.boards||[];
   const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
    rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,limitSource:r.limitSource,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
   const executor={...runtime,paused:!!state.paused},withAuthors={...state,changeAttributions:attributions},now=Date.now(),out:Record<string,any>={},live:any=this.liveItems||[],board=projectBoard(withAuthors,now,{live:live as never[]});
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[]}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:shadowDay}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[]}),storage:this.storagePressure,shadow:shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null}),first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
   await this.phoneAlerts(out['companion:all']).catch(()=>{});
  }
@@ -332,8 +337,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   if(input.action==='accounts'){const panel=await this.ctx.storage.get<any>('accountsPanel');return Response.json(panel?{panel}:{panel:null});}
   if(input.action==='shadow'){
    const status=await this.ctx.storage.get<any>('shadowStatus'),all=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];
-   const day=typeof input.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.day)?input.day:status?.day;
-   const entries=all.filter((e:any)=>!day||e.day===day).sort((a:any,b:any)=>Date.parse(a.firstAt)-Date.parse(b.firstAt)).slice(0,300).map((e:any)=>({rule:e.rule,project:e.projectName,account:e.accountName,adAccountId:e.adAccountId,objectId:e.objectId,campaign:e.name,action:e.action,before:e.before,after:e.after,reason:e.reason,launchDay:e.launchDay,newCampaign:e.newCampaign||null,metrics:e.metrics,firstAt:e.firstAt,firstWouldExecuteAt:e.firstWouldExecuteAt,lastAt:e.lastAt,blockedBy:e.blockedBy,manager:e.manager}));
+   const asked=typeof input.day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(input.day)?input.day:null,day=asked||status?.day;
+   // Without an explicit day, each project's "hoje" is its own local day (shadowStatus.days).
+   const dayOf=(e:any)=>asked||(typeof status?.days?.[e.project]==='string'?status.days[e.project]:day);
+   const entries=all.filter((e:any)=>!dayOf(e)||e.day===dayOf(e)).sort((a:any,b:any)=>Date.parse(a.firstAt)-Date.parse(b.firstAt)).slice(0,300).map((e:any)=>({rule:e.rule,project:e.projectName,account:e.accountName,adAccountId:e.adAccountId,objectId:e.objectId,campaign:e.name,action:e.action,before:e.before,after:e.after,reason:e.reason,launchDay:e.launchDay,newCampaign:e.newCampaign||null,metrics:e.metrics,firstAt:e.firstAt,firstWouldExecuteAt:e.firstWouldExecuteAt,lastAt:e.lastAt,blockedBy:e.blockedBy,manager:e.manager,
+    // Same fields as the notch's recent list: an owner action, the next-day grade and the rule label stay visible here.
+    ruleLabel:e.ruleLabel||null,limitations:e.limitations??null,owner:e.owner||null,grade:e.grade||null}));
    const first24h=await this.ctx.storage.get<any>('first24h'),meta=await this.ctx.storage.get<any>('metaLive');
    return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
   }
@@ -409,7 +418,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // The live Meta read is optional: a failure keeps the last read and never affects the executor.
    if(liveState&&(await this.setting()).enabled)await this.syncMetaLive(liveState).catch(()=>{});
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
-   const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
+   const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),day:shadowLocalDay(Date.now()),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    // The first-24h board is a reading aid: a failure keeps the last board and never affects the executor.
    if(liveState)await this.storeFirst24h(liveState).catch(()=>{});
    // An order the fast lane sent after this pulse's read must not be shown at its older stage.

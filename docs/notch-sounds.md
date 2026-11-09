@@ -12,14 +12,16 @@ Pedido do proprietário em 08/11/2026: tocar um som no Mac quando houver aumento
   - com "Silenciar avisos" ligado;
   - durante uma reunião (toca quando ela acaba);
   - quando o som do Bunker está desligado em Ajustes do Sistema › Notificações.
-- Cada tipo toca uma vez por leitura, com no máximo um som por segundo. A notificação do mesmo ajuste fica silenciosa, inclusive o recibo de uma ordem confirmada, para nada tocar duas vezes.
+- Cada tipo toca uma vez por leitura, com no máximo um som por segundo. Contador que não pôde ser lido conta como desconhecido (N/D), nunca como zero, e não toca na leitura seguinte.
+- Durante uma reunião, os avisos guardados e as notificações do sistema seguem a prioridade: ordem do dono, proposta, perda e depois ajuste de gestor. A notificação do mesmo ajuste fica silenciosa, inclusive o recibo de uma ordem confirmada, para nada tocar duas vezes.
 - O app detecta como novo:
   - a mesma transição repetida depois (pausar, reativar, pausar de novo), pelo horário;
   - um ajuste fora dos 12 mais recentes, pelo aumento do contador de 24h daquele tipo.
 - Limites:
   - o modo Foco do macOS não silencia sons tocados direto pelo app (inferência: a Apple não documenta esse caso), então use "Silenciar avisos";
   - o feed de atividade é de campanha, então ajustes de conjunto (ABO) não tocam;
-  - o som segue o projeto escolhido no notch.
+  - o som segue o projeto escolhido no notch;
+  - um ajuste fora dos 12 mais recentes pode não tocar quando, na mesma leitura, outro do mesmo tipo sai da janela de 24h (o contador líquido não muda e o resumo não traz outro sinal); corrigir exige um contador crescente por tipo vindo do servidor.
 
 ## Regras de desenho
 

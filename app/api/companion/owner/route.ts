@@ -65,6 +65,9 @@ export async function POST(req:Request){
   const proposal=input.op==='proposalReview'?record:null;
   await wakeExecutor(proposal?.status==='Aprovada',[record?.project??input.project]);
   return response({ok:true,revision:saved?.revision??null,op:input.op,status:proposal?proposal.status:record?.status??null,id:record?.id??null});
- }catch(e:any){return response({error:e.message==='CONFLICT'?'Os dados mudaram. Confira de novo e confirme.':e.message||'Não foi possível registrar.'},e.message==='CONFLICT'?409:400);}
+ }catch(e:any){
+  // A Touch ID card order whose value moved since the owner saw it: same code and current values as the direct order.
+  if(e?.code==='DIRECT_ORDER_CHANGED')return response({error:e.message,code:e.code,current:e.detail||undefined},409);
+  return response({error:e.message==='CONFLICT'?'Os dados mudaram. Confira de novo e confirme.':e.message||'Não foi possível registrar.'},e.message==='CONFLICT'?409:400);}
 }
 export async function GET(){return response({error:'Use POST assinado pelo Mac.'},405);}

@@ -14,7 +14,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound()
+        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound(); testAlertPriorityAndCounters()
         failures += bunkFailures
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
@@ -274,6 +274,47 @@ enum SelfTest {
               let env = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let payload = Data(base64Encoded: env["payload"] as? String ?? ""),
               let sig = Data(base64Encoded: env["sig"] as? String ?? ""), let signature = try? P256.Signing.ECDSASignature(rawRepresentation: sig) else { check(false, #line); return }
         check(key.publicKey.isValidSignature(signature, for: payload) && env["key"] as? String == OwnerKey.keyId(key.publicKey) && OwnerKey.keyId(key.publicKey).count == 16, #line)
+    }
+
+    /// Fix battery (09/11/2026): held and notified alerts follow the island priority; counters that did not decode are unknown.
+    private static func testAlertPriorityAndCounters() {
+        typealias A = (String, String, String, IslandAlert.Kind)
+        let m = { (i: Int) -> A in ("ac:pause|m\(i)", "t", "d", .manager) }
+        // In a call: an approval held first survives three later manager changes; one read with approval, loss, pace and order keeps the top three.
+        var held: [A] = Store.keepHeld([], [("ap:x", "t", "d", .approval)])
+        for i in 0..<3 { held = Store.keepHeld(held, [m(i)]) }
+        check(held.map(\.0) == ["ap:x", "ac:pause|m2", "ac:pause|m1"], #line)
+        let one = Store.keepHeld([], [("ap:y", "t", "d", .approval), ("lo:z", "t", "d", .loss), ("pace:p:under:d", "t", "d", .manager), ("or:o:confirmed", "t", "d", .order)])
+        check(one.map(\.0) == ["or:o:confirmed", "ap:y", "lo:z"], #line)
+        // One read keeps the server's newest-first order (m0 newest), as deliver shows it; a later read goes before held ones.
+        check(Store.keepHeld([("sa:1", "t", "d", .sale)], [m(0), m(1), m(2)]).map(\.0) == ["ac:pause|m0", "ac:pause|m1", "ac:pause|m2"], #line)
+        let five = [m(5), m(4), m(3), m(2), m(1)]
+        check(Store.keepHeld([], five).map(\.0) == Store.byPriority(five).prefix(3).map(\.0) && Store.keepHeld([], five).map(\.0) == ["ac:pause|m5", "ac:pause|m4", "ac:pause|m3"], #line)
+        check(Store.keepHeld([m(1), m(0)], [m(3), m(2)]).map(\.0) == ["ac:pause|m3", "ac:pause|m2", "ac:pause|m1"], #line)
+        // Four notifications: a failed order and a loss go before four manager changes; the same kind keeps its arrival order.
+        let notes = Store.byPriority([m(0), m(1), m(2), m(3), ("lo:q", "t", "d", .loss), ("or:o:failed", "t", "d", .order)]).prefix(4).map(\.0)
+        check(notes == ["or:o:failed", "lo:q", "ac:pause|m0", "ac:pause|m1"], #line)
+        // Counters: a malformed bucket or a missing section is unknown, never zero; the next good read compares with the last good one.
+        let block = { (raw: String) in (try? JSONDecoder().decode(Summary.ActivityBlock.self, from: Data(raw.utf8))) ?? Summary.ActivityBlock(hours: 24, summary: [:], recent: []) }
+        let good = block(#"{"hours":24,"summary":{"increase":{"count":12,"actors":{},"unknown":0},"reduce":{"count":4,"actors":{},"unknown":0},"pause":{"count":7,"actors":{},"unknown":0}},"recent":[]}"#)
+        let bad = block(#"{"hours":24,"summary":{"increase":{"count":"12","actors":{},"unknown":0},"reduce":{"count":4,"actors":{},"unknown":0},"pause":{"count":7,"actors":{},"unknown":0}},"recent":[]}"#)
+        let more = block(#"{"hours":24,"summary":{"increase":{"count":13,"actors":{},"unknown":0},"reduce":{"count":4,"actors":{},"unknown":0},"pause":{"count":7,"actors":{},"unknown":0}},"recent":[]}"#)
+        let missing = Summary.ActivityBlock(hours: 24, summary: [:], recent: [])
+        check(AdjustSound.counts(good) == ["increase": 12, "reduce": 4, "pause": 7] && AdjustSound.counts(bad) == nil && AdjustSound.counts(missing) == nil, #line)
+        var last: AdjustSound.Counters? = nil, rises: [Set<String>] = []
+        for b in [good, bad, good, missing, good, bad, more] { let step = AdjustSound.counterStep(last: last, project: "p", activity: b, alreadyNew: []); rises.append(step.rise); last = step.last }
+        check(rises == [[], [], [], [], [], [], ["increase"]], #line)
+        check(AdjustSound.counterStep(last: ("p", ["increase": 1]), project: "q", activity: more, alreadyNew: []).rise.isEmpty, #line)
+        check(AdjustSound.counterStep(last: ("p", ["increase": 1]), project: "q", activity: bad, alreadyNew: []).last == nil, #line)
+        // A null bucket drops only its kind: that kind is unknown (kept, no rise), the others still compare; never zero.
+        let nullInc = block(#"{"hours":24,"summary":{"increase":null,"reduce":{"count":4,"actors":{},"unknown":0},"pause":{"count":7,"actors":{},"unknown":0}},"recent":[]}"#)
+        let morePause = block(#"{"hours":24,"summary":{"increase":{"count":12,"actors":{},"unknown":0},"reduce":{"count":4,"actors":{},"unknown":0},"pause":{"count":8,"actors":{},"unknown":0}},"recent":[]}"#)
+        last = nil; rises = []
+        for b in [good, nullInc, good, nullInc, more, nullInc, morePause] { let step = AdjustSound.counterStep(last: last, project: "p", activity: b, alreadyNew: []); rises.append(step.rise); last = step.last }
+        check(rises == [[], [], [], [], ["increase"], [], ["pause"]], #line)
+        last = nil; rises = []
+        for b in [nullInc, good, more] { let step = AdjustSound.counterStep(last: last, project: "p", activity: b, alreadyNew: []); rises.append(step.rise); last = step.last }
+        check(rises == [[], [], ["increase"]], #line)
     }
 
     /// Sound per kind of adjustment: read from the change alert keys, once per kind, pause first; activation is silent.

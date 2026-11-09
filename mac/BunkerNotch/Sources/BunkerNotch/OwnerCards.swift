@@ -101,9 +101,15 @@ enum OwnerAdjust {
     }
     /// Owner direct order, signed with Touch ID: becomes an approved exact proposal that the Cloudflare executor
     /// applies once via Malva (current value checked before, reread after). Pause, increase or reduce only.
+    /// Carries the values the owner saw (expected + after); a drift is refused, never re-priced.
     static func order(card: OwnerCards.Card, revision: Int, action: String, percent: Double?, reason: String, clientId: String) -> [String: Any] {
         var input = intent(card: card, revision: revision, action: action, percent: percent, reason: reason, clientId: clientId)
         input["ownerOrder"] = true
+        // The exact values on screen and in the Touch ID prompt: the server refuses the order if the current value moved.
+        var expected: [String: Any] = ["status": card.orderStatus ?? NSNull(), "currency": (card.currency ?? card.orderSource?.currency) ?? NSNull()]
+        expected["dailyBudget"] = card.orderBudget ?? NSNull()
+        input["expected"] = expected
+        if action == "increase" || action == "reduce", let after = newBudget(card.orderBudget, action: action, percent: percent) { input["after"] = ["dailyBudget": after] }
         return input
     }
     /// Owner direct order (op ownerDirectOrder): pause / increase % / reduce % of one Meta campaign, with the exact

@@ -34,9 +34,11 @@ test('live reading helpers: fresh, complete, single row; stale or failed reading
 });
 
 test('with a stale analysis, an owner order uses the live value and runs through the executor once', () => {
- const s=fixture(),c=cardAt(s,later),args={project,cardId:c.id,signature:c.signature,choice:'reduce',percent:25,clientId:'live-1',ownerOrder:true};
+ // The Mac signs the live value it showed (120 USD); the server never re-prices it (battery fix #38).
+ const s=fixture(),c=cardAt(s,later),args={project,cardId:c.id,signature:c.signature,choice:'reduce',percent:25,clientId:'live-1',ownerOrder:true,expected:{status:'ACTIVE',dailyBudget:120,currency:'USD'},after:{dailyBudget:90}};
  assert.equal(c.actionable.reduce,false,'the two-hour-old analysis alone blocks');
  assert.throws(()=>recordOwnerChoice(s,args,'mac-touchid:test',later),/não permitem/);
+ assert.throws(()=>recordOwnerChoice(s,{...args,expected:undefined,after:undefined,clientId:'live-old'},'mac-touchid:test',later,{live:liveOf(s,liveItems(s))}),e=>e.code==='DIRECT_ORDER_CHANGED','an older Mac without the signed value is refused when the base moved');
  const r=recordOwnerChoice(s,{...args,clientId:'live-2'},'mac-touchid:test',later,{live:liveOf(s,liveItems(s))});
  const p=s.proposals.find(x=>x.id===r.proposalId);
  assert.equal(r.status,'Autorizado');assert.deepEqual(p.payload.before,{dailyBudget:120});assert.deepEqual(p.payload.after,{dailyBudget:90});
@@ -50,7 +52,7 @@ test('with a stale analysis, an owner order uses the live value and runs through
 
 test('a live order is still refused at prepare when the current value moved again', () => {
  const s=fixture(),c=cardAt(s,later);
- const r=recordOwnerChoice(s,{project,cardId:c.id,signature:c.signature,choice:'increase',percent:10,clientId:'live-3',ownerOrder:true},'mac-touchid:test',later,{live:liveOf(s,liveItems(s))});
+ const r=recordOwnerChoice(s,{project,cardId:c.id,signature:c.signature,choice:'increase',percent:10,clientId:'live-3',ownerOrder:true,expected:{status:'ACTIVE',dailyBudget:120,currency:'USD'},after:{dailyBudget:132}},'mac-touchid:test',later,{live:liveOf(s,liveItems(s))});
  const p=s.proposals.find(x=>x.id===r.proposalId),t=later+1000,e=claimExecution(s,{proposalId:p.id,version:p.version,signature:p.signature,clientId:'claim-m',executionRef:'cloud-test'},t);
  assert.throws(()=>prepareExecution(s,{id:e.id,claimId:e.claimId,executionRef:'cloud-test',clientId:'prep-m',observation:observation(s,t+500,{dailyBudget:150})},t+1000),/mudou/);
 });

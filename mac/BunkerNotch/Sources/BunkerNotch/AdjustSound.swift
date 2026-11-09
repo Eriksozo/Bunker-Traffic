@@ -69,6 +69,21 @@ enum AdjustSound {
         guard let previous else { return [] }
         return Set(Kind.allCases.map(\.rawValue).filter { (current[$0] ?? 0) > (previous[$0] ?? 0) && !alreadyNew.contains($0) })
     }
+    /// Last counters that decoded, with their project.
+    typealias Counters = (project: String, counts: [String: Int])
+    /// The 24h counters of a read; nil (unknown) when they did not decode or the section is missing (the lossy
+    /// decoder leaves them empty, and the summary always sends every kind), so they never count as zero.
+    static func counts(_ a: Summary.ActivityBlock) -> [String: Int]? { a.summary.isEmpty ? nil : a.summary.mapValues(\.count) }
+    /// One read: the rise against the last counters that decoded on the same project, and the counters to keep.
+    /// A read with unknown counters rises nothing and keeps the last good ones, so the next good read compares with them.
+    /// Per kind too: a kind missing from this read (a null bucket) is unknown, keeps its last value and rises nothing,
+    /// and a kind with no earlier value has nothing to compare with, so neither counts as zero.
+    static func counterStep(last: Counters?, project: String, activity: Summary.ActivityBlock, alreadyNew: Set<String>) -> (rise: Set<String>, last: Counters?) {
+        let prev = last?.project == project ? last?.counts : nil
+        guard let now = counts(activity) else { return ([], prev.map { (project, $0) }) }
+        let known = now.filter { prev?[$0.key] != nil }
+        return (countRise(previous: prev, current: known, alreadyNew: alreadyNew), (project, (prev ?? [:]).merging(now) { $1 }))
+    }
     /// The same transition seen again (paused, reactivated, paused again): new when its time is clearly later than
     /// the last one stored. A reread of one change keeps the same or an earlier time (history replaces observed).
     static func repeats(lastAt: Date?, at: Date?) -> Bool {

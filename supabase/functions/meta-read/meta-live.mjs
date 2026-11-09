@@ -16,8 +16,10 @@ const PURCHASE=['offsite_conversion.fb_pixel_purchase','purchase','omni_purchase
 const action=(list,types)=>{let best=null;for(const a of arr(list))if(types.includes(a?.action_type)){const v=num(a.value);if(v!==null)best=best===null?v:Math.max(best,v);}return best;};
 export const metaCampaignFields='id,status,effective_status,start_time,created_time,stop_time,insights.date_preset(today){date_start,spend,impressions,actions,account_currency}';
 export const metaBasicFields='id,status,effective_status,start_time,created_time,stop_time';
-/** Graph error text without numbers that could be ids (never carries the token). */
-const diagnostic=e=>e&&typeof e==='object'?{code:num(e.code),subcode:num(e.error_subcode),type:typeof e.type==='string'?e.type.slice(0,40):null,message:typeof e.message==='string'?e.message.replace(/\d{5,}/g,'#').slice(0,180):null}:null;
+/** Graph error text without numbers that could be ids, with the token and token-shaped text redacted. */
+// Graph text may echo the credential: drop the token itself and anything token-shaped (same rule as account-limits).
+const redact=(text,token)=>{let t=String(text??'');const k=typeof token==='string'?token.trim():'';if(k.length>=8)t=t.split(k).join('[redacted]');return t.replace(/Bearer\s+\S+/gi,'Bearer [redacted]').replace(/(access_token|token)=[^&\s"']+/gi,'$1=[redacted]').replace(/EAA[A-Za-z0-9_-]{8,}/g,'[redacted]');};
+const diagnostic=(e,token)=>e&&typeof e==='object'?{code:num(e.code),subcode:num(e.error_subcode),type:typeof e.type==='string'?e.type.slice(0,40):null,message:typeof e.message==='string'?redact(e.message,token).replace(/\d{5,}/g,'#').slice(0,180):null}:null;
 
 /** Campaign and account ids are numeric strings; anything else is refused before any request. */
 export function cleanMetaIds(ids){
@@ -68,9 +70,9 @@ export async function readMetaAccountCampaigns(fetchImpl,token,accounts,{version
    if(requests>=metaLivePolicy.maxRequests){errors.push('META_REQUEST_BUDGET');break;}
    let r=await get(account,fields,after);
    // The insights expansion refused once: fall back to schedule fields for every account.
-   if(r.c===100&&fields===metaCampaignFields&&!downgraded){diag=diag||diagnostic(r.error);const b=await get(account,metaBasicFields,after);if(b.body){fields=metaBasicFields;downgraded=true;errors.push('META_INSIGHTS_REJECTED');r=b;}}
+   if(r.c===100&&fields===metaCampaignFields&&!downgraded){diag=diag||diagnostic(r.error,token);const b=await get(account,metaBasicFields,after);if(b.body){fields=metaBasicFields;downgraded=true;errors.push('META_INSIGHTS_REJECTED');r=b;}}
    if(r.network){errors.push('META_NETWORK');break;}
-   if(r.code){if(r.c===190)throw fail(r.code);errors.push(r.code);diag=diag||diagnostic(r.error);if([100,10,200,270,283,294].includes(r.c))skippedAccounts.push(account);break;}
+   if(r.code){if(r.c===190)throw fail(r.code);errors.push(r.code);diag=diag||diagnostic(r.error,token);if([100,10,200,270,283,294].includes(r.c))skippedAccounts.push(account);break;}
    for(const node of arr(r.body?.data))if(node&&wanted.has(String(node.id))){items.push(normalizeMetaCampaign(node));wanted.delete(String(node.id));}
    after=typeof r.body?.paging?.cursors?.after==='string'&&r.body?.paging?.next?r.body.paging.cursors.after:null;
    if(!after||!wanted.size)break;

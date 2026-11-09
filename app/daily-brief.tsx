@@ -2,9 +2,8 @@
 import {useEffect,useMemo,useState} from 'react';
 import {ArrowDownRight,ArrowUpRight,ChevronDown,ChevronRight,Minus} from 'lucide-react';
 import {Button} from '@/components/ui/button';
-import {dailyComparison,actionQueue,pausedAfterAnalysis} from '../lib/daily-brief.mjs';
+import {dailyComparison,actionQueue,statusAfterAnalysis,liveStatusRows,dayBound,withoutStaleToday} from '../lib/daily-brief.mjs';
 import {activityLog} from '../lib/campaign-activity.mjs';
-import {currentLiveSnapshot} from '../lib/live-display.mjs';
 import './daily-brief.css';
 import DecisionCards from './decision-cards';
 
@@ -43,12 +42,14 @@ function stakeText(item:any){
 export default function DailyBrief({state,project,candidates,showProject,onOpen,write,saving,liveItems=[]}:{state:any;project:string;candidates:any[];showProject:boolean;onOpen:(candidate:any)=>void;write:(input:any)=>Promise<boolean>;saving:boolean;liveItems?:any[]}){
  const [expanded,setExpanded]=useState<string|null>(null);
  useEffect(()=>setExpanded(null),[project]);
- const comparison=useMemo(()=>dailyComparison(state,project),[state,project]);
+ // After local midnight the last "today" cut is the previous day: today stays N/D until the next analysis, same rule as the notch.
+ const comparison=useMemo(()=>dailyComparison(dayBound(state,Date.now()),project),[state,project]);
  const queue=useMemo(()=>{
-  // A pause after the last analysis (manager log or live reading) removes the campaign from the queue.
-  const now=Date.now(),events=activityLog(state,{project,now});
-  const liveRows=(liveItems||[]).flatMap((item:any)=>{const s=currentLiveSnapshot(item,item?.projectId,undefined,now);return s?s.rows.map((r:any)=>({...r,projectId:item.projectId,fetchedAt:s.fetchedAt})):[];});
-  return actionQueue(candidates,{now,pausedKeys:pausedAfterAnalysis(candidates,{events,liveRows})});
+  // A pause after the last analysis (manager log or live reading) removes the campaign from the queue; a later reactivation
+  // brings it back. Live rows keep their origin sync time (lastSyncAt), exactly like the notch (lib/companion-summary.mjs).
+  const now=Date.now(),events=activityLog(state,{project,now}),current=withoutStaleToday(state,candidates,now);
+  const status=statusAfterAnalysis(current,{events,liveRows:liveStatusRows(liveItems,now)});
+  return actionQueue(current,{now,pausedKeys:status.paused,reactivatedKeys:status.reactivated});
  },[candidates,state,project,liveItems]);
  return <section className="panel daily-brief" aria-label="Resumo do dia">
   <div className="panel-title"><div><span className="eyebrow">RESUMO DO DIA</span><h2>Hoje em 1 minuto</h2><p className="hint">Hoje parcial comparado com ontem e com 7 dias. Só índices: gasto e faturamento de um dia parcial não se comparam com um dia fechado.</p></div></div>

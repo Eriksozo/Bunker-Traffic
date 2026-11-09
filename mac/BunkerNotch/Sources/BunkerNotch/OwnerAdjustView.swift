@@ -295,7 +295,7 @@ struct OwnerAdjustView: View {
 
     func sendOrder(_ card: OwnerCards.Card, revision: Int?, percent: Double?) async {
         guard let revision else { return }
-        let key = ["order", card.id, card.signature, m.action, percent.map { String($0) } ?? "", m.reason].joined(separator: "|")
+        let key = ["order", card.id, card.signature, m.action, percent.map { String($0) } ?? "", card.orderBudget.map { String($0) } ?? "", card.orderStatus ?? "", m.reason].joined(separator: "|")
         let input = OwnerAdjust.order(card: card, revision: revision, action: m.action, percent: percent, reason: m.reason, clientId: clientId(key))
         let line = OwnerAdjust.orderLine(card, action: m.action, percent: percent)
         await submit(input, prompt: "executar \(line) em \(card.campaign ?? "campanha") (\(card.account ?? card.adAccountId))", key: key,

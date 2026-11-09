@@ -29,6 +29,7 @@ import './malva-theme.css';
 import {snapshotRange} from '../lib/snapshot-schema.mjs';
 import {confirmedOwnerChoice,isValidCentralResponse} from '../lib/decision-confirmation.mjs';
 import {pendingCampaignCandidates} from '../lib/decision-flow.mjs';
+import {pulseToast} from '../lib/change-watch.mjs';
 import {accountOverview} from '../lib/overview-view.mjs';
 import OverviewAnalysisStatus from './overview-analysis-status';
 import {dataFreshness} from '../lib/data-freshness.mjs';
@@ -71,7 +72,7 @@ export default function Bunker(){
  useEffect(()=>{let alive=true;const load=async()=>{try{const r=await fetch('/api/attribution',{cache:'no-store'});if(!r.ok)return;const d:any=await r.json();if(alive&&Array.isArray(d.items))setAttributions(d.items);}catch{/* Keep the last authors; activity still shows observed changes. */}};load();const timer=setInterval(load,60000);globalThis.window.addEventListener('bunker:edit-pulse',load);return()=>{alive=false;clearInterval(timer);globalThis.window.removeEventListener('bunker:edit-pulse',load);};},[]);
  // Edit pulse (lib/change-watch.mjs): a new budget/status edit in Malva refreshes authors and live data at once.
  useEffect(()=>{let alive=true,seen=-1;const check=async()=>{if(document.visibilityState!=='visible')return;try{const r=await fetch('/api/companion/pulse',{cache:'no-store'});if(!r.ok)return;const d:any=await r.json(),v=Number(d?.pulse?.version);if(!alive||!Number.isSafeInteger(v))return;
-   if(seen>=0&&v!==seen){globalThis.window.dispatchEvent(new Event('bunker:edit-pulse'));void live.refresh();const last=d.pulse.last;if(last?.campaign)setToast(`${last.actor||'Alguém'} ${last.field==='status'?(String(last.after).toUpperCase()==='PAUSED'?'pausou':'ativou'):'mudou o orçamento de'} ${last.campaign}`);}
+   if(seen>=0&&v!==seen){globalThis.window.dispatchEvent(new Event('bunker:edit-pulse'));void live.refresh();const last=d.pulse.last;const text=pulseToast(last);if(text)setToast(text);}
    seen=v;}catch{/* The minute refresh still runs. */}};void check();const timer=setInterval(check,5000);return()=>{alive=false;clearInterval(timer);};},[]);
  const activityState=useMemo(()=>attributions.length?{...state,changeAttributions:attributions}:state,[state,attributions]);
  async function refresh(){const liveRead=live.refresh();setLoading(true);setError('');try{const r=await fetch('/api/state',{cache:'no-store'}),d:any=await r.json();if(!r.ok){if(d.signIn)setSignin(d.signIn);throw Error(d.error);}if(!isValidCentralResponse(d))throw Error('A resposta da central está incompleta. Os dados anteriores foram preservados.');acceptState(d);setSignin('');}catch(e:any){setError(e.message);}finally{await liveRead;setLoading(false);}}

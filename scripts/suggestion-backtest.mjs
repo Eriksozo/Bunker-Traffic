@@ -15,6 +15,8 @@ import {join} from 'node:path';
 import {sum,candidates} from '../lib/analysis.mjs';
 import {decisionContext} from '../lib/decision-context.mjs';
 import {isWarmupCampaign} from '../lib/campaign-scope.mjs';
+import {shadowRulePolicy as R} from '../lib/autonomy-shadow.mjs';
+import {nameDateOffset} from '../lib/first-24h.mjs';
 
 const FIELDS=['spend','revenueNet','adCosts','productCost','saleTax','frontOrders','orders','checkouts','impressions','linkClicks'];
 const finite=Number.isFinite,round=n=>Math.round(n*100)/100;
@@ -48,8 +50,14 @@ export function evaluateDay(meta,days,i,{now}={}){
  const sums=Object.fromEntries(Object.entries(w).map(([k,r])=>[k,r?sum([r]):null]));
  const ctx=decisionContext(sums);
  const t=sums.today,recent=sums['3d'],budgetBrl=finite(meta.dailyBudget)&&meta.dailyBudget>0?meta.dailyBudget*(meta.budgetCurrency==='BRL'?1:finite(meta.budgetRate)?meta.budgetRate:NaN):NaN;
- // Shadow rule 2 (bad-day-reduce) with the full day standing in for "after 10h".
- const badDay=!!(recent&&finite(recent.roi)&&recent.roi>=1.3&&finite(budgetBrl)&&finite(t?.spend)&&t.spend>=0.3*budgetBrl&&(t.orders===0||finite(t.roi)&&t.roi<0.7));
+ // Shadow rule 2 (bad-day-reduce, v2 thresholds of lib/autonomy-shadow.mjs) with the full day standing in for "after
+ // 10h". Launch day from the series' first spend (0 today, 1 yesterday, else old); old campaigns need a 3-day ROI of
+ // 1.3, campaigns 1–3 days old (never the launch day) yesterday's ROI >= 1.2 and a sale today, unless rule 1 pauses.
+ const first=days.findIndex(d=>d.spend>0),age=first>=0?i-first:null,launch=age===0?0:age===1?1:null,offset=nameDateOffset(meta.name,now,'America/Sao_Paulo'),y=sums.yesterday;
+ const newLossPause=launch!==null&&finite(t?.spend)&&t.spend>=R.newSaleLossMinSpendBrl&&finite(t.roi)&&t.roi<R.newSaleLossPauseRoi&&(t.frontOrders>0||t.orders>0||t.revenueNet>0);
+ const oldOk=launch===null&&!!recent&&finite(recent.roi)&&recent.roi>=1.3;
+ const young=!oldOk&&launch!==0&&(launch===1||offset!==null&&offset<=-1&&offset>=-3)&&!!y&&finite(y.roi)&&y.roi>=R.badDayNewMinYesterdayRoi&&t?.orders>0&&!newLossPause;
+ const badDay=!!((oldOk||young)&&finite(budgetBrl)&&finite(t?.spend)&&t.spend>=0.3*budgetBrl&&(oldOk&&t.orders===0||finite(t.roi)&&t.roi<R.badDayRoi));
  // Shadow rule 4 (morning-increase) with the full day standing in for "since midnight": an optimistic proxy.
  // Owner decision 08/11/2026: it also needs a 3-day ROI of at least 1.3; strongDay (ROI >= 3) gets the bigger step.
  const morning=!!(t&&finite(t.orders)&&t.orders>=3&&finite(t.frontOrders)&&t.frontOrders>=2&&finite(t.roi)&&t.roi>=2.5&&finite(budgetBrl)&&t.spend>=0.25*budgetBrl&&recent&&finite(recent.roi)&&recent.roi>=1.3);
