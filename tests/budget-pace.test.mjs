@@ -4,7 +4,7 @@ import {projectPace,budgetPace} from '../lib/budget-pace.mjs';
 
 const from='2026-11-07T04:00:00Z',at=h=>new Date(Date.parse(from)+h*3600000).toISOString();
 const row=(id,spend,dailyBudget,extra={})=>({externalId:id,adAccountId:'act',level:'campaign',effectiveStatus:'ACTIVE',accountStatus:{active:true},spend,dailyBudget,budgetCurrency:'BRL',...extra});
-const state=(rows,hours,cfg={currency:'BRL'})=>({config:{p:{projectName:'P',...cfg}},snapshots:[{projectId:'p',period:'today',level:'campaign',from,fetchedAt:at(hours),rows}]});
+const state=(rows,hours,cfg={currency:'BRL'})=>({config:{p:{projectName:'P',...cfg}},snapshots:[{projectId:'p',period:'today',level:'campaign',source:'Malva MCP',complete:true,from,fetchedAt:at(hours),rows}]});
 
 test('on pace, under and running out are told apart from the elapsed share of the day', () => {
  assert.equal(projectPace(state([row('a',500,1000)],12),'p',Date.parse(at(12))).status,'on');
@@ -29,8 +29,8 @@ test('missing signal stays N/D: too early, no budget, paused rows and foreign cu
 
 test('all projects combine only within one currency', () => {
  const two={config:{p:{projectName:'P',currency:'BRL'},q:{projectName:'Q',currency:'BRL'}},snapshots:[
-  {projectId:'p',period:'today',level:'campaign',from,fetchedAt:at(12),rows:[row('a',500,1000)]},
-  {projectId:'q',period:'today',level:'campaign',from,fetchedAt:at(12),rows:[row('b',100,1000)]}]};
+  {projectId:'p',period:'today',level:'campaign',source:'Malva MCP',complete:true,from,fetchedAt:at(12),rows:[row('a',500,1000)]},
+  {projectId:'q',period:'today',level:'campaign',source:'Malva MCP',complete:true,from,fetchedAt:at(12),rows:[row('b',100,1000)]}]};
  const all=budgetPace(two,'all',Date.parse(at(12)));
  assert.equal(all.budget,2000);assert.equal(all.status,'under');assert.equal(all.byProject.length,2);
  two.config.q.currency='USD';two.snapshots[1].rows=[row('b',100,1000,{budgetCurrency:'USD'})];
@@ -39,7 +39,7 @@ test('all projects combine only within one currency', () => {
 });
 
 test('owner warnings: running out before 18:00 project time, or far below pace past 40% of the day', () => {
- const st=(rows,hours)=>({config:{p:{projectName:'P',currency:'BRL'}},snapshots:[{projectId:'p',period:'today',level:'campaign',from,timezone:'America/Sao_Paulo',fetchedAt:at(hours),rows}]});
+ const st=(rows,hours)=>({config:{p:{projectName:'P',currency:'BRL'}},snapshots:[{projectId:'p',period:'today',level:'campaign',source:'Malva MCP',complete:true,from,timezone:'America/Sao_Paulo',fetchedAt:at(hours),rows}]});
  // from = 04:00Z = 01:00 in São Paulo; 600 of 1000 by +6 h runs out at +10 h = 11:00 local.
  assert.equal(projectPace(st([row('a',600,1000)],6),'p',Date.parse(at(6))).alert,'early');
  // 200 of 1000 by +12 h (50% of the day): leftover 60% → under.

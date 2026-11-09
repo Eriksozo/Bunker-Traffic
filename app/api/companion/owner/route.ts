@@ -25,12 +25,18 @@ async function directOrder(input:any,owner:string){
   const cur=await readState() as any,state=cur.state;
   const project=typeof input.project==='string'?input.project:'';
   if(!state.config?.[project])return response({error:'Projeto não configurado no Bunker.',code:'DIRECT_ORDER_PROJECT'},400);
+  // A resend of an order already recorded (lost answer) gets its receipt back, before any live read or contingency
+  // check: its own claimed execution must not count as a collision.
+  if(typeof input.clientId==='string'&&(state.proposals||[]).some((p:any)=>p.directOrder===true&&p.clientId===input.clientId)){
+   try{const proposal=recordDirectOrder(state,input,owner,{live:null});return response({ok:true,op:input.op,status:proposal.status,id:proposal.id,revision:cur.revision??null,before:proposal.payload.before,after:proposal.payload.after,currency:proposal.payload.currency,expiresAt:proposal.expiresAt,replay:true});}
+   catch(e:any){return response({error:e?.message||'Não foi possível conferir a ordem.',code:e instanceof DirectOrderError?e.code:'DIRECT_ORDER_FAILED'},400);}
+  }
   const latest=await readLiveData(storage(),state,project).catch(()=>({items:[]})) as any;
   const live=liveOrderRow(latest.items,project,input.adAccountId,input.objectId);
   try{
    if(!live)throw new DirectOrderError('Sem leitura ao vivo desta campanha nos últimos 10 minutos. O Bunker pediu uma releitura agora; tente de novo em 30 segundos.','DIRECT_ORDER_NO_LIVE');
    const guard=decisionContingency({state,project,row:live.row,proposal:null,action:input.action,percent:input.percent,liveItems:latest.items});
-   if(guard.blocked)throw new DirectOrderError('Contingência: '+guard.blockers.join(' '),'DIRECT_ORDER_CONTINGENCY');
+   if(guard.blocked){const text=guard.blockers.join(' ');throw new DirectOrderError(text.startsWith('Contingência')?text:'Contingência: '+text,'DIRECT_ORDER_CONTINGENCY');}
    const proposal=recordDirectOrder(state,input,owner,{live});
    const saved=await commit(state,cur.revision) as any;
    await wakeExecutor(proposal.status==='Aprovada',[project]);

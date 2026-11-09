@@ -5,7 +5,8 @@ import {Button} from '@/components/ui/button';
 import {accountMatches} from '../lib/account-limits.mjs';
 import './accounts-panel.css';
 
-const money=(n:any,currency?:string|null)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('pt-BR',{style:'currency',currency:currency&&/^[A-Z]{3}$/.test(currency)?currency:'USD',maximumFractionDigits:2}):'N/D';
+// Without the account currency the number is shown bare with "moeda N/D", never under a guessed currency symbol.
+const money=(n:any,currency?:string|null)=>typeof n!=='number'||!Number.isFinite(n)?'N/D':currency&&/^[A-Z]{3}$/.test(currency)?n.toLocaleString('pt-BR',{style:'currency',currency,maximumFractionDigits:2}):n.toLocaleString('pt-BR',{maximumFractionDigits:2})+' (moeda N/D)';
 const brl=(n:any)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}):'N/D';
 const stamp=(v?:string|null)=>{const t=Date.parse(v||'');return Number.isFinite(t)?new Date(t).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'N/D';};
 const metaErrors:Record<string,string>={META_TOKEN_MISSING:'Token de leitura da Meta ainda não cadastrado.',META_190:'Token da Meta inválido ou expirado.',META_200:'O token da Meta não tem permissão de leitura dessas contas.',META_NETWORK:'Sem resposta da Meta na última leitura.'};

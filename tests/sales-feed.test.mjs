@@ -110,8 +110,8 @@ test('Adversarial payloads: numeric order ids, non-ISO currency, ambiguous text 
  assert.equal(normalizeSale({topic:'order.paid',data:{amount:1,orderId:-1}},t).orderRef,null);
  assert.equal(normalizeSale({topic:'order.paid',data:{amount:1,orderId:1.5}},t).orderRef,null);
  assert.equal(normalizeSale({topic:'order.paid',data:{amount:1,currency:'usd',orderId:'o'}},t).currency,'USD');
- for(const amount of ['1.297','1.297,00','1,297.00','R$ 297','1e3','',' ','297,0001','-10'])assert.equal(normalizeSale({topic:'order.paid',data:{amount,orderId:'o'}},t),null,JSON.stringify(amount));
- for(const [amount,want] of [['297',297],['297,00',297],['49.9',49.9],[' 12,5 ',12.5],[1297,1297]])assert.equal(normalizeSale({topic:'order.paid',data:{amount,orderId:'o'}},t).amount,want,String(amount));
+ for(const amount of ['1.297','1,297','1e3','',' ','297,0001','-10'])assert.equal(normalizeSale({topic:'order.paid',data:{amount,orderId:'o'}},t),null,JSON.stringify(amount));
+ for(const [amount,want] of [['297',297],['297,00',297],['49.9',49.9],[' 12,5 ',12.5],[1297,1297],['1.297,00',1297],['1,297.00',1297],['R$ 297',297]])assert.equal(normalizeSale({topic:'order.paid',data:{amount,orderId:'o'}},t).amount,want,String(amount));
  assert.equal(normalizeSale({topic:'order.paid',data:{amount:2e7,orderId:'o'}},t),null,'absurd amount refused');
  assert.equal(normalizeSale({topic:'order.paid',data:{amount:10,orderId:'o',paidAt:'2026-11-08T12:04:00Z'}},t).at,'2026-11-08T12:04:00.000Z','small skew kept');
 });

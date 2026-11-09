@@ -5,7 +5,7 @@ import {projectPace,budgetPace} from '../lib/budget-pace.mjs';
 // Synthetic fixtures only.
 const from='2026-11-07T03:00:00Z',at=h=>new Date(Date.parse(from)+h*3600000).toISOString(),t=h=>Date.parse(at(h));
 const row=(id,spend,dailyBudget,extra={})=>({externalId:id,adAccountId:'act',level:'campaign',effectiveStatus:'ACTIVE',accountStatus:{active:true},spend,dailyBudget,budgetCurrency:'BRL',...extra});
-const snap=(rows,hours,over={})=>({projectId:'p',period:'today',level:'campaign',from,fetchedAt:at(hours),timezone:'America/Sao_Paulo',rows,...over});
+const snap=(rows,hours,over={})=>({projectId:'p',period:'today',level:'campaign',source:'Malva MCP',complete:true,from,fetchedAt:at(hours),timezone:'America/Sao_Paulo',rows,...over});
 const state=(snaps,cfg={currency:'BRL'})=>({config:{p:{projectName:'P',...cfg}},snapshots:snaps});
 
 test('After midnight, yesterday\'s "today" source is not today\'s pace (no false under-pace alert)', () => {

@@ -12,16 +12,18 @@ export const metaAccountFields='account_id,name,account_status,disable_reason,cu
 const metaStatus=Object.freeze({1:'active',2:'disabled',3:'unsettled',7:'risk-review',8:'pending-settlement',9:'grace-period',100:'pending-closure',101:'closed',201:'active',202:'closed'});
 export const statusLabels=Object.freeze({active:'Ativa',disabled:'Desabilitada',unsettled:'Pagamento pendente','risk-review':'Em análise de risco','pending-settlement':'Acerto pendente','grace-period':'Carência','pending-closure':'Fechando',closed:'Fechada'});
 const finite=Number.isFinite,arr=v=>Array.isArray(v)?v:[];
-const num=v=>{const n=typeof v==='string'?Number(v):v;return finite(n)?n:null;};
+// Text numbers must be non-empty: '' or whitespace is N/D, not 0 (Number('') is 0).
+const num=v=>{const n=typeof v==='string'?(v.trim()?Number(v):NaN):v;return finite(n)?n:null;};
 const text=(v,max=160)=>typeof v==='string'&&v.trim()?v.trim().slice(0,max):null;
 
 /** Meta Graph account → panel fields. A negative or missing `adtrust_dsl` means no limit reported (N/D). */
 export function normalizeMetaAccount(raw){
  const accountId=text(String(raw?.account_id??'').replace(/^act_/,''),40);if(!accountId||!/^\d+$/.test(accountId))return null;
- const limit=num(raw.adtrust_dsl),spend=num(arr(raw.insights?.data)[0]?.spend);
+ const limit=num(raw.adtrust_dsl),today=arr(raw.insights?.data);
  return {accountId,name:text(raw.name),status:metaStatus[raw.account_status]||null,currency:text(raw.currency,3),timezone:text(raw.timezone_name,64),
-  // Graph omits an empty insights edge: no row today means no spend registered by Meta today.
-  dailyLimit:limit!==null&&limit>0?limit:null,todaySpend:spend??0,disableReason:num(raw.disable_reason)};
+  // Graph omits an empty insights edge: no row today means no spend registered by Meta today (0). A row whose spend
+  // is missing, empty or unparseable is N/D, never 0.
+  dailyLimit:limit!==null&&limit>0?limit:null,todaySpend:today.length?num(today[0]?.spend):0,disableReason:num(raw.disable_reason)};
 }
 
 /**

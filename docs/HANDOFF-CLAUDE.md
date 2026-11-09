@@ -702,3 +702,40 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Exibição (`lib/meta-display.mjs`): status/orçamento da Meta quando a leitura dela é mais nova que a do Malva; gasto, impressões e cliques quando à frente no mesmo dia; razões recalculadas com as fórmulas do Malva (ROAS = receita líquida/gasto; ROI = receita líquida − custos ÷ gasto + custos de anúncio); IC, pedidos e receita continuam do Malva, IC/compras do pixel à parte. Web: `/api/live` e o relógio "Meta ao vivo · HH:MM". Notch: números do dia, placar e detalhe da campanha ("Meta ao vivo há X min"); a fila continua na análise.
 - Fora do alcance de propósito: análise, propostas, aprovações, contingência e conferência de ordem continuam só com o Malva (teste garante). CLAUDE.md e `docs/connections.md` atualizados com a decisão.
 - Pendente: confirmar em produção a duração e o número de chamadas de uma leitura completa (`metaLive.ms`, `requests`) e que a Meta não devolve limite de chamadas no ritmo de 1 min.
+
+## Nova bateria de aprimoramento: 7 frentes, 31 achados (registro escrito às 2026-11-09 12:48:55 UTC por `date -u`)
+- **Pedido do dono:** "Nova bateria de testes para aprimoramento". Foram 7 buscadores só de leitura, com prova por script. As correções foram feitas só nos arquivos livres; a outra sessão ativa tinha edições locais no worker, no notch, em meta-live, companion-summary, reading-context, bunker.tsx e api/live.
+- **Ordens do dono:**
+  - Uma falha antes do envio, com tentativas restantes, agora aparece como "Ainda não enviada · nova tentativa do executor pendente" e continua bloqueando uma segunda ordem. Antes aparecia "Não enviada" e o executor ainda a retomava.
+  - O reenvio de uma ordem já registrada recebe o próprio recibo antes da leitura ao vivo e da contingência.
+  - As ordens podadas levam junto as suas execuções; antes, 200 execuções órfãs travariam o executor.
+  - Orçamento resultante acima de 1e9 é recusado.
+- **Fila de decisões:**
+  - Um teste iniciado ontem à noite mantém a prioridade de teste novo quando todo o gasto anterior é de ontem.
+  - "TESTE" só conta como palavra inteira (TESTEMUNHO não conta). O aquecimento passa a aceitar dígitos e plural.
+  - Sem leitura ao vivo, a lista ordena pelo gasto da análise e põe o teste novo sem vendas primeiro.
+  - A trava de orçamento vale entre projetos que compartilham a conta.
+  - Um incidente de outra campanha da conta não rebaixa o resultado.
+  - O provider é comparado sem diferenciar maiúsculas.
+- **Ritmo e previsão:**
+  - A previsão limita o gasto restante ao orçamento diário conhecido.
+  - Um projeto "spent" projeta o que já gastou.
+  - O ritmo só usa leitura de hoje completa da Malva.
+- **Vendas e contas:**
+  - Estornos em outras grafias (chargedback, charged_back, devolvido, protested, overdue…) não contam como venda.
+  - Valores BR/US agrupados ("1.297,00", "1,297.00", "R$ 297") são lidos; os ambíguos seguem N/D.
+  - A deduplicação e a "última hora" vão além das 40 vendas mostradas (`seen`, 1000 refs).
+  - A hora de pagamento vence a de criação.
+  - Moeda ausente no painel de contas aparece como "moeda N/D", não US$. Texto vazio vira N/D, não 0.
+  - Janelas novas exigem data ISO com fuso; em produção todas já vêm com Z.
+- **Não corrigido aqui (entregue à outra sessão, arquivos dela):**
+  - Executor: uma pausa enviada durante a faixa rápida é desfeita pelo `put('runtime',{...setting})` do pulso pesado.
+  - Notch, ação rápida:
+    - o botão "Pausar" aparece em linha só de alerta;
+    - o preset ignora `blockedBy` e `wouldExecute`, o que permite aumento acima do teto do dono;
+    - linhas antigas mantêm o botão.
+- **Desfeito de propósito:** o incidente encerrado mais recente da própria campanha continua valendo sobre um incidente geral aberto, como manda o teste existente. A contingência segue conservadora.
+- **Limites conhecidos:** a pesquisa recomenda não mexer agora (som fora dos 12 mais recentes: depois, com o próximo build do Mac; data no nome a 61–182 dias: não vale; fila entre meia-noite e a análise: coberta por "Primeiras 24h").
+- **Pendências:**
+  - Abertas: cards por projeto duplicados em "Todos" para conta compartilhada; o `cardDecision` e o `proposalReview` recusam o reenvio pela revisão antes da checagem de replay (achado só por leitura).
+  - Melhorias do executor: `freshChanges` compartilhado, get/put concorrentes em runtime, `watchChanges` com pausa central.

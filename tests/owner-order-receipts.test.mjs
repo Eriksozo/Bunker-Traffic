@@ -8,12 +8,13 @@ const order=(id,over={})=>({id,project:'p1',ownerOrder:true,createdBy:'owner',cr
 const state=(proposals,executions=[])=>({config:{p1:{projectName:'Gabe'},p2:{projectName:'John'}},proposals,executions});
 
 test('Every executor status maps to its receipt stage and label', () => {
- const cases=[[null,'queued'],['Reservada','checking'],['Preparada','checking'],['Enviada','sent'],['Confirmada','confirmed'],['Verificação necessária','verify'],['Falhou','failed']];
+ const cases=[[null,'queued'],['Reservada','checking'],['Preparada','checking'],['Enviada','sent'],['Confirmada','confirmed'],['Verificação necessária','verify'],['Falhou','checking']];
  for(const [status,stage] of cases){
   const s=state([order('a')],status?[{proposalId:'a',status,claimedAt:iso(now-30000),reason:'leitura divergente'}]:[]);
   const [r]=ownerOrderReceipts(s,{now});
   assert.equal(r.stage,stage,String(status));assert.equal(typeof r.label,'string');assert.ok(r.label.length>0);
   assert.equal(r.reason,['failed','verify'].includes(stage)?'leitura divergente':null,'reason only for failed/verify');
+  if(status==='Falhou')assert.match(r.label,/nova tentativa/,'a failure before dispatch with attempts left is still pending');
  }
 });
 
@@ -42,11 +43,11 @@ test('Only owner orders of the last day, newest first, capped, and filtered by p
 
 test('Receipt fields: live source, N/D stays null, long reasons are cut', () => {
  const p=order('a',{payload:{action:'status',before:{},after:{status:'PAUSED'},liveTarget:{dailyBudget:100}}});
- const [r]=ownerOrderReceipts(state([p],[{proposalId:'a',status:'Falhou',claimedAt:iso(now),reason:'x'.repeat(500)}]),{now});
+ const [r]=ownerOrderReceipts(state([p],[{proposalId:'a',status:'Verificação necessária',claimedAt:iso(now),reason:'x'.repeat(500)}]),{now});
  assert.equal(r.source,'live');assert.equal(r.currency,null);assert.equal(r.campaign,null);
  assert.deepEqual(r.before,{dailyBudget:null,status:null});assert.equal(r.after.status,'PAUSED');
  assert.equal(r.reason.length,240);
- const [n]=ownerOrderReceipts(state([order('b')],[{proposalId:'b',status:'Falhou',claimedAt:iso(now),reason:{code:1}}]),{now});
+ const [n]=ownerOrderReceipts(state([order('b')],[{proposalId:'b',status:'Verificação necessária',claimedAt:iso(now),reason:{code:1}}]),{now});
  assert.equal(n.reason,null,'non-text reason is not shown');assert.equal(n.source,'analysis');
 });
 
