@@ -107,7 +107,15 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private shadowChain:Promise<unknown>=Promise.resolve();
  private queueShadow(state:any):Promise<any[]>{const run=this.shadowChain.then(()=>this.storeShadow(state));this.shadowChain=run.catch(()=>{});return run;}
  /** A between-pulse run: a failure keeps the stored entries (the heavy pulse records shadow failures). */
- private async freshShadow(state:any){return (await this.queueShadow(state).catch(()=>null))??await this.storedShadow();}
+ private async freshShadow(state:any){
+  const started=Date.now();
+  const out=await this.queueShadow(state).catch(async(e:any)=>{
+   // Kept apart from shadowStatus (the heavy pulse's record): the last between-pulse failure, code and short text only.
+   await this.ctx.storage.put('shadowLive',{at:new Date().toISOString(),ok:false,ms:Date.now()-started,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});
+   return null;});
+  if(out)await this.ctx.storage.put('shadowLive',{at:new Date().toISOString(),ok:true,ms:Date.now()-started}).catch(()=>{});
+  return out??await this.storedShadow();
+ }
  /**
   * Shadow mode (docs/autonomy-policy.md): records what each owner-chosen rule would do now and what a
   * manager did afterwards. Never proposes, approves or dispatches. Stored in this object, not in the central.
@@ -392,7 +400,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     // Same fields as the notch's recent list: an owner action, the next-day grade and the rule label stay visible here.
     ruleLabel:e.ruleLabel||null,limitations:e.limitations??null,owner:e.owner||null,grade:e.grade||null}));
    const first24h=await this.ctx.storage.get<any>('first24h'),meta=await this.ctx.storage.get<any>('metaLive');
-   return Response.json({status:status||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
+   return Response.json({status:status||null,live:await this.ctx.storage.get<any>('shadowLive')||null,summary:shadowSummary(all,{day}),entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
   }
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse'),phone=await this.ctx.storage.get<any>('phoneAlerts');return Response.json({...runtime,phone:{configured:!!(this.env.PUSHOVER_TOKEN&&this.env.PUSHOVER_USER),primed:!!phone?.primed,sent:phone?.sent||0,lastSentAt:phone?.lastSentAt||null,lastError:phone?.lastError||null,lastErrorAt:phone?.lastErrorAt||null},attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
