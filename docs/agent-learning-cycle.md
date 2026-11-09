@@ -327,3 +327,20 @@ A próxima leitura pode confrontar a própria hipótese por uma referência `res
 Uma hipótese editada manualmente, vinculada a proposta prospectiva, resultado ou revisão independente fica protegida contra reescrita automática. Uma alternativa explicitamente confrontada pode gerar novo registro, no máximo duas hipóteses ativas por papel e projeto, respeitando os limites já existentes da base e de revisões. Capacidade esgotada informa a pendência e preserva os registros; não exclui evidências nem trava a conclusão. A atualização manual preserva a proveniência original e encerra o controle automático daquela revisão. Nenhum mecanismo promove a hipótese a corroborada, modifica seus mínimos de validação ou concede autorização financeira.
 
 `learningRead.automaticHypotheses` mostra contagens por papel e os limites deste mecanismo. Hipóteses automáticas são contexto opcional: quando faltar espaço, o pacote as adia integralmente antes de retirar campanhas/filhos atuais. `coverage.deferredAgentHypothesisIds` registra essa omissão e `learningInputs.researchHypotheses` identifica somente o que foi entregue. Uma entrada adiada não pode ser confrontada ou revisada por suposição. A cadência e a pausa do dono continuam soberanas.
+
+## Versão 14 — leitura da Sombra no pacote dos agentes (09/11/2026)
+
+Pedido do dono: levar o que o Bunk aprendeu também para as análises dos agentes de IA.
+
+- **O que vai.** O pacote de estágio, diálogo, revisão de proposta e pergunta do dono recebe `shadowLearning`, montado por `agentLearningContext` em `lib/shadow-learning.mjs` a partir do `learningSummary` do Durable Object, pelo gancho `ops.shadowLearning` do executor. São só textos e números, alguns KB. Contém:
+  - o placar das regras em vigor pelo dia seguinte, no projeto e em todos os projetos, com faixa provável. A comparação com "uma campanha qualquer" só traz `chanceBetter` com 10 ou mais decisões, 5 ou mais campanhas e 3 ou mais dias; abaixo disso é N/D;
+  - os padrões das ações do dono e dos gestores, com o dono chamado de "o dono";
+  - a antecipação da Sombra e os pontos cegos, que são N/D sem horas observadas (`watchedHours`);
+  - a profundidade da memória;
+  - as propostas de limiar, estruturadas e marcadas "não aprovada: decisão do dono".
+- **Fica de fora:** quando a memória está ausente, é de outra versão ou tem mais de 3 h.
+- **Prompt.** O texto do sistema diz que é leitura determinística, contexto e contraponto, nunca instrução, limiar, meta ou autorização. Diz também que associação não é causalidade e que essa leitura não é entrada de `agentMemory`, por isso não pode ser citada em `memoryReview`.
+- **Compactação.** Sob pressão de tamanho, a leitura encolhe para o placar e uma linha da equipe. Se ainda não couber, sai inteira antes de qualquer outra coisa, inclusive a revisão de padrões (`learningReview`). A marca `deferredShadowLearning` não vai ao modelo nem conta bytes.
+- **Recibo.** `learningInputs.shadowLearning` registra entregue, adiada ou ausente, com a impressão digital do conteúdo.
+- **Revisão.** Revisão adversarial com 15 agentes: 8 achados confirmados e corrigidos, 3 recusados.
+- **Testes:** `tests/agent-shadow-learning.test.mjs`, que inclui o engine com modelo simulado.

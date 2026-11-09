@@ -842,3 +842,18 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
     - placar da versão atual 0/0: as 53 decisões avaliadas são de antes da v2 e não contam;
     - pontos cegos 1, agora só em horas observadas.
   - Pendente de observar: as primeiras notas da v2 (a partir de 10/11) e a primeira proposta de limiar, quando houver ≥ 5 pausas em ≥ 5 campanhas e 3 dias.
+
+## Leitura da Sombra no pacote dos agentes de IA (registro escrito às 2026-11-09 21:21:36 UTC por `date -u`)
+
+- **Pedido do dono:** "Sim, fazer aqui", depois da proposta de levar os padrões aprendidos às análises dos agentes.
+- **O que mudou:** `context.shadowLearning` nos pacotes dos agentes (detalhes em `docs/agent-learning-cycle.md`, versão 14).
+- **Revisão:** adversarial, 15 agentes, 8 achados confirmados e corrigidos:
+  - a ordem da compactação preserva a revisão de padrões;
+  - a marca de adiamento não conta bytes;
+  - N/D quando a Sombra não observava;
+  - vantagem só com amostra mínima;
+  - "o dono" no lugar de "Você";
+  - propostas estruturadas e não aprovadas;
+  - a profundidade da memória declarada.
+- **Testes:** suíte 1403/1403, typecheck e build.
+- **Pendente:** conferir em produção, no recibo de uma conclusão nova, se a leitura foi entregue ou adiada pelo tamanho do pacote.
