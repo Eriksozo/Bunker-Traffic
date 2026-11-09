@@ -1,4 +1,4 @@
-# Política de autonomia — fase sombra
+# Política de autonomia — sombra e módulo de autonomia
 
 Decisão do proprietário em 07/11/2026, depois do estudo das ações de um gestor nos seis projetos Meta. O objetivo é o Bunker agir com precisão antes dos gestores. Este documento descreve a fase atual. Ele **não** autoriza execução automática.
 
@@ -99,4 +99,4 @@ Pedido do proprietário: "quero poder ativar quando for pra ele assumir o contro
 - **Como é enviada:** proposta exata aprovada pela permissão (`createdBy:'bunk'`, `autonomyOrder:true`, impressão digital da permissão), validade de 10 min, pelo mesmo claim → prepare (relê a Malva) → submit único → releitura → confirm da ordem direta. Na reserva, na pré-conferência e no envio a permissão é conferida de novo: interruptor ligado, mesma impressão digital, campanha ainda em Automático. A releitura depois do envio continua mesmo se o dono desligar.
 - **Visibilidade:** recibos em "Suas ordens" com `by:'bunk'`; no web, registro do que o Bunk fez, o que aguarda o dono e o que foi segurado (com o motivo).
 
-**Ainda não autoriza execução real.** A regra do `CLAUDE.md` continua valendo: ligar o Automático em produção depende da revisão da sombra, dos tetos do dono e do registro explícito dele no `CLAUDE.md`. Até lá o interruptor deve ficar desligado. Pendências antes do primeiro Automático: rótulo "Bunk" nos recibos do notch, aviso no iPhone para ordens do Bunk e conferência do interruptor também na Edge Function `malva-mcp` (hoje ela confere a pausa do escritório, a aprovação exata e o comando, não o interruptor da autonomia). Testes: `tests/autonomy-grant.test.mjs`.
+**Registro do dono (09/11/2026, "Sim, registrar"):** o `CLAUDE.md` passou a permitir a ordem do Bunk só no modo Automático, com o interruptor geral ligado, dentro das ações e limites salvos pelo dono. Ligar continua sendo decisão dele, na interface. Ainda recomendado antes do primeiro Automático: rótulo "Bunk" nos recibos do notch, aviso no iPhone para ordens do Bunk e conferência do interruptor também na Edge Function `malva-mcp` (hoje ela confere a pausa do escritório, a aprovação exata e o comando, não o interruptor da autonomia). Testes: `tests/autonomy-grant.test.mjs`.
