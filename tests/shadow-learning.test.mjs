@@ -135,7 +135,7 @@ test('The executor feeds the gate from the memory, stores it apart and shows it 
 
 test('End to end in the executor: graded decisions and the day base land in the memory, the summary and the gate',async()=>{
  const fs=await import('node:fs'),vm=await import('node:vm'),ts=(await import('typescript')).default;
- const mods={'autonomy-shadow':await import('../lib/autonomy-shadow.mjs'),'campaign-activity':await import('../lib/campaign-activity.mjs'),'change-attribution':await import('../lib/change-attribution.mjs'),
+ const mods={'autonomy-grant':await import('../lib/autonomy-grant.mjs'),'autonomy-shadow':await import('../lib/autonomy-shadow.mjs'),'campaign-activity':await import('../lib/campaign-activity.mjs'),'change-attribution':await import('../lib/change-attribution.mjs'),
   'companion-summary':await import('../lib/companion-summary.mjs'),'meta-display':await import('../lib/meta-display.mjs'),'shadow-learning':await import('../lib/shadow-learning.mjs')};
  const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  const store={},exports={};

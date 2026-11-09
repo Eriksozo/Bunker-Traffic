@@ -85,3 +85,18 @@ Referências consultadas:
   - Howard et al., [confidence sequences](https://arxiv.org/abs/1906.09712).
 - Atraso de atribuição na Meta, até ~72 h ([Aimerce](https://www.aimerce.ai/blogs/why-are-my-meta-ad-results-delayed-by-72-hours)): a nota do D+1 pode mudar depois. Uma nota provisória e outra final em D+3 ficam pendentes.
 - Descartados por escala: bandits e Thompson para alocar orçamento, porque a aprovação humana e o retorno atrasado quebram as premissas; e MMM (Robyn, Meridian), que pede anos de dados semanais.
+
+## Módulo de autonomia (09/11/2026)
+
+Pedido do proprietário: "quero poder ativar quando for pra ele assumir o controle das campanhas ... Vou setar o que ele pode fazer". Escolhas dele: quatro níveis, projeto com exceções por campanha, as quatro ações como permissão e o placar da Sombra respeitado.
+
+- **Onde:** web, menu "Autonomia do Bunk". Grava `state.autonomy` na central pela rota do dono (`autonomyConfig`, `autonomyKill`), nunca por agente MCP. Código: `lib/autonomy-grant.mjs`, painel `app/autonomy-panel.tsx`, registro do executor em `/api/autonomy`.
+- **Interruptor geral:** começa desligado. "Desligar agora" mantém as permissões e anula toda ordem do Bunk ainda não enviada.
+- **Níveis por projeto, com exceção por campanha:** Desligado (não mexe, sem ação rápida) · Sombra (só registra, como antes) · Confirmar (registra "aguarda você"; a execução é a ordem direta do notch com Touch ID) · Automático (o Bunk cria a ordem sozinho). Projeto sem configuração fica em Sombra.
+- **Ações:** pausar, reduzir, aumentar e reativar. Reativar ainda não tem regra na Sombra: nada é reativado sozinho.
+- **Limites do dono por projeto:** aumento máximo (%), redução máxima (%), teto de orçamento diário na moeda da campanha (sem teto ou sem %, não aumenta/reduz) e ordens por campanha por dia (padrão 2), com no mínimo 1h entre ordens do Bunk na mesma campanha. O teto também entra na Sombra: preenche o teto privado ausente ou baixa o existente, nunca sobe.
+- **Quando uma ordem nasce:** só de uma decisão da Sombra da passada atual que executaria agora (sem bloqueio, sem "só alerta", regra de orçamento só depois do próprio placar), dentro das permissões e limites, sem outra ordem aprovada pendente na campanha, com a contingência liberando, e com o valor ao vivo da Malva igual ao da decisão. Uma decisão vira no máximo uma ordem.
+- **Como é enviada:** proposta exata aprovada pela permissão (`createdBy:'bunk'`, `autonomyOrder:true`, impressão digital da permissão), validade de 10 min, pelo mesmo claim → prepare (relê a Malva) → submit único → releitura → confirm da ordem direta. Na reserva, na pré-conferência e no envio a permissão é conferida de novo: interruptor ligado, mesma impressão digital, campanha ainda em Automático. A releitura depois do envio continua mesmo se o dono desligar.
+- **Visibilidade:** recibos em "Suas ordens" com `by:'bunk'`; no web, registro do que o Bunk fez, o que aguarda o dono e o que foi segurado (com o motivo).
+
+**Ainda não autoriza execução real.** A regra do `CLAUDE.md` continua valendo: ligar o Automático em produção depende da revisão da sombra, dos tetos do dono e do registro explícito dele no `CLAUDE.md`. Até lá o interruptor deve ficar desligado. Pendências antes do primeiro Automático: rótulo "Bunk" nos recibos do notch, aviso no iPhone para ordens do Bunk e conferência do interruptor também na Edge Function `malva-mcp` (hoje ela confere a pausa do escritório, a aprovação exata e o comando, não o interruptor da autonomia). Testes: `tests/autonomy-grant.test.mjs`.

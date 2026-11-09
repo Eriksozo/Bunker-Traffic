@@ -29,6 +29,9 @@ import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} f
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
 import {changeWatchPolicy,fastLaneKinds,watchProject,nextPulse,liveOrder,orderPulse,newestLiveItems} from '../lib/change-watch.mjs';
 import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
+import {autonomyGrant,recordAutonomyOrder,autonomyLogEntry,mergeAutonomyLog,autonomyBudgetCap} from '../lib/autonomy-grant.mjs';
+import {liveOrderRow} from '../lib/owner-order-live.mjs';
+import {decisionContingency} from '../lib/decision-contingency.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
 import {deliverPhoneAlerts} from '../lib/phone-alerts.mjs';
 
@@ -128,6 +131,42 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   * Shadow mode (docs/autonomy-policy.md): records what each owner-chosen rule would do now and what a
   * manager did afterwards. Never proposes, approves or dispatches. Stored in this object, not in the central.
   */
+ /**
+  * Autonomy module (docs/autonomy-policy.md, lib/autonomy-grant.mjs). For each Sombra decision of this pass that would
+  * execute: "Confirmar" only logs it (the owner acts from the notch with Touch ID); "Automático" records one approved
+  * exact order with the live Malva value and wakes the fast lane, which sends it through claim → prepare → single submit
+  * → reread → confirm. The grant is checked again inside the write and at claim/prepare/submit. Nothing else here.
+  */
+ private async autonomyAct(state:any,batches:any[],now:number){
+  const config=state?.autonomy,acting=(m:any)=>m==='confirm'||m==='auto';
+  if(!config?.projects||!Object.values(config.projects).some((p:any)=>acting(p?.mode)||Object.values(p?.campaigns||{}).some((c:any)=>acting(c?.mode)))){await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config?.enabled,acting:false});return;}
+  const log:any[]=[],woke=new Set<string>();let created=0;
+  const tz=(project:string)=>(this.liveItems||[]).find((i:any)=>i.projectId===project)?.snapshot?.timezone||'America/Sao_Paulo';
+  for(const [list,day] of batches)for(const raw of list){
+   if(!raw?.wouldExecute)continue;
+   // Same id as mergeShadow: one order per Sombra decision, ever.
+   const d={...raw,id:JSON.stringify([day,raw.rule,raw.project,raw.adAccountId,raw.objectId,raw.action])},timezone=tz(d.project);
+   const g=autonomyGrant(state,d,{now,timezone});
+   if(g.mode==='off'||g.mode==='shadow')continue;
+   if(g.act==='none'){log.push(autonomyLogEntry(d,g,{kind:'blocked',blockers:g.blockers},now));continue;}
+   if(g.act==='confirm'){log.push(autonomyLogEntry(d,g,{kind:'confirm',text:'Aguarda sua confirmação no notch (Touch ID).'},now));continue;}
+   const live=liveOrderRow(this.liveItems,d.project,d.adAccountId,d.objectId,Date.now());
+   const check=(s:any)=>{
+    const guard=decisionContingency({state:s,project:d.project,row:live?.row||{},proposal:null,action:g.action,percent:g.percent,liveItems:this.liveItems});
+    if(guard.blocked)return {blocked:guard.blockers.map((b:any)=>String(b))};
+    return recordAutonomyOrder(s,d,{live,now:Date.now(),timezone});
+   };
+   // Dry run on a copy first: a blocked decision never writes the central.
+   const dry=check(structuredClone(state));
+   if((dry as any).blocked){log.push(autonomyLogEntry(d,g,{kind:'blocked',blockers:(dry as any).blocked},now));continue;}
+   const out=await this.write((s:any)=>{const r:any=check(s);if(r.blocked){const e:any=Error('AUTONOMY_BLOCKED');e.blockers=r.blocked;throw e;}return r;}).catch((e:any)=>e?.message==='AUTONOMY_BLOCKED'?{blocked:e.blockers}:{blocked:['Não foi possível gravar a ordem: '+String(e?.message||'erro').slice(0,120)]});
+   if(out.blocked){log.push(autonomyLogEntry(d,g,{kind:'blocked',blockers:out.blocked},now));continue;}
+   created++;woke.add(d.project);log.push(autonomyLogEntry(d,g,{kind:'order',proposalId:out.proposal.id,text:'Ordem do Bunk aprovada pela sua permissão; executor envia uma vez e confere.'},now));
+  }
+  if(log.length)await this.ctx.storage.put('autonomyLog',mergeAutonomyLog(await this.ctx.storage.get<any[]>('autonomyLog'),log));
+  if(woke.size){const prev=await this.ctx.storage.get<any>('wake');await this.ctx.storage.put('wake',{order:true,projects:[...new Set([...(prev?.projects||[]),...woke])].slice(0,6),at:new Date().toISOString()});if(!this.running)await this.ctx.storage.setAlarm(Date.now()+300);}
+  await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config.enabled,acting:true,created,logged:log.length});
+ }
  private async storeShadow(state:any){
   if(!state||state.paused)return [];
   const policy=this.shadowPolicyFor(state);
@@ -142,7 +181,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Same as shadowLocalDay: the day of a pulse where every project was skipped (stale source), so "hoje" stays today.
   const fallbackDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   for(const project of Object.keys(state.config||{})){
-   const params=policy?.projects?.[project];if(!params||params.enabled===false)continue;
+   const base=policy?.projects?.[project];if(!base||base.enabled===false)continue;
+   // The owner's autonomy ceiling (web, lib/autonomy-grant.mjs) fills or lowers the private one; never raises it.
+   const cap=autonomyBudgetCap(state.autonomy,project),params=cap===null?base:{...base,budgetCap:Number.isFinite(base.budgetCap)&&base.budgetCap>0?Math.min(base.budgetCap,cap):cap};
    const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now,meta,accuracy:accuracy as any});
    if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;if(out.day)days[project]=out.day;batches.push([out.decisions,out.day||fallbackDay]);
   }
@@ -155,6 +196,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   for(let i=0;i<entries.length;i+=100)await this.ctx.storage.put(Object.fromEntries(entries.slice(i,i+100)));
   for(let i=0;i<stale.length;i+=128)await this.ctx.storage.delete(stale.slice(i,i+128));
   await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped,ms:Date.now()-now});
+  // Autonomy (owner permissions): only decisions of this very pass; a failure never blocks the shadow.
+  await this.autonomyAct(state,batches,now).catch(async(e:any)=>{await this.ctx.storage.put('autonomyStatus',{at:new Date().toISOString(),ok:false,error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   // The memory never blocks the shadow: a failure is recorded apart (code and short text only).
   await this.storeLearning(state,merged,events,policy,now).catch(async(e:any)=>{await this.ctx.storage.put('learningStatus',{at:new Date().toISOString(),ok:false,code:'LEARNING_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   return merged;
@@ -441,6 +484,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     // Long memory (lib/shadow-learning.mjs): scores with ranges, edge over doing nothing, blind spots and lessons.
     learning:await this.ctx.storage.get<any>('learningSummary')||null,learningStatus:await this.ctx.storage.get<any>('learningStatus')||null,entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
   }
+  // Read-only: what the autonomy module did or held back (lib/autonomy-grant.mjs). The permissions live in the central.
+  if(input.action==='autonomy'){const shadow=await this.ctx.storage.get<any>('shadowStatus');return Response.json({shadowProjects:Array.isArray(shadow?.projects)?shadow.projects:null,shadowAt:shadow?.at||null,status:await this.ctx.storage.get<any>('autonomyStatus')||null,log:(await this.ctx.storage.get<any[]>('autonomyLog')||[]).slice(0,100)});}
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse'),phone=await this.ctx.storage.get<any>('phoneAlerts');return Response.json({...runtime,phone:{configured:!!(this.env.PUSHOVER_TOKEN&&this.env.PUSHOVER_USER),primed:!!phone?.primed,sent:phone?.sent||0,lastSentAt:phone?.lastSentAt||null,lastError:phone?.lastError||null,lastErrorAt:phone?.lastErrorAt||null},attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true});}
   if(input.action==='check'){

@@ -9,10 +9,11 @@ import * as attribution from '../lib/change-attribution.mjs';
 import * as companion from '../lib/companion-summary.mjs';
 import * as metaDisplay from '../lib/meta-display.mjs';
 import * as learning from '../lib/shadow-learning.mjs';
+import * as autonomyGrant from '../lib/autonomy-grant.mjs';
 import {evaluateDay} from '../scripts/suggestion-backtest.mjs';
 // Battery fixes of the worker group. Synthetic fixtures only: invented projects, accounts, campaigns and amounts.
 const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-const modules={'autonomy-shadow':shadowLib,'campaign-activity':activity,'change-attribution':attribution,'companion-summary':companion,'meta-display':metaDisplay,'shadow-learning':learning};
+const modules={'autonomy-grant':autonomyGrant,'autonomy-shadow':shadowLib,'campaign-activity':activity,'change-attribution':attribution,'companion-summary':companion,'meta-display':metaDisplay,'shadow-learning':learning};
 function executor(store={},env={}){
  const exports={};
  const storage={get:async k=>store[k],list:async({prefix})=>new Map(Object.entries(store).filter(([k])=>k.startsWith(prefix))),put:async(k,v)=>{if(typeof k==='object')Object.assign(store,k);else store[k]=v;},delete:async keys=>{for(const k of [].concat(keys))delete store[k];},setAlarm:async()=>{}};
