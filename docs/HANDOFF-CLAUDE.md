@@ -857,3 +857,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - a profundidade da memória declarada.
 - **Testes:** suíte 1403/1403, typecheck e build.
 - **Pendente:** conferir em produção, no recibo de uma conclusão nova, se a leitura foi entregue ou adiada pelo tamanho do pacote.
+- **Conferido em produção.** Commit `74eeff2`, versão `a90d3a20`. O histórico do executor agora mostra `shadowLearning` em cada estágio e revisão: entregue, encurtada, adiada (pacote cheio) ou indisponível.
+  - Às 21:35 e 21:36 UTC, os estágios de tráfego e criativo do projeto Leandro receberam a leitura **entregue**, com pacotes de 149.018 e 155.558 bytes.
+  - As falhas vistas depois do deploy já ocorriam antes desta mudança:
+    - `CLOUD_AI_INVALID` (21:30), por repetição de espaços que estoura o limite de saída;
+    - `CLOUD_MEMORY_REVIEW_EVIDENCE` (21:39), por `not_in_reflection`.
+  - Pendente: acompanhar se a taxa de truncamento muda com a leitura no pacote.
