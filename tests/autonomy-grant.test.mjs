@@ -127,6 +127,20 @@ test('one order per decision, daily limit and 1h cooldown per campaign; owner an
  assert.throws(()=>recordDirectOrder(s2,{op:'ownerDirectOrder',clientId:'notch-x',project,adAccountId:acct,objectId:obj,action:'pause',expected:{status:'ACTIVE',dailyBudget:100,currency:'BRL'}},'mac-touchid:owner',{live:live(),now:now+1000}),/a caminho/);
 });
 
+test('a Meta campaign shared by two projects gets one Bunk order, not one per project',()=>{
+ const both={enabled:true,projects:{[project]:allow().projects[project],[other]:allow().projects[project]}};
+ const s=withConfig(both);
+ const first=recordAutonomyOrder(s,reduce(),{live:live(),now});assert.ok(first.proposal);
+ const twin=reduce({id:'red-other',project:other,projectName:'Other'});
+ assert.match(recordAutonomyOrder(s,twin,{live:live(),now:now+1000}).blocked.join(' '),/a caminho|menos de 1h/);
+ assert.equal(s.proposals.filter(p=>p.autonomyOrder).length,1);
+ first.proposal.appliedAt=date(now+2000);   // the first one reached Meta
+ assert.match(autonomyGrant(s,twin,{now:now+3000}).blockers.join(' '),/menos de 1h/);
+ const one={enabled:true,projects:{[project]:allow().projects[project],[other]:{...allow().projects[project],limits:{...allow().projects[project].limits,ordersPerDay:1}}}};
+ const s2=withConfig(one);recordAutonomyOrder(s2,reduce(),{live:live(),now}).proposal.appliedAt=date(now+1000);
+ assert.match(autonomyGrant(s2,twin,{now:now+2*3600000}).blockers.join(' '),/Limite de 1 ordem/);
+});
+
 test('owner events and log: kill keeps permissions; the log does not repeat the same hold',()=>{
  const s=withConfig();killAutonomy(s,'web:owner',now);
  assert.equal(s.autonomy.enabled,false);assert.equal(s.autonomy.projects[project].mode,'auto','permissions kept');
