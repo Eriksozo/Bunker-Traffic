@@ -99,6 +99,16 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  }
  private async storedShadow(){return [...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];}
  /**
+  * Shadow rules on every new reading, not only at the end of the heavy pulse (owner report of 09/11/2026: "já era
+  * pra ter acionado bem antes"). The heavy pulse runs model stages and took 10–30 min, so a new test crossed the
+  * R$99/R$110 line long before the Sombra said so, while the Meta read had the spend every minute. Runs are queued,
+  * never overlapping (the fast-lane timer also runs during the heavy pulse). Observation only, as before.
+  */
+ private shadowChain:Promise<unknown>=Promise.resolve();
+ private queueShadow(state:any):Promise<any[]>{const run=this.shadowChain.then(()=>this.storeShadow(state));this.shadowChain=run.catch(()=>{});return run;}
+ /** A between-pulse run: a failure keeps the stored entries (the heavy pulse records shadow failures). */
+ private async freshShadow(state:any){return (await this.queueShadow(state).catch(()=>null))??await this.storedShadow();}
+ /**
   * Shadow mode (docs/autonomy-policy.md): records what each owner-chosen rule would do now and what a
   * manager did afterwards. Never proposes, approves or dispatches. Stored in this object, not in the central.
   */
@@ -126,7 +136,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const entries=merged.filter((e:any)=>before.get(e.id)!==JSON.stringify(e)).map((e:any)=>['shadow:'+e.id,e] as [string,any]);
   for(let i=0;i<entries.length;i+=100)await this.ctx.storage.put(Object.fromEntries(entries.slice(i,i+100)));
   for(let i=0;i<stale.length;i+=128)await this.ctx.storage.delete(stale.slice(i,i+128));
-  await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped});
+  await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped,ms:Date.now()-now});
   return merged;
  }
  /**
@@ -188,7 +198,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   if(!(await this.syncMetaLive(central.state,{force}).catch(()=>false)))return;
   const latest=await this.read();if(latest.state.paused)return;
   await this.storeFirst24h(latest.state).catch(()=>{});
-  await this.storeCompanion(latest.state,await this.storedShadow()).catch(()=>{});
+  await this.storeCompanion(latest.state,await this.freshShadow(latest.state)).catch(()=>{});
   await this.bumpLive([]);
  }
  /**
@@ -347,7 +357,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const liveState=await this.syncLive(reads,true).catch(()=>null);
   // The "Primeiras 24h" board is rebuilt from this read before the notch summary that embeds it (owner report of 08/11:
   // test campaigns paused from the notch stayed on that board until the next heavy pulse). Pure: no model, no provider.
-  if(liveState){await this.storeFirst24h(liveState).catch(()=>{});await this.storeCompanion(liveState,await this.storedShadow()).catch(()=>{});await this.publishOrders(liveState);await this.bumpLive(reads);}
+  if(liveState){await this.storeFirst24h(liveState).catch(()=>{});await this.storeCompanion(liveState,await this.freshShadow(liveState)).catch(()=>{});await this.publishOrders(liveState);await this.bumpLive(reads);}
  }
  async fetch(request:Request){
   let input:any;try{input=await request.json();}catch{return Response.json({error:'Pedido inválido.'},{status:400});}
@@ -459,7 +469,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // The live Meta read is optional: a failure keeps the last read and never affects the executor.
    if(liveState&&(await this.setting()).enabled)await this.syncMetaLive(liveState).catch(()=>{});
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
-   const shadow=liveState?await this.storeShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),day:shadowLocalDay(Date.now()),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
+   const shadow=liveState?await this.queueShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),day:shadowLocalDay(Date.now()),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    // The first-24h board is a reading aid: a failure keeps the last board and never affects the executor.
    if(liveState)await this.storeFirst24h(liveState).catch(()=>{});
    // An order the fast lane sent after this pulse's read must not be shown at its older stage.

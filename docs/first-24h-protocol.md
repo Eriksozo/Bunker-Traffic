@@ -42,7 +42,7 @@ Regra geral do proprietário: campanha nova **sem venda** e com **0 ou 1 IC** n�
 
 ## Onde aparece
 
-- **Sombra do Bunk** (regra `test-no-sale`, agora "Pausar campanha nova sem venda (primeiras 24h e 2º dia)"): registra o que faria e se o gestor agiu depois. Não executa.
+- **Sombra do Bunk** (regra `test-no-sale`, agora "Pausar campanha nova sem venda (primeiras 24h e 2º dia)"): registra o que faria e se o gestor agiu depois. Não executa. Desde 09/11 é reavaliada a cada leitura nova (Meta a cada minuto e releituras Malva da faixa rápida), não só no fim do pulso pesado: em 09/11 o pulso pesado levava 10–30 min por causa das etapas de modelo, e o dono pausou à mão testes que já tinham passado de R$99 sem a sombra registrar.
 - **Notch / app do Mac**: bloco "Primeiras 24h" com as campanhas no 1º e 2º dia (mais urgentes primeiro) e as programadas; o Bunk avisa quando alguma está perto do teto.
 - **Acompanhamento de campanhas**: sinal `first-24h` (prioridade 1) em "perto do teto" ou acima; contagem `newCampaigns` por projeto.
 - Leitura MCP `cloud-data` `{"action":"shadow"}` (ou com `"day":"AAAA-MM-DD"`) devolve também `first24h.boards`.

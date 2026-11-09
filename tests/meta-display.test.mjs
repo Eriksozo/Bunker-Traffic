@@ -137,7 +137,8 @@ function worker(rpcAnswer){
  e.liveItems=[{projectId:'p1',snapshot:snap([row()])}];
  e.read=async()=>{log.push('central');return {state:{paused:false,config:{}}};};
  e.db=()=>({rpc:async(name,args)=>{log.push('meta:'+args.accounts.map(a=>a.account+'='+a.ids.join('/')).join(','));return rpcAnswer();}});
- e.storeCompanion=async()=>log.push('notch');e.storeFirst24h=async()=>log.push('first24h');e.storedShadow=async()=>[];
+ e.storeCompanion=async(_s,shadow)=>log.push(shadow?.length?'notch+shadow':'notch');e.storeFirst24h=async()=>log.push('first24h');e.storedShadow=async()=>[];
+ e.storeShadow=async()=>{log.push('shadow');return [{id:'x'}];};
  return {e,values,log};
 }
 test('Executor: one Meta read a minute, at once after an order (10 s apart at least), nothing while Meta asks to wait',async()=>{
@@ -145,7 +146,7 @@ test('Executor: one Meta read a minute, at once after an order (10 s apart at le
  try{
   const {e,values,log}=worker(()=>({at:iso(t),items:[item()],requests:1,errors:[]}));
   await e.metaTick(false);
-  assert.deepEqual(log,['central','meta:12345=120000001','central','first24h','notch'],'read, then the notch summary from a fresh central read');
+  assert.deepEqual(log,['central','meta:12345=120000001','central','first24h','shadow','notch+shadow'],'read, then the Sombra rules and the notch summary from a fresh central read');
   assert.ok(values.get('syncPulse').version>=1,'the pulse moves: the web and the notch reload');
   assert.equal(values.get('metaLive').read,1);
   log.length=0;t+=5000;await e.metaTick(false);await e.metaTick(true);assert.deepEqual(log,[],'not due: not even the central is read');
@@ -161,4 +162,18 @@ test('Executor: one Meta read a minute, at once after an order (10 s apart at le
   const stale=await (await e.fetch(new Request('https://bunker-internal/control',{method:'POST',body:JSON.stringify({action:'metaLive'})}))).json();
   assert.equal(stale.meta,null,'older than 10 minutes: not shown');
  }finally{Date.now=real;}
+});
+
+test('Executor: the Sombra runs on each new reading, one run at a time, and a failed run keeps the stored entries',async()=>{
+ const {e,log}=worker(()=>({}));
+ let open=0,max=0;e.storeShadow=async()=>{open++;max=Math.max(max,open);await new Promise(r=>setTimeout(r,5));open--;log.push('shadow');return [{id:'a'}];};
+ const [a,b]=await Promise.all([e.queueShadow({}),e.queueShadow({})]);
+ assert.equal(max,1,'the heavy pulse and the fast lane never evaluate at the same time');
+ assert.deepEqual([a.length,b.length],[1,1],'each caller gets its own result');
+ e.storeShadow=async()=>{throw new Error('boom');};e.storedShadow=async()=>[{id:'kept'}];
+ assert.deepEqual(await e.freshShadow({}),[{id:'kept'}],'between pulses a failure shows the last entries');
+ e.storeShadow=async()=>[{id:'next'}];assert.deepEqual(await e.queueShadow({}),[{id:'next'}],'a failure never blocks the next run');
+ const src=fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8');
+ assert.equal((src.match(/this\.storeShadow\(/g)||[]).length,1,'every run goes through the queue');
+ assert.match(src,/storeFirst24h\(liveState\)[^\n]*freshShadow\(liveState\)/,'the fast-lane live read reevaluates the Sombra too');
 });
