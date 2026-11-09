@@ -54,6 +54,29 @@ struct OwnerCards: Decodable, Equatable {
 /// Which campaign (or the approvals list when campaignId is nil) the adjust view is about.
 struct AdjustTarget: Equatable {
     let project: String?; let adAccountId: String?; let campaignId: String?; let name: String?
+    /// Action already chosen when the view opens (from the Bunk's anticipated move). Nothing runs until Touch ID.
+    var preset: AdjustPreset? = nil
+}
+
+/// A pre-selected owner action: "pause", or "increase"/"reduce" with a percent.
+struct AdjustPreset: Equatable {
+    let action: String; let percent: Double?
+
+    /// The shadow's anticipated move as the owner's own order, or nil when the notch cannot offer it:
+    /// already done (owner or manager), missing ids, activation, or a percent outside the server limits.
+    static func from(_ item: Summary.ShadowItem) -> AdjustPreset? {
+        guard item.owner == nil, item.manager == nil, item.projectId != nil, item.adAccountId != nil, item.objectId != nil else { return nil }
+        if item.action == "status" { return item.after?["status"]?.text == "PAUSED" ? AdjustPreset(action: "pause", percent: nil) : nil }
+        guard item.action == "budget", let b = item.before?["dailyBudget"]?.number, let a = item.after?["dailyBudget"]?.number, b > 0, a != b else { return nil }
+        let pct = (abs(a - b) / b * 1000).rounded() / 10
+        let action = a > b ? "increase" : "reduce"
+        guard OwnerAdjust.percentProblem(action, pct, current: b) == nil, OwnerAdjust.validPercent(action, pct) else { return nil }
+        return AdjustPreset(action: action, percent: pct)
+    }
+    /// Button text: "Pausar", "Aumentar 50%", "Reduzir 20%".
+    var label: String { OwnerAdjust.label(action) + (percent.map { " " + Format.percent($0, signed: false) } ?? "") }
+    /// The percent field text ("50", "12.5").
+    var percentText: String? { percent.map { $0.rounded() == $0 ? String(Int($0)) : String($0) } }
 }
 
 /// Pure rules shared by the view and the self-test.

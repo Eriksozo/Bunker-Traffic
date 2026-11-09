@@ -365,6 +365,6 @@ final class OwnerAdjustModel: ObservableObject {
     /// A new campaign starts clean; reopening the same one keeps the draft.
     func reset(for next: AdjustTarget) {
         guard next != target else { return }
-        target = next; data = nil; loadError = nil; action = ""; percentText = "20"; reason = ""; notice = nil; requestIds = [:]
+        target = next; data = nil; loadError = nil; action = next.preset?.action ?? ""; percentText = next.preset?.percentText ?? "20"; reason = ""; notice = nil; requestIds = [:]
     }
 }

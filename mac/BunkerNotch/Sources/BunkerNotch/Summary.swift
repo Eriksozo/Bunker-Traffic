@@ -97,6 +97,8 @@ struct Summary: Decodable, Equatable {
         let wouldExecute: Bool?; let blockedBy: [String]?; let manager: ShadowManager?
         /// The same action the owner sent through the Bunker (notch order or approved proposal), when it happened.
         let owner: ShadowManager?
+        /// Campaign ids so the owner can order the anticipated action himself (Touch ID). Older servers omit them.
+        var projectId: String? = nil; var adAccountId: String? = nil; var objectId: String? = nil
     }
     struct Shadow: Decodable, Equatable {
         let day: String?; let total: Int; let byRule: [String: ShadowRule]; let recent: [ShadowItem]

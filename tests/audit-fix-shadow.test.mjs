@@ -93,3 +93,10 @@ test('A first day across midnight without yesterday read says the ceiling saw on
  const d=evaluateShadow(s,{project:'p',params:{},now}).decisions.find(x=>x.rule==='test-no-sale');
  assert.match(d.limitations.join(' '),/gasto de ontem não foi lido/);
 });
+
+test('shadow summary rows carry the campaign ids so the owner can order the anticipated move himself',()=>{
+ const e={project:'p1',projectName:'John',adAccountId:'act_1',accountName:'CA 1',objectId:'123',name:'C',rule:'test-no-sale',ruleLabel:'x',action:'status',before:{status:'ACTIVE'},after:{status:'PAUSED'},day:'2026-11-09',firstAt:'2026-11-09T08:00:00.000Z',firstWouldExecuteAt:'2026-11-09T08:00:00.000Z',blockedBy:[]};
+ const r=shadowSummary([e],{day:'2026-11-09'}).recent[0];
+ assert.deepEqual([r.projectId,r.adAccountId,r.objectId,r.project],['p1','act_1','123','John']);
+ assert.deepEqual([shadowSummary([{...e,adAccountId:undefined}],{day:'2026-11-09'}).recent[0].adAccountId],[null]);
+});

@@ -679,3 +679,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - **Avisos de mudança:** cada edição uma vez, mesmo no mesmo segundo; pulso de ordem descreve a ordem certa; "Já fiz" com orçamento N/D fica "A conferir"; nome da campanha nas ordens do notch.
   - **Mac:** em reunião e nas notificações, prioridade ordem > proposta > perda > gestor; contador ilegível é N/D (sem som falso).
 - **Pendentes para o dono:** (1) ~~confirmar a base D da regra 6~~ — confirmada pelo dono em 09/11/2026: a regra 6 (virada do dia) é avaliada pelo próprio dia D. (2) Limite conhecido do som: ajuste fora dos 12 mais recentes pode não tocar quando outro do mesmo tipo sai das 24h na mesma leitura (precisa de contador do servidor). (3) Os números do backtest de 08/11 ("reduzir em dia ruim" 36–43%) usaram o proxy antigo (ROI < 0,7); o proxy agora segue a v2. (4) Entre a meia-noite e a primeira análise do dia, um teste novo que só gastou ontem sai da fila até a nova análise (N/D, sem rótulo errado).
+
+### 09/11/2026 — Ação rápida na sombra do notch
+
+- Pedido do dono: agir direto nas linhas antecipadas pelo Bunk (Agora › Sombra do Bunk) para ficar mais rápido.
+- `shadowSummary` (`lib/autonomy-shadow.mjs`) passa `projectId`, `adAccountId` e `objectId` em cada linha recente (só identificadores; a sombra continua sem executar nada).
+- Notch: cada linha ainda não tratada (sem ação do gestor nem do dono) ganha um botão "Pausar", "Aumentar N%" ou "Reduzir N%" (`AdjustPreset.from`, `ShadowActionButton`). O botão só abre a ordem direta da campanha com essa ação já escolhida. O valor ao vivo e os bloqueios aparecem como antes, e nada é enviado sem "Executar agora" com Touch ID (mesmo fluxo da ordem direta de 07/11). Ativação não ganha botão, e percentual fora dos limites do servidor também não.

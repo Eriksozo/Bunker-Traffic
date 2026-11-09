@@ -60,6 +60,16 @@ import SwiftUI
             }
         }.padding(DS.Space.m).frame(width: 760).background(Color.black).environmentObject(NotchState(geometry: geometry)).environment(\.colorScheme, .dark)
         if !write(rows, to: dir.appendingPathComponent("14-fila-saldo.png")) { failures += 1 }
+        // The Bunk's anticipated moves with the owner's quick action (opens the order already chosen; Touch ID still decides).
+        let shadowRows = VStack(spacing: 2) {
+            ForEach(summary.shadow?.recent ?? []) { item in
+                ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil || item.owner != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),
+                        title: item.campaign ?? "Campanha", subtitle: Format.shadowChange(item) + " · " + (item.ruleLabel ?? item.rule ?? ""),
+                        tag: Format.queueTag(project: item.project, account: item.account), value: Format.stamp(item.firstAt), valueCaption: Format.shadowOutcome(item),
+                        accessory: AdjustPreset.from(item).map { AnyView(ShadowActionButton(item: item, preset: $0)) })
+            }
+        }.padding(DS.Space.m).frame(width: 760).background(Color.black).environmentObject(NotchState(geometry: geometry)).environment(\.colorScheme, .dark)
+        if !write(shadowRows, to: dir.appendingPathComponent("16-sombra-acao.png")) { failures += 1 }
         print(failures == 0 ? "Notch salvo em \(dir.path)" : "\(failures) imagem(ns) falharam")
         return failures == 0 ? 0 : 1
     }
@@ -165,7 +175,7 @@ import SwiftUI
          "agents":{"recent":[{"agent":"Lia","role":"traffic","to":"Theo","kind":"conclusion","decision":"Segurar escala do Criativo B até fechar o dia","text":"ROAS de 3 dias sustenta, mas o gasto de hoje está 40% acima do ritmo.","at":"\(ago(22))","project":"Gama"},{"agent":"Nina","role":"creative","to":null,"kind":"question","decision":null,"text":"O Criativo C trocou de gancho ontem? A retenção caiu pela metade.","at":"\(ago(75))","project":"Alfa"}]},
          "executor":{"enabled":true,"paused":false,"lastPulseAt":"\(ago(1.5))","lastError":null,"recentFailures":0},
          "notice":"Leitura do Bunker. Ordens suas saem só com Touch ID: o executor aplica uma vez pela Malva e confere; o resto continua no Bunker.",
-         "shadow":{"day":"2026-11-07","total":5,"byRule":{"loss":{"total":3,"wouldExecute":2,"managerDid":1,"bunkerFirst":1}},"recent":[{"rule":"loss","ruleLabel":"Perda no dia","project":"Beta","account":"Conta Exemplo 02","campaign":"[ABO] - Criativo E","action":"status","reason":"x","firstAt":"\(ago(130))","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":{"actor":"Bruno Lima","at":"\(ago(60))","minutesAfter":70}}]},
+         "shadow":{"day":"2026-11-07","total":5,"byRule":{"loss":{"total":3,"wouldExecute":2,"managerDid":1,"bunkerFirst":1}},"recent":[{"rule":"loss","ruleLabel":"Perda no dia","project":"Beta","account":"Conta Exemplo 02","campaign":"[ABO] - Criativo E","action":"status","reason":"x","firstAt":"\(ago(130))","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":{"actor":"Bruno Lima","at":"\(ago(60))","minutesAfter":70}},{"rule":"test-no-sale","ruleLabel":"Pausar campanha nova sem venda","project":"Beta","projectId":"p2","adAccountId":"a2","objectId":"c7","account":"Conta Exemplo 02","campaign":"08/11 - [CBO] - [TESTE] - Criativo F","action":"status","reason":"x","firstAt":"\(ago(40))","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":null},{"rule":"morning-increase","ruleLabel":"Aumentar na virada","project":"Beta","projectId":"p2","adAccountId":"a2","objectId":"c8","account":"Conta Exemplo 02","campaign":"08/11 - [CBO] - [PRE-ESCALA]","action":"budget","reason":"x","firstAt":"\(ago(300))","before":{"dailyBudget":236.24,"currency":"USD"},"after":{"dailyBudget":354.36,"currency":"USD"},"wouldExecute":false,"blockedBy":["x"],"manager":null}]},
          "accounts":{"generatedAt":"\(ago(12))","metaConnected":true,"metaError":null,"counts":{"total":14,"active":11,"running":8,"disabled":1,"nearLimit":2,"withLimit":9},
            "rows":[{"accountId":"ac1","name":"Conta Exemplo 01","group":"Alfa","status":"active","statusLabel":"Ativa","runningLabel":"rodando","currency":"BRL","dailyLimit":2000,"todaySpend":1780,"usedPct":89,"balance":null,"alerts":["perto do limite"]},
                    {"accountId":"ac2","name":"Conta Exemplo 02","group":"Beta","status":"active","statusLabel":"Ativa","runningLabel":"rodando","currency":"USD","dailyLimit":500,"todaySpend":180,"usedPct":36,"balance":null,"alerts":[]},

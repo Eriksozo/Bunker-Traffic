@@ -80,6 +80,24 @@ enum SelfTest {
         let ownJSON = #"{"rule":"test-no-sale","action":"status","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"manager":{"actor":"Gestor","minutesAfter":5},"owner":{"actor":"Bunker · aprovado por você","at":"2026-11-08T14:28:46.000Z","minutesAfter":30}}"#
         if let own = try? JSONDecoder().decode(Summary.ShadowItem.self, from: Data(ownJSON.utf8)) {
             check(Format.shadowOutcome(own) == "pausada por você", #line)
+            check(AdjustPreset.from(own) == nil, #line)   // already done: no quick action
+        } else { check(false, #line) }
+        // Quick action from the Bunk's anticipated move: only with the campaign ids and inside the server limits.
+        func shadowItem(_ json: String) -> Summary.ShadowItem? { try? JSONDecoder().decode(Summary.ShadowItem.self, from: Data(json.utf8)) }
+        let ids = #""projectId":"p","adAccountId":"a","objectId":"1","wouldExecute":true"#
+        if let pause = shadowItem(#"{"action":"status","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"# + ids + "}"),
+           let up = shadowItem(#"{"action":"budget","before":{"dailyBudget":236.24},"after":{"dailyBudget":354.36},"# + ids + "}"),
+           let down = shadowItem(#"{"action":"budget","before":{"dailyBudget":100},"after":{"dailyBudget":87.5},"# + ids + "}"),
+           let activate = shadowItem(#"{"action":"status","before":{"status":"PAUSED"},"after":{"status":"ACTIVE"},"# + ids + "}"),
+           let noIds = shadowItem(#"{"action":"status","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"}}"#),
+           let managed = shadowItem(#"{"action":"status","after":{"status":"PAUSED"},"manager":{"actor":"G","minutesAfter":3},"# + ids + "}") {
+            check(AdjustPreset.from(pause) == AdjustPreset(action: "pause", percent: nil), #line)
+            check(AdjustPreset.from(pause)?.label == "Pausar", #line)
+            check(AdjustPreset.from(up) == AdjustPreset(action: "increase", percent: 50), #line)
+            check(AdjustPreset.from(up)?.label == "Aumentar 50%" && AdjustPreset.from(up)?.percentText == "50", #line)
+            check(AdjustPreset.from(down)?.label == "Reduzir 12,5%" && AdjustPreset.from(down)?.percentText == "12.5", #line)
+            check(OwnerAdjust.parsePercent(AdjustPreset.from(down)?.percentText ?? "") == 12.5, #line)
+            check(AdjustPreset.from(activate) == nil && AdjustPreset.from(noIds) == nil && AdjustPreset.from(managed) == nil, #line)
         } else { check(false, #line) }
         let f24JSON = #"{"ceiling":110,"counts":{"scheduled":1,"firstDay":2,"secondDay":0,"attention":1},"items":[{"projectName":"P","account":"A","adAccountId":"a","objectId":"1","campaign":"07/11 - [PRE]","stage":"first-day","stageLabel":"Primeiras 24h","level":"pause","spend":100,"checkouts":1,"limit":110,"pauseAt":99,"reason":"x","awaitingDelivery":false},{"campaign":"07/11 - [TESTE]","stage":"first-day","level":"sold","spend":80,"checkouts":3,"limit":null}],"scheduled":[{"campaign":"08/11 - [PRE]","project":"P","account":"A","startsOn":"08/11"}]}"#
         if let f = try? JSONDecoder().decode(Summary.First24h.self, from: Data(f24JSON.utf8)) {

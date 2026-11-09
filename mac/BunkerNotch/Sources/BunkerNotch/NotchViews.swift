@@ -511,6 +511,8 @@ struct ListRow: View {
     var action: (() -> Void)? = nil
     /// Optional third line (the balance strip of the queue).
     var footer: AnyView? = nil
+    /// Optional trailing control (a quick action button); only on rows without `action`.
+    var accessory: AnyView? = nil
     var body: some View {
         let hovered = notch.hovered == id
         let row = HStack(alignment: .center, spacing: DS.Space.m) {
@@ -530,6 +532,7 @@ struct ListRow: View {
                     if let valueCaption { Text(valueCaption).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted) }
                 }
             }
+            if let accessory { accessory }
             if action != nil { Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(DS.Color.inkMuted).opacity(hovered ? 1 : 0.35) }
         }
         .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
@@ -678,11 +681,40 @@ struct NowTab: View {
                                 title: item.campaign ?? "Campanha",
                                 subtitle: Format.shadowChange(item) + " · " + (item.ruleLabel ?? item.rule ?? ""),
                                 tag: Format.queueTag(project: showProject ? item.project : nil, account: item.account),
-                                value: Format.stamp(item.firstAt), valueCaption: Format.shadowOutcome(item))
+                                value: Format.stamp(item.firstAt), valueCaption: Format.shadowOutcome(item),
+                                accessory: AdjustPreset.from(item).map { preset in AnyView(ShadowActionButton(item: item, preset: preset)) })
                     }
                 }
             }
         }
+    }
+}
+
+/// Opens the owner's order for this campaign with the Bunk's anticipated move already chosen. Nothing runs here:
+/// the adjust view shows the live value and blockers, and "Executar agora" still asks Touch ID for the exact change.
+struct ShadowActionButton: View {
+    @EnvironmentObject var notch: NotchState
+    let item: Summary.ShadowItem; let preset: AdjustPreset
+    var body: some View {
+        let tone: Tone = preset.action == "increase" ? .good : .bad
+        Button {
+            withAnimation(DS.Motion.quick) {
+                notch.adjust = AdjustTarget(project: item.projectId, adAccountId: item.adAccountId, campaignId: item.objectId, name: item.campaign, preset: preset)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: OwnerAdjust.symbols[preset.action] ?? "slider.horizontal.3").font(.system(size: 9, weight: .bold))
+                Text(preset.label).font(DS.Font.microStrong).lineLimit(1)
+            }
+            .fixedSize()
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .foregroundStyle(tone.color)
+            .background(tone.color.opacity(0.14), in: Capsule())
+            .overlay(Capsule().strokeBorder(tone.color.opacity(0.35)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Abre sua ordem com \(preset.label.lowercased()) já escolhido. Você confere o valor ao vivo e confirma com Touch ID em \"Executar agora\".")
     }
 }
 
