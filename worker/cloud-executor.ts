@@ -19,7 +19,7 @@ import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
-import {evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
+import {ownerShadowPolicy,evaluateShadow,mergeShadow,shadowOutcomes,shadowGrades,shadowSummary,shadowPolicy,first24hWatch,first24hSummary,ruleAccuracy,scoreGatedRules} from '../lib/autonomy-shadow.mjs';
 import {metaLiveCandidates,groupMetaAccounts} from '../lib/first-24h.mjs';
 import {metaLivePolicy} from '../lib/meta-live.mjs';
 import {metaLiveTargets,overlayMetaItems,liveTodayState,liveRowIndex,freshMeta} from '../lib/meta-display.mjs';
@@ -97,6 +97,13 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.ctx.storage.put('watchStatus',{at:new Date().toISOString(),projects:changes.length,failed:results.length-changes.length,fresh:fresh.map(c=>c.project)});
   return fresh.map(c=>c.project);
  }
+ /** Private Sombra policy with the owner's layered decisions (lib/autonomy-shadow.mjs ownerShadowPolicy). */
+ private shadowPolicyFor(state:any):any{
+  let policy:any={},owner:any={};
+  try{policy=JSON.parse(this.env.AUTONOMY_SHADOW_POLICY||'{}');}catch{policy={};}
+  try{owner=JSON.parse(this.env.AUTONOMY_SHADOW_OWNER||'{}');}catch{owner={};}
+  return ownerShadowPolicy(policy,owner,Object.keys(state?.config||{}));
+ }
  private async storedShadow(){return [...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()];}
  /**
   * Shadow rules on every new reading, not only at the end of the heavy pulse (owner report of 09/11/2026: "já era
@@ -122,7 +129,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   */
  private async storeShadow(state:any){
   if(!state||state.paused)return [];
-  let policy:any={};try{policy=JSON.parse(this.env.AUTONOMY_SHADOW_POLICY||'{}');}catch{policy={};}
+  const policy=this.shadowPolicyFor(state);
   const now=Date.now(),list=await this.ctx.storage.list<any>({prefix:'attr:'}),withAuthors={...state,changeAttributions:usableAttributions([...list.values()])};
   const events=activityLog(withAuthors,{since:now-26*3600000,now});
   const prior=[...(await this.ctx.storage.list<any>({prefix:'shadow:'})).values()],meta=await this.ctx.storage.get<any>('metaLive');
@@ -153,7 +160,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   */
  private async storeFirst24h(state:any){
   if(!state||state.paused)return;
-  let policy:any={};try{policy=JSON.parse(this.env.AUTONOMY_SHADOW_POLICY||'{}');}catch{policy={};}
+  const policy=this.shadowPolicyFor(state);
   const meta=await this.ctx.storage.get<any>('metaLive');
   const now=Date.now(),boards=Object.keys(state.config||{}).map(project=>first24hWatch(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,params:policy?.projects?.[project]||{},now,meta})).filter(Boolean);
   await this.ctx.storage.put('first24h',{at:new Date(now).toISOString(),boards});

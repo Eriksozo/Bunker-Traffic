@@ -744,3 +744,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Causa técnica: a regra `test-no-sale` só rodava no fim do pulso pesado, que demorava por causa das etapas de modelo. A leitura Meta chegava a cada minuto, mas a sombra não. Agora `queueShadow` roda as regras a cada leitura Meta nova (`metaTick`) e a cada releitura Malva da faixa rápida, em fila (nunca duas ao mesmo tempo). Falha entre pulsos mantém as entradas guardadas; o pulso pesado continua registrando falha. `shadowStatus.ms` mede a duração.
 - Parte das pausas do dono ocorreu abaixo do ponto de pausa da sombra e, com 2+ IC, abaixo do limiar privado do projeto; dois projetos configurados não estão na política privada da sombra. Ajustar limiares ou incluir projetos é decisão do dono — pendente, nada alterado.
 - Não muda execução: continua sombra, sem envio automático.
+
+## Limiares da sombra alinhados às pausas do dono (registro escrito às 2026-11-09 15:44:41 UTC por `date -u`)
+
+- O dono aprovou no chat alinhar a sombra com as pausas dele: ponto de pausa mais cedo com 0–1 IC, limiar menor para 2+ IC e inclusão dos dois projetos que estavam fora.
+- Como `AUTONOMY_SHADOW_POLICY` não pode ser lido, a decisão foi gravada num secret à parte, `AUTONOMY_SHADOW_OWNER` (`ownerShadowPolicy` em `lib/autonomy-shadow.mjs`): só reduz valores, liga projetos listados e respeita projeto desligado. Campo novo `first24hLowIcPauseAt` em `lib/first-24h.mjs`.
+- Continua sombra: nada é executado sem o dono.
