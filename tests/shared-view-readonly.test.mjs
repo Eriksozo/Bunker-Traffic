@@ -58,3 +58,12 @@ test('The shared view hydrates once per central revision, concurrent callers sha
  revision=8;const c=await e.view();assert.equal(reads,2);assert.notEqual(c,a,'new revision: fresh copy');
  probe=false;const d=await e.view();assert.equal(reads,3);assert.notEqual(d,c,'failed probe: plain fresh read, never a stale copy');
 });
+
+test('The engine releases its first copy before rereading the central (never two copies across a long wait)',()=>{
+ const src=fs.readFileSync(new URL('../lib/cloud-engine.mjs',import.meta.url),'utf8');
+ assert.match(src,/let s=\(await read\(\)\)\.state;const work=cloudNext\(s,/);
+ assert.match(src,/phase='reservation';s=null;const collectionState=\(await read\(\)\)\.state;/);
+ assert.match(src,/s=null;const claim=await write\(st=>claimCollaboration\(st,claimArgs,now\(\)\)\),latest=\(await read\(\)\)\.state;/);
+ const exec=fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8');
+ assert.match(exec,/viewIdleMs=20000/);
+});
