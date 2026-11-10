@@ -1005,3 +1005,8 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - o teste de precedência pausa/aumento (`tests/battery-fix-shadow.test.mjs`) passou a usar um ontem cujo lucro não cobre o gasto de hoje, mantendo o que ele verifica.
 - **Validação:** `tests/partial-day.test.mjs` (4), suíte completa (1432), typecheck e build.
 
+## Web no design system do notch (registro escrito às 2026-11-10 22:50:21 UTC por `date -u`)
+
+- **Pedido do dono (10/11/2026):** a experiência da Autonomia estava ruim; seguir em toda a web o design system e a UX do notch. Detalhes em `docs/notch-design-system.md` (seção "Web do Bunker no mesmo sistema").
+- **Feito:** tokens de `app/malva-theme.css` com os valores do notch, `app/notch-system.css` (formas e componentes `ns-*`), tela `app/autonomy-panel.tsx` refeita, neutros arroxeados soltos trocados por tokens. Só apresentação.
+- **Acesso do dono:** o Site `chatgpt.site` está em versão anterior à Autonomia; a versão atual fica no Worker, com login por e-mail em `/auth/login?email=1`. Republicar o Site continua pendente (última publicação feita pelo Codex).

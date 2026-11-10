@@ -1,43 +1,46 @@
-/* Malva-derived workspace language. The Bunker identity and office artwork are original.
+/* Workspace theme. The values follow the notch design system (mac/BunkerNotch DesignSystem.swift, summary in
+   docs/notch-design-system.md): black canvas, white-alpha surfaces, hairline strokes, one violet accent and
+   mint/coral/amber for state. Shapes and shared components live in notch-system.css.
    One semantic contract is shared by the app and Bunker's portalled surfaces. */
+:root,
 .app,
 .workspace-dialog,
 .dc-modal,
 .uix-mobile-nav,
 [data-slot=tooltip-content] {
-  --canvas:#121016;
-  --surface:#1b1823;
-  --surface-subtle:#17141d;
-  --surface-hover:#25202f;
-  --surface-raised:#342e45;
-  --line-subtle:#272230;
-  --line-strong:#494058;
-  --ink:#efecf4;
-  --ink-soft:#b6aec5;
-  --ink-muted:#978da7;
-  --brand:#8b5cf6;
-  --brand-hover:#7945d8;
-  --brand-soft:#2c203f;
-  --selection:#c9b7f8;
-  /* A slightly deeper control fill gives white 12px labels AA contrast. */
-  --primary:#8754ea;
-  --primary-foreground:#fff;
-  --success:#34cda0;
-  --success-soft:#192d29;
-  --success-line:#30594d;
-  --warning:#e5bd75;
-  --warning-soft:#30291e;
-  --warning-line:#594b31;
-  --danger:#f08284;
-  --danger-soft:#332126;
-  --danger-line:#653c48;
-  --info:#a99af4;
-  --radius-control:9px;
+  --canvas:#060607;
+  --surface:#141415;
+  --surface-subtle:#0d0d0e;
+  --surface-hover:#1c1c1e;
+  --surface-raised:#242426;
+  --line-subtle:#ffffff0f;
+  --line-strong:#ffffff29;
+  --ink:#f0f0f1;
+  --ink-soft:#b9b9bb;
+  --ink-muted:#929294;
+  --brand:#b89ce8;
+  --brand-hover:#c9b3f0;
+  --brand-soft:#b89ce826;
+  --selection:#cbb6f2;
+  /* The one prominent action: accent fill with near-black text (notch onAccent). */
+  --primary:#b89ce8;
+  --primary-foreground:#17121f;
+  --success:#3dcc9e;
+  --success-soft:#3dcc9e24;
+  --success-line:#3dcc9e4d;
+  --warning:#f5bd66;
+  --warning-soft:#f5bd6624;
+  --warning-line:#f5bd664d;
+  --danger:#f2737a;
+  --danger-soft:#f2737a24;
+  --danger-line:#f2737a4d;
+  --info:#b89ce8;
+  --radius-control:8px;
   --radius-card:14px;
   --radius-dialog:18px;
-  --shadow-surface:0 1px 2px #0006;
-  --font-ui:'Instrument Sans Variable',system-ui,sans-serif;
-  --font-mono:'JetBrains Mono Variable',ui-monospace,monospace;
+  --shadow-surface:inset 0 1px 0 #ffffff0d;
+  --font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Instrument Sans Variable',system-ui,sans-serif;
+  --font-mono:ui-rounded,'SF Pro Rounded',-apple-system,BlinkMacSystemFont,'Instrument Sans Variable',system-ui,sans-serif;
   --background:var(--canvas);
   --foreground:var(--ink);
   --card:var(--surface);
@@ -50,7 +53,7 @@
   --muted-foreground:var(--ink-soft);
   --accent:var(--surface-raised);
   --accent-foreground:var(--ink);
-  --border:#302a3d;
+  --border:#ffffff14;
   --input:var(--line-strong);
   --ring:var(--selection);
   --destructive:var(--danger);

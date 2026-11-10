@@ -1,0 +1,150 @@
+/* Notch design system on the web. Colours come from the tokens in malva-theme.css; this file holds the shapes
+   and the shared components, mirroring mac/BunkerNotch DesignSystem.swift:
+   capsule actions and pills, hairline cards with a light on the top edge, banners with a glyph, one prominent
+   action per screen, numbers with fixed-width digits, press and hover feedback, fades under Reduce Motion. */
+body { background:#060607; }
+body .app,.workspace-dialog,.dc-modal { font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased; }
+
+/* Shell */
+body .app .nav,.uix-mobile-nav .nav { border-radius:8px; }
+body .app .nav.active,.uix-mobile-nav .nav.active { background:var(--surface-raised); box-shadow:inset 0 1px 0 #ffffff0d; }
+body .app .nav.active svg,.uix-mobile-nav .nav.active svg { color:var(--brand); }
+body .app .brand-icon,.uix-mobile-nav .brand-icon { background:var(--brand-soft); color:var(--brand); }
+body .app .eyebrow,.workspace-dialog .eyebrow,body .app .dc-phase,body .app .dc-eyebrow,body .app .workspace-label,body .app .brand small,body .app .mono { font-family:var(--font-ui); font-weight:600; letter-spacing:.05em; }
+body .app .eyebrow,.workspace-dialog .eyebrow { font-size:10.5px; color:var(--ink-soft); }
+body .app .panel-title .eyebrow { font-size:10.5px; margin-bottom:6px; }
+body .app .heading h1 { letter-spacing:-.3px; }
+
+/* Actions: capsules. The primary one carries the accent; the rest stay quiet. */
+body .app .button,.workspace-dialog .button,.dc-modal .dc-button,body .app .dc-button,body .app .cp-button {
+  border-radius:999px; border-color:var(--border); box-shadow:none; font-weight:600; padding-inline:14px;
+  transition:background .12s ease-out,border-color .12s ease-out,color .12s ease-out,transform .18s cubic-bezier(.3,1.4,.6,1),opacity .12s;
+}
+body .app .button:not(:disabled):hover,.workspace-dialog .button:not(:disabled):hover,.dc-modal .dc-button:not(:disabled):hover,body .app .dc-button:not(:disabled):hover,body .app .cp-button:not(:disabled):hover { border-color:var(--line-strong); }
+body .app .button:not(:disabled):active,.workspace-dialog .button:not(:disabled):active,.dc-modal .dc-button:not(:disabled):active,body .app .dc-button:not(:disabled):active,body .app .cp-button:not(:disabled):active { transform:scale(.97); opacity:.82; }
+body .app .button.primary,.workspace-dialog .button.primary,.dc-modal .dc-button.dc-primary,body .app .dc-button.dc-primary,body .app .cp-button.cp-primary {
+  background:linear-gradient(#ffffff1f,#ffffff00),var(--primary); border-color:transparent; color:var(--primary-foreground);
+}
+body .app .button.primary:not(:disabled):hover,.workspace-dialog .button.primary:not(:disabled):hover,.dc-modal .dc-button.dc-primary:not(:disabled):hover,body .app .dc-button.dc-primary:not(:disabled):hover,body .app .cp-button.cp-primary:not(:disabled):hover {
+  background:linear-gradient(#ffffff38,#ffffff00),var(--primary); border-color:transparent; color:var(--primary-foreground);
+}
+body .app .button.danger,.workspace-dialog .button.danger { background:var(--danger-soft); border-color:var(--danger-line); color:var(--danger); }
+body .app .button.danger:not(:disabled):hover,.workspace-dialog .button.danger:not(:disabled):hover { background:color-mix(in srgb,var(--danger) 22%,transparent); border-color:var(--danger); }
+body .app :is(button,input,select,textarea,a,summary):focus-visible,
+.workspace-dialog :is(button,input,select,textarea,a,summary):focus-visible,
+.dc-modal :is(button,input,select,textarea,a,summary):focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+
+/* Pills: tinted capsules, no outline; the tone says the state. */
+body .app .pill,.workspace-dialog .pill,body .app .cp-badge,body .app .dc-state { border-radius:999px; border-color:transparent; font-size:10.5px; font-weight:600; padding:2px 8px; line-height:1.5; }
+body .app .pill.gray,body .app .cp-badge { background:#ffffff1f; color:var(--ink-soft); border-color:transparent; }
+body .app .pill.green,body .app .pill.red,body .app .pill.amber,body .app .cp-badge.cp-good,body .app .cp-badge.cp-bad,body .app .cp-badge.cp-wait { border-color:transparent; }
+
+/* Surfaces: one hairline, a soft light on the top edge, no drop shadow at rest. */
+body .app .panel,body .app .kpi[data-slot=card],.workspace-dialog .kpi[data-slot=card],body .app .dc-card[data-slot=card] { border-radius:14px; }
+body .app .kpi[data-slot=card] { background:var(--surface); }
+body .app .kpi strong,body .app .kpi .kpi-value,body .app .budget-number,body .app .signal strong { font-family:var(--font-mono); font-weight:600; letter-spacing:-.4px; }
+body .app .windows,body .app .dc-tabs { border-radius:999px; padding:3px; }
+body .app .windows button,body .app .dc-tabs>[role=tab] { border-radius:999px; }
+body .app .project-selector { border-radius:999px; border-color:var(--border); padding-inline:12px; }
+body .app input:not([type=checkbox]):not([type=radio]),body .app select,body .app textarea,
+.workspace-dialog input:not([type=checkbox]):not([type=radio]),.workspace-dialog select,.workspace-dialog textarea,
+.dc-modal input:not([type=checkbox]):not([type=radio]),.dc-modal select,.dc-modal textarea { border-radius:8px; border-color:var(--border); background:var(--surface); transition:border-color .12s ease-out; }
+body .app :is(input:not([type=checkbox]):not([type=radio]),select,textarea):hover:not(:disabled) { border-color:var(--line-strong); }
+body .app :is(input:not([type=checkbox]):not([type=radio]),select,textarea):focus { border-color:var(--brand); outline:none; }
+body .app .project-selector select,body .app .search input,body .app .dc-search input { background:transparent; border:0; }
+
+/* Banners: tone wash, hairline in the tone's colour, text stays readable ink. */
+body .app .notice,body .app .dc-notice,body .app .cp-notice,.workspace-dialog .notice { border-radius:10px; background:var(--surface); border-color:var(--border); }
+body .app .notice.red,.workspace-dialog .notice.red { background:var(--danger-soft); border-color:var(--danger-line); }
+body .app .toast,body .app .saving { border-radius:999px; background:#000; border-color:var(--line-strong); box-shadow:0 10px 24px #00000080; }
+.workspace-dialog,.dc-modal,body .app .modal { border-radius:18px; }
+
+/* ── Shared components (ns-*) ───────────────────────────────────────────────────────────────── */
+.ns-section { display:flex; align-items:baseline; gap:8px; margin:0 2px 10px; min-width:0; }
+.ns-section h2,.ns-section h3 { font-size:10.5px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); white-space:nowrap; }
+.ns-section span { font-size:11.5px; color:var(--ink-muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* The island: the one black, raised surface of a screen. It holds the state and the one prominent action. */
+.ns-island { background:#000; border:1px solid var(--line-strong); border-radius:24px; padding:20px 22px; box-shadow:0 10px 24px #00000080,inset 0 1px 0 #ffffff12; }
+.ns-island-row { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.ns-island-copy { flex:1; min-width:220px; }
+.ns-island-copy h2 { font-size:20px; font-weight:600; letter-spacing:-.3px; line-height:1.3; color:var(--ink); }
+.ns-island-copy p { font-size:12.5px; line-height:1.55; color:var(--ink-soft); margin-top:3px; }
+
+.ns-dot { position:relative; width:8px; height:8px; border-radius:50%; background:var(--tone,var(--ink-muted)); flex-shrink:0; box-shadow:0 0 0 3px color-mix(in srgb,var(--tone,var(--ink-muted)) 25%,transparent); }
+.ns-dot.pulse:after { content:''; position:absolute; inset:0; border-radius:50%; border:1px solid var(--tone); animation:ns-pulse 1.6s ease-out infinite; }
+@keyframes ns-pulse { from { transform:scale(1); opacity:.7; } to { transform:scale(2.6); opacity:0; } }
+
+.ns-tone-good { --tone:var(--success); } .ns-tone-bad { --tone:var(--danger); } .ns-tone-warn { --tone:var(--warning); } .ns-tone-accent { --tone:var(--brand); } .ns-tone-neutral { --tone:var(--ink-muted); }
+
+.ns-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; line-height:1.5; white-space:nowrap; color:var(--tone,var(--ink-soft)); background:color-mix(in srgb,var(--tone,#fff) 15%,transparent); }
+.ns-chip.ns-tone-neutral { color:var(--ink-soft); background:#ffffff1a; }
+.ns-chip svg { width:11px; height:11px; flex-shrink:0; }
+.ns-chips { display:flex; flex-wrap:wrap; gap:6px; }
+
+.ns-badge { display:grid; place-items:center; width:28px; height:28px; border-radius:7px; flex-shrink:0; color:var(--tone,var(--ink-soft)); background:color-mix(in srgb,var(--tone,#fff) 15%,transparent); font-size:12px; font-weight:700; }
+.ns-badge svg { width:14px; height:14px; }
+.ns-badge.round { border-radius:50%; }
+
+.ns-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:inset 0 1px 0 #ffffff0d; min-width:0; transition:border-color .12s ease-out,background .12s ease-out; }
+.ns-card.selected { border-color:color-mix(in srgb,var(--brand) 60%,transparent); }
+
+.ns-row { display:flex; align-items:center; gap:12px; padding:10px 12px; min-width:0; }
+.ns-row-copy { flex:1; min-width:0; }
+.ns-row-copy strong { display:block; font-size:13px; font-weight:600; color:var(--ink); line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ns-row-copy small { display:block; font-size:11.5px; line-height:1.5; color:var(--ink-muted); overflow-wrap:anywhere; }
+.ns-row time,.ns-row .ns-when { font-size:11px; color:var(--ink-muted); white-space:nowrap; flex-shrink:0; }
+.ns-list>.ns-row+.ns-row { border-top:1px solid var(--line-subtle); }
+
+/* Segmented control: one capsule track, the chosen option tinted by its tone. */
+.ns-seg { display:inline-flex; padding:3px; gap:2px; border-radius:999px; background:#ffffff0d; border:1px solid var(--border); max-width:100%; }
+.ns-seg label { position:relative; margin:0; cursor:pointer; }
+.ns-seg input { position:absolute; opacity:0; inset:0; width:100%; height:100%; margin:0; cursor:pointer; }
+.ns-seg span { display:block; padding:5px 11px; border-radius:999px; font-size:11.5px; font-weight:600; line-height:1.4; color:var(--ink-soft); white-space:nowrap; transition:background .12s ease-out,color .12s ease-out; }
+.ns-seg label:hover span { color:var(--ink); }
+.ns-seg input:checked+span { color:var(--tone,var(--ink)); background:color-mix(in srgb,var(--tone,#fff) 18%,transparent); }
+.ns-seg label.ns-tone-neutral input:checked+span { color:var(--ink); background:#ffffff24; }
+.ns-seg input:focus-visible+span { outline:2px solid var(--brand); outline-offset:1px; }
+.ns-seg input:disabled+span { opacity:.45; cursor:not-allowed; }
+
+/* Toggle chip: a permission that is on or off. The check glyph says it as well as the colour. */
+.ns-toggle { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; border:1px solid var(--border); background:transparent; color:var(--ink-soft); font-size:12px; font-weight:600; line-height:1.4; transition:background .12s ease-out,border-color .12s ease-out,color .12s ease-out,transform .18s; }
+.ns-toggle svg { width:13px; height:13px; }
+.ns-toggle:not(:disabled):hover { border-color:var(--line-strong); color:var(--ink); }
+.ns-toggle:not(:disabled):active { transform:scale(.97); }
+.ns-toggle[aria-pressed=true],.ns-toggle[aria-pressed=true]:not(:disabled):hover { background:color-mix(in srgb,var(--brand) 16%,transparent); border-color:color-mix(in srgb,var(--brand) 45%,transparent); color:var(--brand); }
+
+.ns-field { display:block; margin:0; min-width:0; }
+.ns-field>span { display:block; font-size:11.5px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; }
+.ns-field-box { display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:8px; transition:border-color .12s ease-out; }
+.ns-field-box:hover { border-color:var(--line-strong); }
+.ns-field-box:focus-within { border-color:var(--brand); }
+body .app .ns-field-box input { flex:1; min-width:0; width:100%; margin:0; padding:7px 10px; border:0; background:transparent; font-family:var(--font-mono); font-size:13px; font-weight:600; outline:none; }
+.ns-field-box em { font-style:normal; font-size:11px; color:var(--ink-muted); padding-right:10px; white-space:nowrap; }
+.ns-field>small { display:block; margin-top:4px; font-size:11px; line-height:1.45; color:var(--ink-muted); }
+.ns-field.warn .ns-field-box { border-color:var(--warning-line); }
+.ns-field.warn>small { color:var(--warning); }
+
+.ns-banner { display:flex; align-items:flex-start; gap:9px; padding:9px 12px; border-radius:8px; font-size:12px; line-height:1.55; color:var(--ink); background:color-mix(in srgb,var(--tone,#fff) 10%,transparent); border:1px solid color-mix(in srgb,var(--tone,#fff) 24%,transparent); }
+.ns-banner>svg { width:14px; height:14px; margin-top:2px; flex-shrink:0; color:var(--tone,var(--ink-soft)); }
+.ns-banner>div { flex:1; min-width:0; }
+.ns-banner strong { font-weight:600; }
+.ns-empty { display:flex; align-items:center; gap:8px; padding:10px 2px; font-size:12px; color:var(--ink-muted); }
+.ns-empty svg { width:14px; height:14px; flex-shrink:0; }
+
+.ns-icon-button { display:grid; place-items:center; width:28px; height:28px; padding:0; border-radius:50%; border:1px solid transparent; background:#ffffff0d; color:var(--ink-soft); flex-shrink:0; transition:background .12s ease-out,color .12s ease-out,transform .2s ease-out; }
+.ns-icon-button:not(:disabled):hover { background:var(--surface-hover); color:var(--ink); border-color:var(--border); }
+.ns-icon-button svg { width:14px; height:14px; }
+
+/* Floating bar for unsaved changes: a small island at the bottom of the screen. */
+.ns-savebar { position:sticky; bottom:16px; z-index:20; display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:fit-content; max-width:100%; margin:0 auto; padding:8px 8px 8px 16px; border-radius:999px; background:#000; border:1px solid var(--line-strong); box-shadow:0 10px 24px #000000a6,inset 0 1px 0 #ffffff12; animation:ns-rise .28s cubic-bezier(.3,1.3,.6,1); }
+.ns-savebar>span { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:var(--ink); margin-right:6px; }
+@keyframes ns-rise { from { transform:translateY(14px); opacity:0; } to { transform:none; opacity:1; } }
+@media (max-width:700px) { .ns-island { border-radius:20px; padding:16px; } .ns-savebar { border-radius:18px; padding:10px 12px; } }
+
+/* Screens that are not about one project or period drop the project and period bar. */
+body .app.view-autonomy .contextbar,body .app.view-autonomy .heading-actions .button.primary,body .app.view-autonomy .welcome,body .app.view-autonomy .project-scope-summary { display:none; }
+
+/* Office chrome outside the pixel scene follows the same surfaces; the scene artwork keeps its own palette. */
+body .app .vo-decision-summary { background:color-mix(in srgb,var(--brand) 10%,transparent); border-color:color-mix(in srgb,var(--brand) 24%,transparent); color:var(--ink); border-radius:12px; }
+body .app .vo-decision-summary p,body .app .vo-decision-summary small { color:var(--ink-soft); }
