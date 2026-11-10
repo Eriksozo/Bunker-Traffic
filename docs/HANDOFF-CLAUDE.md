@@ -921,3 +921,17 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Notch: uma falha isolada (5xx ou rede) logo depois de uma leitura boa tenta de novo em 15 s, sem mostrar erro; a segunda seguida aparece.
 - **Testes:** `tests/executor-cpu-budget.test.mjs` e o autoteste do app.
 - **Acompanhar:** contagem de `exceededResources`/`exceededMemory` nas próximas horas. Se `exceededMemory` persistir, o próximo passo é reduzir as cópias do estado mantidas ao mesmo tempo.
+
+## Notch fora do lugar com quatro telas (registro escrito às 2026-11-10 09:47:42 UTC por `date -u`)
+
+- Relato do dono em 10/11 ("o notch bugou"): a ilha recolhida apareceu à esquerda do monitor principal, em cima dos menus.
+- Medição:
+  - escolha de tela `menuBar`, com o monitor L2717REC de 1920 pt;
+  - 4 telas conectadas, uma delas duplicada no nome;
+  - janela do notch em x = 0 em vez de x = 610.
+- Causa: com monitores dormindo, acordando ou sendo reorganizados, o macOS moveu o painel, e o app só reposicionava ao receber o aviso de mudança de telas.
+- Correção (`NotchController.swift`):
+  - a cada 1,5 s, `healPosition()` confere `NotchGeometry.drifted` (tolerância de 0,5 pt) e devolve o painel ao centro da tela escolhida;
+  - um segundo reposicionamento roda 1,2 s depois de cada aviso de mudança de telas;
+  - o modo seguir-o-mouse continua como estava.
+- Autoteste com o caso real (painel em x = 0 contra 610 esperado). Reinstalado: a janela voltou para x = 610. Não alterou o design nem os dados.

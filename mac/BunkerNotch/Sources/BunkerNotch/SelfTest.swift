@@ -293,6 +293,14 @@ enum SelfTest {
         check(origin == CGPoint(x: 406, y: 422), #line)
         let island = NotchGeometry.islandRect(panel: CGSize(width: 700, height: 560), island: CGSize(width: 340, height: 32))
         check(island == CGRect(x: 180, y: 528, width: 340, height: 32), #line)
+        // 10/11: four displays; the panel was left at x = 0 of the 1920-pt main screen instead of its centre.
+        let main = CGRect(x: 0, y: 0, width: 1920, height: 1080), size = CGSize(width: 700, height: 560)
+        let expected = CGRect(origin: NotchGeometry.panelOrigin(screen: main, panel: size), size: size)
+        check(expected.origin == CGPoint(x: 610, y: 520), #line)
+        check(NotchGeometry.drifted(panel: CGRect(origin: CGPoint(x: 0, y: 520), size: size), expected: expected), #line)
+        check(!NotchGeometry.drifted(panel: expected, expected: expected), #line)
+        check(!NotchGeometry.drifted(panel: expected.offsetBy(dx: 0.3, dy: -0.3), expected: expected), #line)
+        check(NotchGeometry.drifted(panel: CGRect(origin: expected.origin, size: CGSize(width: 600, height: 560)), expected: expected), #line)
     }
     /// Touch ID adjustments: same limits as the server, intent never approves, signed envelope verifies.
     private static func testOwnerAdjust() {

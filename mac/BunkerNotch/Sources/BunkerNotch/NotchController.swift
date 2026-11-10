@@ -38,6 +38,10 @@ struct NotchGeometry: Equatable {
     static func panelOrigin(screen: CGRect, panel: CGSize) -> CGPoint {
         CGPoint(x: screen.midX - panel.width / 2, y: screen.maxY - panel.height)
     }
+    /// The panel is somewhere else than it should be (more than half a point off, or a different size).
+    static func drifted(panel: CGRect, expected: CGRect) -> Bool {
+        abs(panel.minX - expected.minX) > 0.5 || abs(panel.minY - expected.minY) > 0.5 || panel.size != expected.size
+    }
     static func islandRect(panel: CGSize, island: CGSize) -> CGRect {
         CGRect(x: (panel.width - island.width) / 2, y: panel.height - island.height, width: island.width, height: island.height)
     }
@@ -168,6 +172,8 @@ final class NotchController {
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in guard let self, self.fsm.state == .compact else { return }; withAnimation(DS.Motion.quick) { self.state.tick &+= 1 } } }.tolerance = 0.5
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.relocate(force: true) }
+            // The window server may still move windows after the notice (displays waking or being rearranged).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { MainActor.assumeIsolated { self?.relocate(force: true) } }
         }
         // Escape and 1–4 while open; a click anywhere else folds a click-opened island.
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -194,7 +200,7 @@ final class NotchController {
             self?.track(); return event
         } as Any)
         // Slow safety net (screen changes, follow-the-mouse relocation, a missed event).
-        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.track() } }.tolerance = 0.5
+        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.healPosition(); self?.track() } }.tolerance = 0.5
     }
 
     func toggle() { send(.toggle) }
@@ -213,10 +219,19 @@ final class NotchController {
         return screens[min(index, screens.count - 1)]
     }
 
+    /// Safety net: with several displays sleeping, waking or being rearranged, macOS can move the panel without a
+    /// screen-change notice we can act on (seen 10/11 with four screens: the island sat at x = 0 of the main display,
+    /// over the app menus). Every 1.5 s, put it back where the chosen screen says it belongs. Follow-the-mouse is
+    /// already handled by `track()` while the island is closed.
+    private func healPosition() {
+        guard display != .followMouse else { return }
+        relocate()
+    }
+
     private func relocate(force: Bool = false) {
         let screen = Self.screen(for: display)
         let frame = NSRect(origin: NotchGeometry.panelOrigin(screen: screen.frame, panel: Self.panelSize), size: Self.panelSize)
-        guard force || frame != panel.frame else { return }
+        guard force || NotchGeometry.drifted(panel: panel.frame, expected: frame) || NotchGeometry.measure(screen) != state.geometry else { return }
         state.geometry = NotchGeometry.measure(screen)
         panel.setFrame(frame, display: true)
     }
