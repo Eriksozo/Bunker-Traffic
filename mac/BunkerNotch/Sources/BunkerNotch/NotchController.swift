@@ -2,14 +2,14 @@ import AppKit
 import Combine
 import SwiftUI
 
-enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", accounts = "Contas", managers = "Gestores", agents = "Agentes", system = "Sistema" }
+enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", accounts = "Contas", managers = "Gestores", agents = "Agentes", system = "Sistema", days = "Dias" }
 
 /// Pointer pre-filter for the global mouse monitor: within 60 pt of the island panel.
 enum NotchHover {
     static func near(_ p: CGPoint, panel: CGRect) -> Bool { panel.insetBy(dx: -60, dy: -60).contains(p) }
 }
 
-/// Keyboard while the island is open: 1–6 pick a tab, ← → move between tabs (wrapping). Pure, for the self-test.
+/// Keyboard while the island is open: 1–7 pick a tab, ← → move between tabs (wrapping). Pure, for the self-test.
 enum NotchKeys {
     static func tab(for chars: String?, keyCode: UInt16, current: NotchTab) -> NotchTab? {
         let all = NotchTab.allCases, i = all.firstIndex(of: current) ?? 0

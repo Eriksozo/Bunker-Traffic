@@ -943,3 +943,13 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - As etapas dos analistas seguem concluindo.
   - **Pendente:** o objeto ainda é reiniciado por memória a cada ~7 min. Medido localmente com a central real: uma cópia hidratada precisa de ~45–60 MB de heap e duas de ~100 MB, num isolate de 128 MB. Desde que o histórico (ledger, outcomes, diários) saiu da central, o limite de 1,75 MB da central não segura mais o tamanho em memória. Os maiores itens são `snapshots` 9,0 MB de JSON, `historyLearning` 7,7 MB, `decisionHistoryOutcomes` 4,0 MB, `decisionHistory` 3,4 MB e `decisionHistoryImports` 1,7 MB.
   - **Próximo passo:** limitar o histórico mantido em memória ou carregar só o necessário por leitor, com auditoria do que cada construtor usa. Não foi feito sem essa auditoria.
+
+## Notch: aba Dias, resultado por dia (registro escrito às 2026-11-10 13:54:56 UTC por `date -u`)
+
+- Pedido do dono: ter no notch a tabela diária (dia, investimento, vendas, CPA, faturamento líquido, lucro, ROAS, ROI).
+- Fonte: Malva `tracking_series` (dia a dia, últimos 7 dias com hoje parcial, Meta, vendas de tráfego), uma leitura por projeto configurado a cada 10 min pelo executor (`syncDays`, chave `dailySeries` no DO). Somente leitura e só exibição: não entra em análise, proposta, aprovação nem conferência de ordem.
+- "Todos os projetos" soma os 6 projetos dia a dia e refaz as razões a partir das somas: CPA = investimento ÷ vendas (todos os pedidos), ROAS = fat. líquido ÷ investimento, ROI = (lucro + investimento + taxas) ÷ (investimento + taxas), a mesma conta da Malva (conferida no Gabe). Projeto nunca lido deixa o total como N/D; falha de leitura mantém a anterior e marca atraso.
+- `tracking_series` entrou na lista de leituras permitidas (`lib/cloud-malva.mjs` e a cópia da Edge Function). Edge Function `malva-mcp` publicada como v13 (só essa linha muda em relação à v12).
+- Notch: aba "Dias" (tecla 7), depois de Sistema, para não mudar as teclas das abas existentes.
+- Validação: `tests/daily-series.test.mjs`, suíte completa (1423), typecheck e build num worktree limpo do HEAD com só estas mudanças; self-test nativo.
+- Havia, ao mesmo tempo, alterações de outra sessão no checkout (leitura `lean` em `worker/cloud-executor.ts`, `lib/persistence.mjs`, `lib/history-storage.mjs`, `lib/cloud-history-learning.mjs`). Ficaram fora deste commit, intactas; com elas, `tests/shared-view-readonly.test.mjs` falha (conta 3 `this.read()` e espera 6).

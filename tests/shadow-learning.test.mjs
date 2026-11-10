@@ -197,7 +197,7 @@ test('End to end in the executor: memory, team moves, blind spot, retention, gat
  const shadowLib=await import('../lib/autonomy-shadow.mjs'),captured=[];
  const spy={...shadowLib,evaluateShadow:(state,opts)=>{captured.push(opts.accuracy);return shadowLib.evaluateShadow(state,opts);}};
  const mods={'autonomy-grant':await import('../lib/autonomy-grant.mjs'),'autonomy-shadow':spy,'campaign-activity':await import('../lib/campaign-activity.mjs'),'change-attribution':await import('../lib/change-attribution.mjs'),
-  'companion-summary':await import('../lib/companion-summary.mjs'),'meta-display':await import('../lib/meta-display.mjs'),'shadow-learning':await import('../lib/shadow-learning.mjs'),'team-learning':await import('../lib/team-learning.mjs')};
+  'companion-summary':await import('../lib/companion-summary.mjs'),'daily-series':await import('../lib/daily-series.mjs'),'meta-display':await import('../lib/meta-display.mjs'),'shadow-learning':await import('../lib/shadow-learning.mjs'),'team-learning':await import('../lib/team-learning.mjs')};
  const compiled=ts.transpileModule(fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  const store={},exports={};
  const storage={get:async k=>Array.isArray(k)?new Map(k.filter(x=>x in store).map(x=>[x,store[x]])):store[k],list:async({prefix})=>new Map(Object.entries(store).filter(([k])=>k.startsWith(prefix))),put:async(k,v)=>{if(typeof k==='object')Object.assign(store,k);else store[k]=v;},delete:async keys=>{for(const k of [].concat(keys))delete store[k];},setAlarm:async()=>{}};

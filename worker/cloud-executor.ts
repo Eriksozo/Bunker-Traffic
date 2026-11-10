@@ -17,6 +17,7 @@ import {CLOUD_MODEL} from '../lib/cloud-analysis.mjs';
 import {cloudModelPolicy,cloudProductionModelPolicy} from '../lib/cloud-model-policy.mjs';
 import {checkCloudModel} from '../lib/cloud-model-check.mjs';
 import {companionSummary,projectBoard} from '../lib/companion-summary.mjs';
+import {dailySeriesPolicy,dailySeriesArgs,projectDays,daysSummary} from '../lib/daily-series.mjs';
 import {expiredAttribution,usableAttributions} from '../lib/change-attribution.mjs';
 import {activityHistoryProjects,collectActivityHistory,activityHistoryPolicy} from '../lib/activity-history.mjs';
 import {journalStorage} from '../lib/history-storage.mjs';
@@ -365,6 +366,19 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.storeCompanion(latest.state,await this.freshShadow(latest.state)).catch(()=>{});
   await this.bumpLive([]);
  }
+ /** Notch "Dias" tab (lib/daily-series.mjs): one Malva day series per configured project every 10 minutes.
+  * Display only; a failed project keeps its previous days and never affects the executor. */
+ private async syncDays(state:any){
+  if(!state||state.paused)return;
+  const prior=await this.ctx.storage.get<any>('dailySeries'),now=Date.now();
+  if(prior?.version===dailySeriesPolicy.version&&now-(Date.parse(prior.checkedAt||'')||0)<dailySeriesPolicy.refreshMs)return;
+  const kept=prior?.version===dailySeriesPolicy.version&&prior.projects&&typeof prior.projects==='object'?prior.projects:{},source=cloudMalvaClient(this.db()),projects:Record<string,any>={};
+  for(const id of Object.keys(state.config||{})){
+   try{const read=projectDays(await source.read('tracking_series',dailySeriesArgs(id)));if(!read.days.length)throw Object.assign(new Error('DAYS_EMPTY'),{code:'DAYS_EMPTY'});projects[id]={...read,at:new Date(now).toISOString(),error:null};}
+   catch(e:any){projects[id]={...(kept[id]||{days:[]}),error:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'DAYS_FAILED'};}
+  }
+  await this.ctx.storage.put('dailySeries',{version:dailySeriesPolicy.version,checkedAt:new Date(now).toISOString(),projects});
+ }
  /**
   * Ad-account panel (docs/connections.md): Malva accounts per configured project plus the daily spending
   * limit Meta reports, read with a dedicated read-only token. Every 30 minutes; stored here, not in the central.
@@ -435,7 +449,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async storeCompanion(state:any,shadow:any[]=[]){
   if(!state)return;
   const learned=await this.ctx.storage.get<any>('learningSummary');
-  const shadowStatus=await this.ctx.storage.get<any>('shadowStatus'),shadowDay=shadowStatus?.day||shadowLocalDay(Date.now()),accountsPanel=await this.ctx.storage.get<any>('accountsPanel'),first24h=(await this.ctx.storage.get<any>('first24h'))?.boards||[];
+  const shadowStatus=await this.ctx.storage.get<any>('shadowStatus'),shadowDay=shadowStatus?.day||shadowLocalDay(Date.now()),accountsPanel=await this.ctx.storage.get<any>('accountsPanel'),dailySeries=await this.ctx.storage.get<any>('dailySeries'),first24h=(await this.ctx.storage.get<any>('first24h'))?.boards||[];
   const accounts=accountsPanel?{generatedAt:accountsPanel.generatedAt,metaConnected:accountsPanel.metaConnected,metaError:accountsPanel.metaError,counts:accountsPanel.counts,
    rows:(accountsPanel.rows||[]).filter((r:any)=>r.status==='active'||r.alerts?.length).slice(0,80).map((r:any)=>({accountId:r.accountId,name:r.name,group:r.group,status:r.status,statusLabel:r.statusLabel,runningLabel:r.runningLabel,projects:r.projects,currency:r.currency,dailyLimit:r.dailyLimit,limitSource:r.limitSource,todaySpend:r.todaySpend,usedPct:r.usedPct,balance:r.balance,alerts:r.alerts}))}:null;
   const list=await this.ctx.storage.list<any>({prefix:'attr:'}),attributions=usableAttributions([...list.values()]),runtime=await this.setting();
@@ -443,7 +457,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Display only (lib/meta-display.mjs): the Malva live rows with the Meta read on top; today's numbers and the details
   // of the notch follow them, the queue and every decision keep the analysis.
   const live:any=overlayMetaItems(this.liveItems||[],await this.ctx.storage.get<any>('metaLive'),{now}),todayState=liveTodayState(withAuthors,live,{now}),liveRows=liveRowIndex(live,{now}),board=projectBoard(withAuthors,now,{live:live as never[],todayState});
-  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:{...shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null,pulseAt:shadowStatus?.failed?null:shadowStatus?.at||null}),learning:learningBrief(learned,{project})},first24h:first24hSummary(first24h,{project}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:{...shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null,pulseAt:shadowStatus?.failed?null:shadowStatus?.at||null}),learning:learningBrief(learned,{project})},first24h:first24hSummary(first24h,{project}),days:daysSummary(dailySeries,{project,config:state.config,now}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
   await this.ctx.storage.put(out);
   await this.phoneAlerts(out['companion:all']).catch(()=>{});
  }
@@ -640,6 +654,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // The account panel is optional: a failure keeps the last panel and never affects the executor.
    await lane();
    if(liveState&&(await this.setting()).enabled)await this.syncAccounts(liveState).catch(()=>{});
+   await lane();
+   if(liveState&&(await this.setting()).enabled)await this.syncDays(liveState).catch(()=>{});
    await lane();
    // The live Meta read is optional: a failure keeps the last read and never affects the executor.
    if(liveState&&(await this.setting()).enabled)await this.syncMetaLive(liveState).catch(()=>{});

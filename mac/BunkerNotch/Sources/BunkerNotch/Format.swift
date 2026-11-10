@@ -59,6 +59,17 @@ enum Format {
     static func balanceVerdict(_ v: String?) -> (text: String, tone: Tone)? {
         switch v { case "recovers": return ("hoje negativo · histórico positivo", .warn); case "negative": return ("negativo também com 7d", .bad); default: return nil }
     }
+    /// "Dias" tab helpers: "10/11", whole orders, profit and ROI tones (ROI ≥ 1 pays back).
+    static func dayLabel(_ day: String) -> String {
+        let p = day.split(separator: "-"); return p.count == 3 ? "\(p[2])/\(p[1])" : "N/D"
+    }
+    static func orders(_ value: Double?) -> String { guard let value, value.isFinite else { return "N/D" }; return String(Int(value.rounded())) }
+    static func signTone(_ value: Double?) -> Tone? { guard let value, value.isFinite, value != 0 else { return nil }; return value > 0 ? .good : .bad }
+    static func roiTone(_ value: Double?) -> Tone? { guard let value, value.isFinite else { return nil }; return value >= 1 ? .good : .bad }
+    static func daysStale(_ d: Summary.Days) -> String {
+        let who = (d.failing ?? []).joined(separator: ", ")
+        return who.isEmpty ? "Leitura atrasada: valores da última leitura confirmada." : "Última leitura de \(who) falhou: valores da leitura anterior."
+    }
     static func ratio(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "N/D" }
         return String(format: "%.2fx", value).replacingOccurrences(of: ".", with: ",")

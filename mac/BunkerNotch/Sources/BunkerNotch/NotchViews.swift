@@ -264,6 +264,7 @@ struct ExpandedView: View {
                         case .managers: ManagersTab(s: s)
                         case .agents: AgentsTab(s: s)
                         case .system: SystemTab(s: s)
+                        case .days: DaysTab(s: s)
                         }
                     }
                     .padding(.bottom, DS.Space.l)
@@ -518,6 +519,7 @@ struct TabBar: View {
         case .projects:
             let n = (s.board ?? []).reduce(0) { $0 + $1.approvals }
             return n > 0 ? ("\(n)", .warn) : nil
+        case .days: return nil
         case .agents: return s.agents.recent.isEmpty ? nil : ("\(s.agents.recent.count)", .neutral)
         case .system:
             guard let e = s.executor else { return nil }
@@ -868,6 +870,59 @@ struct AccountsTab: View {
                 EmptyLine(text: "O painel de contas ainda está sendo montado.", kind: .waiting)
             }
         }
+    }
+}
+
+/// Last 7 days, one row per day (the web daily table, for the whole project or all of them).
+/// Vendas count every order (upsells included); CPA = investimento ÷ vendas. Missing numbers stay N/D.
+struct DaysTab: View {
+    let s: Summary
+    private static let widths: [CGFloat] = [62, 82, 50, 70, 86, 82, 50, 50]
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            SectionHeader(title: "Resultado por dia", detail: detail)
+            if let d = s.days, d.error == nil, !d.rows.isEmpty {
+                if d.stale == true { EmptyLine(text: Format.daysStale(d), kind: .info) }
+                VStack(spacing: 0) {
+                    row(["DIA", "INVEST.", "VENDAS", "CPA", "FAT. LÍQ.", "LUCRO", "ROAS", "ROI"], header: true)
+                    ForEach(d.rows) { r in
+                        Divider().overlay(DS.Color.stroke)
+                        let c = d.currency
+                        row([Format.dayLabel(r.day), Format.money(r.spend, currency: c), Format.orders(r.orders), Format.money(r.cpa, currency: c),
+                             Format.money(r.revenueNet, currency: c), Format.money(r.profit, currency: c), Format.ratio(r.roas), Format.ratio(r.roi)],
+                            tones: [nil, nil, nil, nil, nil, Format.signTone(r.profit), nil, Format.roiTone(r.roi)], partial: r.day == d.today)
+                    }
+                }
+                .padding(.vertical, DS.Space.xs)
+                .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                Text("Vendas incluem upsells · CPA = investimento ÷ vendas · Meta, vendas de tráfego · hoje parcial").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+            } else if let e = s.days?.error {
+                EmptyLine(text: e + ". Aparece na próxima leitura (a cada 10 min).", kind: .waiting)
+            } else {
+                EmptyLine(text: "Resultado por dia disponível na próxima leitura do executor (a cada 10 min).", kind: .waiting)
+            }
+        }
+    }
+    var detail: String {
+        guard let at = s.days?.at else { return "últimos 7 dias · \(s.projectName)" }
+        return "últimos 7 dias · \(s.projectName) · lido " + Format.relative(at)
+    }
+    @ViewBuilder func row(_ cells: [String], header: Bool = false, tones: [Tone?] = [], partial: Bool = false) -> some View {
+        HStack(spacing: 4) {
+            ForEach(cells.indices, id: \.self) { i in
+                Group {
+                    if i == 0 && partial {
+                        HStack(spacing: 3) { Text(cells[i]); Text("parcial").font(DS.Font.micro).foregroundStyle(DS.Color.warn) }
+                    } else { Text(cells[i]) }
+                }
+                .font(header ? DS.Font.microStrong : (i == 0 ? DS.Font.bodyStrong : DS.Font.number))
+                .foregroundStyle(header ? DS.Color.inkMuted : (i < tones.count ? tones[i]?.color : nil) ?? DS.Color.ink)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .frame(width: Self.widths[i], alignment: i == 0 ? .leading : .trailing)
+            }
+        }
+        .padding(.horizontal, DS.Space.s).padding(.vertical, header ? 5 : 7)
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -174,6 +174,17 @@ struct Summary: Decodable, Equatable {
         let alert: String?
         let byProject: [Pace]?
     }
+    /// "Dias" tab (lib/daily-series.mjs): the last 7 days, newest first, today partial. Display only.
+    struct DayRow: Decodable, Equatable, Identifiable {
+        var id: String { day }
+        let day: String; let spend: Double?; let orders: Double?; let cpa: Double?
+        let revenueNet: Double?; let profit: Double?; let roas: Double?; let roi: Double?
+    }
+    struct Days: Decodable, Equatable {
+        let rows: [DayRow]; let currency: String?; let today: String?; let at: String?
+        let stale: Bool?; let missing: [String]?; let failing: [String]?; let error: String?
+    }
+    var days: Days? = nil
     struct Accounts: Decodable, Equatable { let generatedAt: String?; let metaConnected: Bool; let metaError: String?; let counts: AccountCounts; let rows: [AccountRow] }
 }
 

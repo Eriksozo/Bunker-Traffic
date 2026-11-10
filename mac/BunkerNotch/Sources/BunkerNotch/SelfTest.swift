@@ -69,6 +69,13 @@ enum SelfTest {
         check(Format.accountMatches(accRow, "ca 1") && Format.accountMatches(accRow, "") && !Format.accountMatches(accRow, "flix 9"), #line)
         check(Format.accountMatches(accRow, "act_1") && !Format.accountMatches(accRow, "act_"), #line)
         check(NotchTab.allCases[2] == .accounts, #line)
+        check(NotchTab.allCases.last == .days && NotchKeys.tab(for: "7", keyCode: 0, current: .now) == .days, #line)
+        let daysJSON = #"{"rows":[{"day":"2026-11-10","spend":32519.62,"orders":125,"cpa":260.16,"revenueNet":39794.25,"profit":5973.85,"roas":1.2237,"roi":1.18},{"day":"2026-11-09","spend":null,"orders":null,"cpa":null,"revenueNet":null,"profit":-5,"roas":null,"roi":0.9}],"currency":"BRL","today":"2026-11-10","at":"2026-11-10T13:00:00.000Z","stale":false,"missing":[],"failing":[],"error":null}"#
+        let days = try? JSONDecoder().decode(Summary.Days.self, from: Data(daysJSON.utf8))
+        check(days?.rows.count == 2 && days?.rows[1].spend == nil, #line)
+        check(Format.dayLabel("2026-11-10") == "10/11" && Format.dayLabel("x") == "N/D" && Format.orders(125) == "125" && Format.orders(nil) == "N/D", #line)
+        check(Format.signTone(-5) == .bad && Format.signTone(0) == nil && Format.roiTone(1.18) == .good && Format.roiTone(0.9) == .bad && Format.roiTone(nil) == nil, #line)
+        check(Format.daysStale(Summary.Days(rows: [], currency: nil, today: nil, at: nil, stale: true, missing: nil, failing: ["Gabe"], error: nil)).contains("Gabe"), #line)
         let shadowJSON = #"{"day":"2026-11-07","total":2,"byRule":{"test-no-sale":{"total":1,"wouldExecute":1,"managerDid":1,"bunkerFirst":1}},"recent":[{"rule":"test-no-sale","ruleLabel":"Pausar teste","project":"P","account":"A","campaign":"C","action":"status","reason":"x","firstAt":"2026-11-07T17:00:00.000Z","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"blockedBy":[],"manager":{"actor":"Gestor","at":"2026-11-07T17:40:00.000Z","minutesAfter":40}},{"rule":"bad-day-reduce","action":"budget","before":{"dailyBudget":100,"currency":"USD"},"after":{"dailyBudget":80,"currency":"USD"},"wouldExecute":false,"blockedBy":["x"],"manager":null}]}"#
         if let sh = try? JSONDecoder().decode(Summary.Shadow.self, from: Data(shadowJSON.utf8)) {
             check(Format.shadowChange(sh.recent[0]) == "Pausar", #line)
