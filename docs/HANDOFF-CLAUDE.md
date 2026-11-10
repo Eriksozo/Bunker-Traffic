@@ -878,3 +878,35 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Decisão do dono em 09/11 ("Yes, keep 24h"): cópias antigas de leituras (`snapshots:<digest>`) sem referência são apagadas, guardando as últimas 24h.
 - `bunker_store` (migração `20261109231000_snapshot_retention.sql`, aplicada): no commit vencedor da central, apaga `snapshots:` gravados há mais de 24h, nunca o que a central nova referencia. A central é a única leitora desses registros (conferido: nenhum outro registro cita essas chaves).
 - Limpeza única feita com a mesma regra, seguida de `VACUUM FULL` em `bunker_records` fora da cadência; a leitura da central e `/health` conferidos depois.
+
+## Design system do notch e rodada de UX (registro escrito às 2026-11-10 03:39:11 UTC por `date -u`)
+
+- Pedido do dono em 09/11: "100 baterias de melhorias no design system do notch", com referências externas (Apple HIG, DynamicNotchKit, Boring Notch, NotchNook, Alcove), seguidas de "100 rodadas de testes e aprimoramento na UIX, usabilidade". Feito como duas listas fechadas de 100, sem ciclo aberto. Só apresentação: regras, números, fluxo de ordem/Touch ID e ações dos botões não mudaram.
+- `DesignSystem.swift` reescrito em três camadas:
+  - `Palette`: valores crus, cada um com gêmeo de Aumentar contraste;
+  - `Token`: papéis nos dois modos;
+  - `DS.*` e componentes: `TintChip`, `Monogram`, `PressableStyle`, `Banner` com glifo por tom, `EmptyLine` claro/info/espera, `SkeletonBlock`, `scrollEdgeFade`, `numericTransition`.
+- `DSAudit` entrou no `--self-test`: contraste AA de cada texto e tom nos dois modos, piso de 10 pt, grade de 4 pt, raios concêntricos e alvos de clique de pelo menos 20 pt.
+- Aplicado nas telas:
+  - indicador de aba deslizante;
+  - números que rolam ao mudar;
+  - lista com fade na borda;
+  - esqueleto no carregamento;
+  - aro sutil na ilha aberta e halo no aviso;
+  - passar o mouse e pressionar em todos os botões;
+  - dicas com o texto completo em linhas truncadas;
+  - botão de limpar na busca de contas;
+  - alvos pequenos aumentados.
+- Detalhes, inventário e as duas listas: `docs/notch-design-system.md`. UX: 45 itens passavam, 49 foram corrigidos e 6 ficaram para depois.
+- Validação:
+  - `mac/build.sh` compilou e passou no autoteste; o app foi instalado em `~/Applications`;
+  - a reabertura automática deu `-600` no `open` e o app foi reaberto à mão (está rodando);
+  - capturas antes/depois feitas pelo `--render-notch` (16 telas fictícias);
+  - a captura real do topo da tela saiu preta (tela bloqueada ou sem permissão de gravação), então a conferência visual da instalação fica pendente com o dono.
+- Para depois (lote E e ⏳ da UX):
+  - botões de ícone de 28 pt;
+  - anel de foco de teclado;
+  - háptico e atraso de abertura;
+  - altura dinâmica;
+  - prévias de alto contraste e Reduzir movimento no renderizador;
+  - janela de sons com os componentes da ilha.

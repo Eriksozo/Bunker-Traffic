@@ -60,6 +60,12 @@ struct NotchRootView: View {
             ZStack(alignment: .top) {
                 let radii = IslandShape.radii(notch.mode)
                 IslandShape(top: radii.top, bottom: radii.bottom).fill(DS.Color.canvas)
+                // A faint rim on the lower edges when the island floats over the desktop; the resting notch stays pure black.
+                if notch.mode != .compact {
+                    IslandShape(top: radii.top, bottom: radii.bottom).stroke(DS.Color.rim, lineWidth: DS.Size.hairline)
+                        .mask(LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: UnitPoint(x: 0.5, y: 0.35)))
+                        .allowsHitTesting(false)
+                }
                 switch notch.mode {
                 case .open: ExpandedView().padding(.top, notch.geometry.height + DS.Space.s).transition(.pour)
                 case .alert(let alert): AlertView(alert: alert).transition(.opacity)
@@ -69,7 +75,7 @@ struct NotchRootView: View {
             }
             .frame(width: notch.islandSize.width, height: notch.islandSize.height)
             // Depth grows with the island: none at rest (it is the bezel), soft when peeking, deep when open.
-            .shadow(color: .black.opacity(notch.expanded ? 0.5 : notch.mode == .compact ? 0 : 0.3), radius: notch.expanded ? 24 : 12, y: notch.expanded ? 10 : 5)
+            .shadow(color: .black.opacity(DS.Elevation.island(notch.mode).opacity), radius: DS.Elevation.island(notch.mode).radius, y: DS.Elevation.island(notch.mode).y)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -105,10 +111,10 @@ struct CollapsedView: View {
                 // The bell says what the number counts: items that still need the owner (approvals and losses).
                 if store.attention > 0 { Pill(text: "\(store.attention)", tone: .warn, icon: "bell.fill") }
                 else if let s = store.summary, !store.muted { MiniBars(values: s.today.roasTrend, height: 11, barWidth: 3) }
-                if store.muted { Image(systemName: "moon.fill").font(.system(size: 9)).foregroundStyle(DS.Color.inkMuted).help("Avisos silenciados") }
+                if store.muted { Image(systemName: "moon.fill").font(DS.Icon.s).foregroundStyle(DS.Color.inkMuted).help("Avisos silenciados") }
             }.frame(width: NotchState.earWidth)
             Spacer(minLength: notch.geometry.width)
-            Text(current?.text ?? (store.preparing ? "preparando" : "…")).font(.system(size: 10.5, weight: .semibold, design: .rounded)).monospacedDigit()
+            Text(current?.text ?? (store.preparing ? "preparando" : "…")).font(DS.Font.ticker)
                 .foregroundStyle(current.map { $0.tone == .neutral ? DS.Color.inkSoft : $0.tone.color } ?? DS.Color.inkSoft)
                 .lineLimit(1).minimumScaleFactor(0.7).frame(width: NotchState.earWidth - 14).padding(.trailing, 14)
                 .id(notch.tick).transition(.blurFade)
@@ -143,13 +149,13 @@ struct PeekView: View {
         VStack(spacing: 0) {
             CollapsedView().allowsHitTesting(false)
             HStack(spacing: DS.Space.s) {
-                StatusDot(tone: healthTone(store), size: 6)
+                StatusDot(tone: healthTone(store), size: DS.Size.dotSmall, pulse: store.error != nil)
                 if let s = store.summary { MiniBars(values: s.today.roasTrend, height: 12, barWidth: 3.5) }
-                Text(headline).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(1)
+                Text(headline).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(1).minimumScaleFactor(0.88).help(headline)
                 Spacer(minLength: DS.Space.s)
                 Text(age).font(DS.Font.micro).foregroundStyle(staleMinutes(store) != nil ? DS.Color.warn : DS.Color.inkMuted).lineLimit(1)
             }
-            .padding(.horizontal, DS.Space.l).frame(height: 30)
+            .padding(.horizontal, DS.Space.l).frame(height: DS.Size.peekRow)
         }
         .contentShape(Rectangle())
         .onTapGesture { notch.onClick() }
@@ -195,16 +201,16 @@ struct AlertView: View {
             Color.clear.frame(height: notch.geometry.height)
             HStack(alignment: .center, spacing: DS.Space.m) {
                 BunkView(mood: alert.kind == .manager ? .watching : alert.kind == .sale || alert.kind == .order && alert.id.hasSuffix(":confirmed") ? .happy : .alert, size: 32)
+                    // A soft glow in the alert's colour says what kind of news this is before the text is read.
+                    .background(Circle().fill(tone.color.opacity(0.22)).frame(width: 40, height: 40).blur(radius: A11y.reduceTransparency ? 0 : 14))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(alert.title).font(DS.Font.bodyStrong).foregroundStyle(DS.Color.ink).lineLimit(1)
                     Text(alert.detail).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(2).truncationMode(.middle)
                 }
                 Spacer(minLength: DS.Space.s)
-                HStack(spacing: 3) { Text("abrir"); Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .bold)) }
-                    .font(DS.Font.bodyStrong).foregroundStyle(tone.color)
-                    .padding(.horizontal, 9).padding(.vertical, 4).background(tone.color.opacity(0.14), in: Capsule())
+                TintChip(text: "abrir", icon: symbol, trailingIcon: "chevron.right", tone: tone, font: DS.Font.bodyStrong)
             }
-            .padding(.horizontal, DS.Space.l + 6)
+            .padding(.horizontal, DS.Space.xxl)
             .frame(maxHeight: .infinity)
         }
         .contentShape(Rectangle())
@@ -262,17 +268,50 @@ struct ExpandedView: View {
                     }
                     .padding(.bottom, DS.Space.l)
                 }
+                .scrollEdgeFade()
                 }
-                .opacity(switching ? 0.4 : 1).allowsHitTesting(!switching)
+                .opacity(switching ? DS.Opacity.switching : 1).allowsHitTesting(!switching)
             } else if store.error == nil && !store.preparing {
-                HStack(spacing: DS.Space.s) { ProgressView().controlSize(.small); Text("Lendo o Bunker…").font(DS.Font.body).foregroundStyle(DS.Color.inkMuted) }
-                    .frame(maxWidth: .infinity, alignment: .center).padding(.top, DS.Space.xl)
+                LoadingSkeleton()
             }
         }
         .padding(.horizontal, DS.Space.xl)
         .foregroundStyle(DS.Color.ink)
         // Another project: a campaign detail or a filter from the previous one must not stay on screen.
         .onChange(of: store.project) { _, _ in withAnimation(DS.Motion.quick) { notch.selected = nil; notch.activityFilter = nil } }
+    }
+}
+
+/// First load: the shape of the KPI strip, tabs and rows instead of a lone spinner, so the island never looks empty.
+struct LoadingSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            HStack(spacing: DS.Space.s) {
+                ForEach(0..<4, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
+                        SkeletonBlock(width: 60, height: 9)
+                        SkeletonBlock(width: 84, height: 18)
+                        SkeletonBlock(width: 100, height: 8)
+                        SkeletonBlock(width: 76, height: 8)
+                    }
+                    .padding(DS.Space.m).frame(maxWidth: .infinity, alignment: .leading).card()
+                }
+            }
+            SkeletonBlock(height: 30).clipShape(Capsule())
+            ForEach(0..<4, id: \.self) { _ in
+                HStack(spacing: DS.Space.m) {
+                    SkeletonBlock(width: DS.Size.badge, height: DS.Size.badge)
+                    VStack(alignment: .leading, spacing: 6) { SkeletonBlock(width: 240, height: 10); SkeletonBlock(width: 320, height: 8) }
+                    Spacer(minLength: 0)
+                    SkeletonBlock(width: 64, height: 12)
+                }
+                .padding(DS.Inset.row)
+            }
+            HStack(spacing: DS.Space.s) { ProgressView().controlSize(.small); Text("Lendo o Bunker…").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted) }
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Lendo o Bunker")
     }
 }
 
@@ -283,12 +322,14 @@ struct Header: View {
         HStack(spacing: DS.Space.s) {
             HStack(spacing: 6) {
                 BunkAvatar(size: 26)
-                Text("BUNK").font(DS.Font.mark).tracking(1.6).foregroundStyle(DS.Color.accent)
+                Text("BUNK").font(DS.Font.mark).tracking(1.6)
+                    .foregroundStyle(LinearGradient(colors: [DS.Color.accent, Tone.accent.rgba(true).color], startPoint: .leading, endPoint: .trailing))
+                    .accessibilityLabel("Bunk")
             }
             ProjectMenu()
             Spacer(minLength: DS.Space.s)
             HStack(spacing: 6) {
-                StatusDot(tone: freshnessTone, size: 6)
+                StatusDot(tone: freshnessTone, size: DS.Size.dotSmall, pulse: freshnessTone == .bad || freshnessTone == .warn)
                 Text(freshness).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
             }
             .help(Format.dataSources(store.summary))
@@ -315,26 +356,6 @@ struct Header: View {
     }
 }
 
-struct IconButton: View {
-    let symbol: String; let help: String; var spinning = false; var active = false; let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            // Reduce Motion: no endless spin; the dimmed icon still says it is working.
-            let spin = spinning && !A11y.reduceMotion
-            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
-                .rotationEffect(.degrees(spin ? 360 : 0))
-                .animation(spin ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: spin)
-                .opacity(spinning && !spin ? 0.5 : 1)
-                .frame(width: 24, height: 24)
-                .foregroundStyle(active ? DS.Color.accent : DS.Color.inkSoft)
-                .background(active ? DS.Color.accent.opacity(0.18) : DS.Color.surface, in: Circle())
-                .contentShape(Circle())
-        }.buttonStyle(.plain).help(help)
-        // VoiceOver reads the purpose, not the symbol name ("arrow.clockwise").
-        .accessibilityLabel(help)
-    }
-}
-
 struct ProjectMenu: View {
     @EnvironmentObject var store: Store
     var body: some View {
@@ -346,9 +367,9 @@ struct ProjectMenu: View {
             HStack(spacing: 5) {
                 // The chosen project shows at once; the summary for it arrives a moment later.
                 Text(selectedName).font(DS.Font.bodyStrong).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 8.5, weight: .bold)).foregroundStyle(DS.Color.inkMuted)
+                Image(systemName: "chevron.down").font(DS.Icon.xs).foregroundStyle(DS.Color.inkMuted)
             }
-            .padding(.horizontal, 10).padding(.vertical, 5)
+            .padding(DS.Inset.control)
             .background(DS.Color.surface, in: Capsule())
             .overlay(Capsule().stroke(DS.Color.stroke))
         }
@@ -360,18 +381,6 @@ struct ProjectMenu: View {
     }
     @ViewBuilder func menuLabel(_ name: String, _ current: Bool) -> some View {
         if current { Label(name, systemImage: "checkmark") } else { Text(name) }
-    }
-}
-
-struct Banner: View {
-    let text: String; let tone: Tone
-    var body: some View {
-        HStack(spacing: DS.Space.s) {
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(tone.color)
-            Text(text).font(DS.Font.body).foregroundStyle(DS.Color.ink)
-        }
-        .padding(DS.Space.s).frame(maxWidth: .infinity, alignment: .leading)
-        .background(tone.color.opacity(0.12), in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
     }
 }
 
@@ -396,12 +405,13 @@ struct PaceTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
             Text("Ritmo do orçamento").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
-            Text(Format.pace(pace).replacingOccurrences(of: "ritmo ", with: "")).font(DS.Font.stat).foregroundStyle(pace?.status == "nd" || pace == nil ? DS.Color.inkMuted : Format.paceTone(pace).color == DS.Color.inkMuted ? DS.Color.ink : Format.paceTone(pace).color)
+            Text(Format.pace(pace).replacingOccurrences(of: "ritmo ", with: "")).font(DS.Font.stat).numericTransition(Format.pace(pace)).foregroundStyle(pace?.status == "nd" || pace == nil ? DS.Color.inkMuted : Format.paceTone(pace).color == DS.Color.inkMuted ? DS.Color.ink : Format.paceTone(pace).color)
                 .lineLimit(1).minimumScaleFactor(0.6)
             if let e = pace?.elapsedPct, pace?.status != "nd" { Pill(text: "\(Int(e))% do dia", tone: .neutral) } else { Pill(text: "N/D") }
-            Text(Format.paceTileBase(pace)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(2).minimumScaleFactor(0.85).fixedSize(horizontal: false, vertical: true)
+            Text(Format.paceTileBase(pace)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(3).minimumScaleFactor(0.9).fixedSize(horizontal: false, vertical: true)
         }
         .padding(DS.Space.m).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).card()
+        .accessibilityElement(children: .combine)
         .help("Projeção simples: gasto de hoje no ritmo atual contra os orçamentos diários ativos. Não é previsão de vendas nem proposta.")
     }
 }
@@ -418,7 +428,7 @@ struct StatTile: View {
                 Spacer(minLength: 0)
                 if let spark { MiniBars(values: spark, height: 12, barWidth: 3.5) }
             }
-            Text(value).font(DS.Font.stat).lineLimit(1).minimumScaleFactor(0.8)
+            Text(value).font(DS.Font.stat).lineLimit(1).minimumScaleFactor(0.8).numericTransition(value)
             VStack(alignment: .leading, spacing: 2) {
                 compare("ontem", yesterday, delta?.yesterday)
                 compare("7d", week, delta?.week)
@@ -445,7 +455,7 @@ struct DeltaText: View {
         if let change, change.isFinite {
             let flat = abs(change) < 0.05, good = (change > 0) == higherIsBetter
             HStack(spacing: 1) {
-                if !flat { Image(systemName: change > 0 ? "arrow.up" : "arrow.down").font(.system(size: 7.5, weight: .bold)) }
+                if !flat { Image(systemName: change > 0 ? "arrow.up" : "arrow.down").font(DS.Icon.xxs) }
                 Text(Format.percent((change * 100).rounded(), signed: false)).font(DS.Font.microStrong).monospacedDigit()
             }
             .foregroundStyle(flat ? DS.Color.inkMuted : good ? DS.Color.good : DS.Color.bad)
@@ -460,21 +470,32 @@ struct DeltaText: View {
 
 struct TabBar: View {
     @EnvironmentObject var notch: NotchState
+    @Namespace private var indicator
     let s: Summary
     var body: some View {
         HStack(spacing: DS.Space.xs) {
             ForEach(NotchTab.allCases, id: \.self) { tab in
                 let selected = notch.tab == tab
-                Button { withAnimation(DS.Motion.quick) { notch.tab = tab } } label: {
+                Button { withAnimation(DS.Motion.select) { notch.tab = tab } } label: {
                     HStack(spacing: 5) {
                         Text(tab.rawValue).font(DS.Font.bodyStrong)
                         if let badge = badge(tab) { Pill(text: badge.0, tone: badge.1) }
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .foregroundStyle(selected ? DS.Color.ink : DS.Color.inkMuted)
-                    .background(selected ? DS.Color.surfaceSelected : .clear, in: Capsule())
+                    .padding(DS.Inset.tab)
+                    .foregroundStyle(selected ? DS.Color.ink : notch.hovered == "tab:" + tab.rawValue ? DS.Color.inkSoft : DS.Color.inkMuted)
+                    // One indicator that slides between tabs instead of blinking in and out.
+                    .background {
+                        if selected {
+                            Capsule().fill(DS.Color.surfaceSelected)
+                                .overlay(Capsule().strokeBorder(LinearGradient(colors: [DS.Color.highlight, .clear], startPoint: .top, endPoint: .bottom)))
+                                .matchedGeometryEffect(id: "tab", in: indicator)
+                        } else if notch.hovered == "tab:" + tab.rawValue {
+                            Capsule().fill(DS.Color.surface)
+                        }
+                    }
                     .contentShape(Capsule())
-                }.buttonStyle(.plain)
+                }.buttonStyle(.pressable)
+                .onHover { inside in withAnimation(DS.Motion.hover) { if inside { notch.hovered = "tab:" + tab.rawValue } else if notch.hovered == "tab:" + tab.rawValue { notch.hovered = nil } } }
                 .help("\(tab.rawValue) · tecla \((NotchTab.allCases.firstIndex(of: tab) ?? 0) + 1) (← → trocam de aba)")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
@@ -536,13 +557,15 @@ struct ListRow: View {
                 }
             }
             if let accessory { accessory }
-            if action != nil { Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(DS.Color.inkMuted).opacity(hovered ? 1 : 0.35) }
+            if action != nil { Image(systemName: "chevron.right").font(DS.Icon.s).foregroundStyle(DS.Color.inkMuted).opacity(hovered ? 1 : DS.Opacity.restingHint).offset(x: hovered && !A11y.reduceMotion ? 2 : 0) }
         }
-        .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
+        .padding(DS.Inset.row)
         .background(hovered ? DS.Color.surfaceHover : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+        .help(title + "\n" + subtitle)
         .contentShape(Rectangle())
         .onHover { inside in withAnimation(DS.Motion.quick) { if inside { notch.hovered = id } else if notch.hovered == id { notch.hovered = nil } } }
-        if let action { Button(action: action) { row }.buttonStyle(.plain) } else { row }
+        if let action { Button(action: action) { row }.buttonStyle(PressableStyle(scale: 0.99)) }
+        else if accessory == nil { row.accessibilityElement(children: .combine) } else { row }
     }
 }
 
@@ -557,12 +580,12 @@ struct BalanceStrip: View {
         HStack(spacing: DS.Space.s) {
             if let v = Format.balanceVerdictShort(balance.verdict) {
                 HStack(spacing: 3) {
-                    Image(systemName: v.icon).font(.system(size: 8, weight: .bold))
+                    Image(systemName: v.icon).font(DS.Icon.xs)
                     Text(v.text).font(DS.Font.microStrong)
                 }
                 .foregroundStyle(v.tone.color).lineLimit(1).fixedSize()
                 .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(v.tone.color.opacity(0.12), in: Capsule())
+                .background(v.tone.fill, in: Capsule())
             }
             HStack(spacing: 0) {
                 if showToday { cell("hoje", balance.today); divider }
@@ -578,10 +601,10 @@ struct BalanceStrip: View {
         .accessibilityLabel((Format.balanceVerdict(balance.verdict).map { $0.text + ". " } ?? "") + "Saldo: hoje \(Format.balance(balance.today)), ontem \(Format.balance(balance.yesterday)), 3 dias \(Format.balance(balance.d3)), 7 dias \(Format.balance(balance.d7)), 7 dias mais hoje \(Format.balance(balance.with7d))")
         .help((Format.balanceVerdict(balance.verdict).map { $0.text.prefix(1).uppercased() + $0.text.dropFirst() + ". " } ?? "") + "Saldo por período (resultado, ou receita menos mídia sem custos). 7 dias termina ontem; 7d+hoje soma dias diferentes.")
     }
-    private var divider: some View { Rectangle().fill(DS.Color.stroke).frame(width: 1).padding(.vertical, 4) }
+    private var divider: some View { Rectangle().fill(DS.Color.stroke).frame(width: DS.Size.hairline).padding(.vertical, DS.Space.xs) }
     private func cell(_ label: String, _ w: Summary.BalanceWindow?, emphasis: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.system(size: 8.5, weight: .medium)).foregroundStyle(DS.Color.inkMuted)
+            Text(label).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
             Text(Format.balance(w)).font(emphasis ? DS.Font.microStrong : DS.Font.micro).monospacedDigit()
                 .foregroundStyle(w == nil ? DS.Color.inkMuted : Format.balanceTone(w).color)
                 .fixedSize(horizontal: emphasis, vertical: false)
@@ -589,15 +612,7 @@ struct BalanceStrip: View {
         .lineLimit(1).minimumScaleFactor(emphasis ? 1 : 0.85)
         .padding(.horizontal, 7).padding(.vertical, 3)
         .layoutPriority(emphasis ? 1 : 0)
-        .background(emphasis ? Format.balanceTone(w).color.opacity(w == nil ? 0 : 0.12) : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
-    }
-}
-
-struct EmptyLine: View {
-    let text: String
-    var body: some View {
-        HStack(spacing: DS.Space.s) { Image(systemName: "checkmark.circle").foregroundStyle(DS.Color.good); Text(text) }
-            .font(DS.Font.body).foregroundStyle(DS.Color.inkMuted).padding(.vertical, DS.Space.s)
+        .background(emphasis && w != nil ? Format.balanceTone(w).fill : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
     }
 }
 
@@ -647,7 +662,7 @@ struct NowTab: View {
                             valueCaption: loss ? (q.basis == "result" ? (q.period == "today" ? "prejuízo hoje" : "prejuízo em 3 dias") : "receita abaixo da mídia") : "resultado em 3 dias",
                             action: { withAnimation(DS.Motion.quick) { notch.selected = q } },
                             footer: q.balance.flatMap { $0.hasAny ? AnyView(BalanceStrip(balance: $0, showToday: q.period != "today")) : nil })
-                        .opacity(quiet ? 0.55 : 1)
+                        .opacity(quiet ? DS.Opacity.quiet : 1)
                     if loss || quiet { QuietMenu(key: AttentionLedger.key(q), item: q, compact: true) }
                     }
                 }
@@ -682,10 +697,10 @@ struct NowTab: View {
                 }
                 if let l = sh.learning, l.graded > 0 || (l.blindSpots ?? 0) > 0 {
                     // What the Bunk has learned beyond the 7 days: score with an honest range and its top lesson.
-                    Text(Format.shadowMemory(l)).font(DS.Font.caption).foregroundStyle(.secondary)
+                    Text(Format.shadowMemory(l)).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft)
                         .help("Memória de até 90 dias: cada decisão conferida pelo dia seguinte, com a faixa provável de acerto (95%). Ponto cego: corte do gestor ou seu que a Sombra não tinha apontado.")
                     if let lesson = l.lessons?.first {
-                        Text(lesson).font(DS.Font.caption).foregroundStyle(.secondary).lineLimit(2)
+                        Text(lesson).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(2)
                     }
                 }
                 VStack(spacing: 2) {
@@ -715,18 +730,9 @@ struct ShadowActionButton: View {
                 notch.adjust = AdjustTarget(project: item.projectId, adAccountId: item.adAccountId, campaignId: item.objectId, name: item.campaign, preset: preset)
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: OwnerAdjust.symbols[preset.action] ?? "slider.horizontal.3").font(.system(size: 9, weight: .bold))
-                Text(preset.label).font(DS.Font.microStrong).lineLimit(1)
-            }
-            .fixedSize()
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .foregroundStyle(tone.color)
-            .background(tone.color.opacity(0.14), in: Capsule())
-            .overlay(Capsule().strokeBorder(tone.color.opacity(0.35)))
-            .contentShape(Capsule())
+            TintChip(text: preset.label, icon: OwnerAdjust.symbols[preset.action] ?? "slider.horizontal.3", tone: tone, outlined: true)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .help("Abre sua ordem com \(preset.label.lowercased()) já escolhido. Você confere o valor ao vivo e confirma com Touch ID em \"Executar agora\".")
     }
 }
@@ -758,7 +764,7 @@ struct ManagersTab: View {
             }
             let list = s.activity.recent.filter { notch.activityFilter == nil || $0.action == notch.activityFilter }
             SectionHeader(title: notch.activityFilter.map { (Format.actionLabels[$0] ?? $0) + " recentes" } ?? "Mais recentes", detail: Format.count(list.count, "registro", "registros") + " no resumo")
-            if list.isEmpty { EmptyLine(text: "Nenhuma mudança neste filtro.") }
+            if list.isEmpty { EmptyLine(text: "Nenhuma mudança neste filtro.", kind: .info) }
             VStack(spacing: 2) {
                 ForEach(list) { e in
                     ListRow(id: "a:" + e.id, symbol: symbols[e.action] ?? "clock", tone: tones[e.action] ?? .neutral,
@@ -774,10 +780,10 @@ struct ManagersTab: View {
         return Button { withAnimation(DS.Motion.quick) { notch.activityFilter = selected ? nil : key } } label: {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 HStack(spacing: 5) {
-                    Image(systemName: symbols[key] ?? "circle").font(.system(size: 9.5, weight: .bold)).foregroundStyle((tones[key] ?? .neutral).color)
+                    Image(systemName: symbols[key] ?? "circle").font(DS.Icon.s).foregroundStyle((tones[key] ?? .neutral).color)
                     Text(Format.actionLabels[key] ?? key).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft)
                 }
-                Text("\(count)").font(DS.Font.stat)
+                Text("\(count)").font(DS.Font.stat).numericTransition(count)
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(people.prefix(2), id: \.key) { p in Text("\(p.key) · \(p.value)").font(DS.Font.micro).foregroundStyle(DS.Color.inkSoft).lineLimit(1) }
                     if let u = b?.unknown, u > 0 { Text("\(u) sem autor").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted) }
@@ -787,8 +793,10 @@ struct ManagersTab: View {
             }
             .padding(DS.Space.m).frame(maxWidth: .infinity, minHeight: 104, maxHeight: 104, alignment: .topLeading)
             .card(selected: selected)
+            .opacity(count == 0 ? DS.Opacity.disabled + 0.2 : 1)
             .contentShape(Rectangle())
-        }.buttonStyle(.plain).disabled(count == 0)
+        }.buttonStyle(.pressable).disabled(count == 0)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -798,13 +806,11 @@ struct AgentsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             SectionHeader(title: "Agentes", detail: "últimas conclusões e perguntas entre eles")
-            if s.agents.recent.isEmpty { EmptyLine(text: "Sem conversa recente.") }
+            if s.agents.recent.isEmpty { EmptyLine(text: "Sem conversa recente.", kind: .info) }
             VStack(spacing: 2) {
                 ForEach(s.agents.recent) { m in
                     HStack(alignment: .top, spacing: DS.Space.m) {
-                        Text(String((m.agent ?? "?").prefix(1))).font(.system(size: 11, weight: .bold))
-                            .frame(width: 26, height: 26).foregroundStyle((roleTones[m.role ?? ""] ?? .neutral).color)
-                            .background((roleTones[m.role ?? ""] ?? .neutral).color.opacity(0.15), in: Circle())
+                        Monogram(text: m.agent ?? "?", tone: roleTones[m.role ?? ""] ?? .neutral, circle: true)
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: DS.Space.xs) {
                                 Text(m.agent ?? "Agente").font(DS.Font.bodyStrong)
@@ -817,7 +823,8 @@ struct AgentsTab: View {
                             if let t = m.text { Text(t).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(2) }
                         }
                     }
-                    .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
+                    .padding(DS.Inset.row)
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
@@ -835,13 +842,18 @@ struct AccountsTab: View {
                     SectionHeader(title: "Contas de anúncio", detail: "\(a.counts.active) ativas · \(a.counts.running) rodando · \(a.counts.nearLimit) perto do limite · atualiza a cada 30 min")
                     if a.counts.nearLimit > 0 { QuietMenu(key: AttentionLedger.limitKey, compact: true) }
                 }
-                if !a.metaConnected { EmptyLine(text: Format.accountsMetaNotice(a.metaError)) }
+                if !a.metaConnected { EmptyLine(text: Format.accountsMetaNotice(a.metaError), kind: .info) }
                 if !a.rows.isEmpty {
-                    TextField("Buscar conta por nome ou ID", text: $notch.accountQuery).textFieldStyle(.island)
+                    HStack(spacing: DS.Space.xs) {
+                        TextField("Buscar conta por nome ou ID", text: $notch.accountQuery).textFieldStyle(.island)
+                        if !notch.accountQuery.isEmpty {
+                            IconButton(symbol: "xmark", help: "Limpar a busca") { notch.accountQuery = "" }
+                        }
+                    }
                 }
                 let rows = a.rows.filter { Format.accountMatches($0, notch.accountQuery) }
                 if a.rows.isEmpty { EmptyLine(text: "Nenhuma conta ativa ou com alerta.") }
-                else if rows.isEmpty { EmptyLine(text: "Nenhuma conta com “\(notch.accountQuery.trimmingCharacters(in: .whitespaces))”.") }
+                else if rows.isEmpty { EmptyLine(text: "Nenhuma conta com “\(notch.accountQuery.trimmingCharacters(in: .whitespaces))”.", kind: .info) }
                 VStack(spacing: 2) {
                     ForEach(rows) { r in
                         let near = (r.usedPct ?? 0) >= 80, bad = r.status != "active"
@@ -853,7 +865,7 @@ struct AccountsTab: View {
                     }
                 }
             } else {
-                EmptyLine(text: "O painel de contas ainda está sendo montado.")
+                EmptyLine(text: "O painel de contas ainda está sendo montado.", kind: .waiting)
             }
         }
     }
@@ -873,7 +885,7 @@ struct SystemTab: View {
                     Spacer()
                     Text("último pulso " + Format.relative(e.lastPulseAt)).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 }.padding(DS.Space.m).card()
-            } else { EmptyLine(text: "Status do executor indisponível nesta leitura.") }
+            } else { EmptyLine(text: "Status do executor indisponível nesta leitura.", kind: .info) }
             SectionHeader(title: "Dados")
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text("Base de análise: " + (s.analysisAt.map(Format.stamp) ?? "N/D")).font(DS.Font.body)
@@ -923,7 +935,7 @@ struct ProjectsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             SectionHeader(title: "Projetos hoje", detail: "ordenados por gasto · clique para focar")
-            if (s.board ?? []).isEmpty { EmptyLine(text: "Placar disponível na próxima atualização do executor.") }
+            if (s.board ?? []).isEmpty { EmptyLine(text: "Placar disponível na próxima atualização do executor.", kind: .waiting) }
             VStack(spacing: 2) {
                 ForEach(s.board ?? []) { p in
                     let selected = store.project == p.id
@@ -936,8 +948,7 @@ struct ProjectsTab: View {
                         withAnimation(DS.Motion.quick) { notch.tab = .now }
                     } label: {
                         HStack(spacing: DS.Space.m) {
-                            Text(String(p.name.prefix(1))).font(.system(size: 11, weight: .bold)).frame(width: 26, height: 26)
-                                .foregroundStyle(DS.Color.accent).background(DS.Color.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: DS.Radius.s))
+                            Monogram(text: p.name, tone: .accent)
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: DS.Space.xs) {
                                     Text(p.name).font(DS.Font.bodyStrong)
@@ -955,16 +966,17 @@ struct ProjectsTab: View {
                             }
                             Spacer(minLength: DS.Space.s)
                             VStack(alignment: .trailing, spacing: 2) {
-                                Text(Format.ratio(p.roas)).font(DS.Font.number).foregroundStyle(trend.color)
+                                Text(Format.ratio(p.roas)).font(DS.Font.number).foregroundStyle(trend.color).numericTransition(p.roas)
                                 Text("ontem " + Format.ratio(p.roasYesterday)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                             }
                         }
-                        .padding(.horizontal, DS.Space.s).padding(.vertical, 7)
-                        .background(notch.hovered == "p:" + p.id || selected ? DS.Color.surfaceHover : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s))
+                        .padding(DS.Inset.row)
+                        .background(notch.hovered == "p:" + p.id || selected ? DS.Color.surfaceHover : .clear, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .onHover { inside in if inside { notch.hovered = "p:" + p.id } else if notch.hovered == "p:" + p.id { notch.hovered = nil } }
+                    .buttonStyle(PressableStyle(scale: 0.99))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .onHover { inside in withAnimation(DS.Motion.hover) { if inside { notch.hovered = "p:" + p.id } else if notch.hovered == "p:" + p.id { notch.hovered = nil } } }
                 }
             }
         }
@@ -983,7 +995,7 @@ struct CampaignDetailView: View {
             HStack(spacing: DS.Space.s) {
                 IconButton(symbol: "chevron.left", help: "Voltar (Esc)") { withAnimation(DS.Motion.quick) { notch.selected = nil } }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.campaign ?? "Campanha").font(DS.Font.bodyStrong).lineLimit(1).truncationMode(.middle)
+                    Text(item.campaign ?? "Campanha").font(DS.Font.title).lineLimit(1).truncationMode(.middle).help(item.campaign ?? "")
                     HStack(spacing: DS.Space.xs) {
                         if let p = item.project { Pill(text: p, tone: .tag) }
                         Pill(text: Format.statusName(item.detail?.status), tone: item.detail?.status == "ACTIVE" ? .good : .neutral)
@@ -995,10 +1007,9 @@ struct CampaignDetailView: View {
                     }
                 }
                 Spacer()
-                Button { withAnimation(DS.Motion.quick) { notch.adjust = AdjustTarget(project: item.detail?.projectId, adAccountId: item.adAccountId, campaignId: item.campaignId, name: item.campaign) } } label: {
-                    HStack(spacing: 5) { Image(systemName: "slider.horizontal.3").font(.system(size: 10, weight: .bold)); Text("Ajustar aqui").font(DS.Font.bodyStrong) }
-                        .padding(.horizontal, 10).padding(.vertical, 5).foregroundStyle(.black.opacity(0.85)).background(DS.Color.accent, in: Capsule())
-                }.buttonStyle(.plain).help("Pausar, reduzir ou aumentar aqui, confirmando com Touch ID")
+                ActionButton(title: "Ajustar aqui", icon: "slider.horizontal.3", leadingIcon: true, prominent: true, help: "Pausar, reduzir ou aumentar aqui, confirmando com Touch ID") {
+                    withAnimation(DS.Motion.quick) { notch.adjust = AdjustTarget(project: item.detail?.projectId, adAccountId: item.adAccountId, campaignId: item.campaignId, name: item.campaign) }
+                }
                 QuietMenu(key: AttentionLedger.key(item), item: item, compact: true)
                 IconButton(symbol: "arrow.up.right.square", help: "Abrir o card no navegador") { store.open(deepLink) }
                 if Store.malvaCampaignsURL(projectId: item.detail?.projectId) != nil {
@@ -1020,7 +1031,7 @@ struct CampaignDetailView: View {
                                     Text("sem gasto").font(DS.Font.stat).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.6)
                                         .help("Fonte completa do período sem esta campanha: não houve gasto. Vendas ficam N/D.")
                                 } else {
-                                    Text(Format.ratio(w?.roas)).font(DS.Font.stat).foregroundStyle((w?.roi ?? 1) >= 1 ? DS.Color.ink : DS.Color.bad)
+                                    Text(Format.ratio(w?.roas)).font(DS.Font.stat).foregroundStyle((w?.roi ?? 1) >= 1 ? DS.Color.ink : DS.Color.bad).numericTransition(w?.roas)
                                 }
                                 if w?.noSpend == true {
                                     // "sem gasto" already says the spend; only what stays unknown is listed.
@@ -1061,6 +1072,7 @@ struct CampaignDetailView: View {
                     Text("Ajustar aqui: execute sua ordem com Touch ID (o executor aplica uma vez pela Malva e confere) ou peça à equipe uma proposta exata.").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                 }.padding(.bottom, DS.Space.l)
             }
+            .scrollEdgeFade()
         }
     }
     var deepLink: String {

@@ -13,11 +13,11 @@ struct MiniBars: View {
         HStack(alignment: .bottom, spacing: barWidth / 2) {
             ForEach(Array(values.enumerated()), id: \.offset) { i, v in
                 if let v, v.isFinite {
-                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    RoundedRectangle(cornerRadius: DS.Radius.bar, style: .continuous)
                         .fill(v >= 1 ? (i == values.count - 1 ? DS.Color.accent : DS.Color.inkSoft) : DS.Color.bad)
                         .frame(width: barWidth, height: max(2, height * CGFloat(min(v, top) / top)))
                 } else {
-                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    RoundedRectangle(cornerRadius: DS.Radius.bar, style: .continuous)
                         .stroke(DS.Color.inkMuted, style: StrokeStyle(lineWidth: 0.8, dash: [1.5, 1.5]))
                         .frame(width: barWidth, height: height * 0.4)
                 }
@@ -48,11 +48,13 @@ struct QuietMenu: View {
             ForEach(AttentionLedger.Snooze.allCases, id: \.self) { choice in Button(choice.label) { store.snooze(key, choice) } }
         } label: {
             HStack(spacing: 3) {
-                Image(systemName: until != nil ? "moon.zzz.fill" : dismissed ? "eye.slash" : "bell.slash").font(.system(size: 9.5, weight: .semibold))
+                Image(systemName: until != nil ? "moon.zzz.fill" : dismissed ? "eye.slash" : "bell.slash").font(DS.Icon.s)
                 if !compact { Text(until.map { "adiado até " + Format.clock(Format.isoFull.string(from: $0)) } ?? (dismissed ? "dispensado" : "Silenciar")).font(DS.Font.caption) }
             }
             .foregroundStyle(until != nil || dismissed ? DS.Color.inkSoft : DS.Color.inkMuted)
             .padding(.horizontal, compact ? 5 : 8).padding(.vertical, 3)
+            // Never below the 20-pt macOS hit-target floor, even when it is only the bell.
+            .frame(minWidth: compact ? 24 : nil, minHeight: 20)
             .background(DS.Color.surface, in: Capsule())
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()

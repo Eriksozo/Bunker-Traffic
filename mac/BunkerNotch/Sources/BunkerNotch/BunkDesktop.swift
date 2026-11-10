@@ -36,8 +36,8 @@ struct BunkStageView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
                     .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color.black.opacity(A11y.reduceTransparency ? 1 : 0.86), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(DS.Color.accent.opacity(0.6), lineWidth: 1))
+                    .background(Color.black.opacity(A11y.reduceTransparency ? 1 : 0.86), in: RoundedRectangle(cornerRadius: DS.Radius.l - 2, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DS.Radius.l - 2, style: .continuous).stroke(DS.Color.accent.opacity(0.6), lineWidth: DS.Size.hairline))
                     .frame(maxWidth: BunkDesk.panel.width - 16)
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
             }

@@ -38,7 +38,7 @@ struct OwnerAdjustView: View {
                         }
                         if target.campaignId != nil {
                             if data.cards.first != nil || data.directOrder != nil { decision(data.cards.first, direct: data.directOrder, revision: data.revision) }
-                            else { EmptyLine(text: "Campanha sem leitura de hoje no Bunker (aquecimento, outro provedor ou fora dos projetos).") }
+                            else { EmptyLine(text: "Campanha sem leitura de hoje no Bunker (aquecimento, outro provedor ou fora dos projetos).", kind: .info) }
                         }
                     } else if m.loading {
                         HStack(spacing: DS.Space.s) { ProgressView().controlSize(.small); Text("Lendo os cards…").font(DS.Font.body).foregroundStyle(DS.Color.inkMuted) }
@@ -79,12 +79,12 @@ struct OwnerAdjustView: View {
                 }
                 Spacer(minLength: 0)
             }
-            Text(OwnerAdjust.change(p)).font(DS.Font.stat).foregroundStyle(down ? DS.Color.bad : DS.Color.good).lineLimit(1).minimumScaleFactor(0.7)
+            Text(OwnerAdjust.change(p)).font(DS.Font.stat).foregroundStyle(down ? DS.Color.bad : DS.Color.good).lineLimit(1).minimumScaleFactor(0.7).numericTransition(OwnerAdjust.change(p))
             if let r = p.reason { Text(r).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(3).fixedSize(horizontal: false, vertical: true) }
             HStack(spacing: DS.Space.s) {
                 ActionButton(title: "Aprovar e executar", icon: "touchid", leadingIcon: true, prominent: true, help: "Autoriza só este valor. O executor confere o valor atual, envia uma vez pela Malva e relê.") {
                     Task { await review(p, revision: revision, decision: "approve") }
-                }.disabled(m.busy || p.expired == true || revision == nil).opacity(m.busy || p.expired == true || revision == nil ? 0.5 : 1)
+                }.disabled(m.busy || p.expired == true || revision == nil)
                 ActionButton(title: "Pedir revisão", help: "Devolve à equipe com seu pedido de revisão") { Task { await review(p, revision: revision, decision: "revise") } }.disabled(m.busy || revision == nil)
                 ActionButton(title: "Recusar", help: "Encerra esta proposta") { Task { await review(p, revision: revision, decision: "reject") } }.disabled(m.busy || revision == nil)
                 Spacer(minLength: 0)
@@ -100,11 +100,11 @@ struct OwnerAdjustView: View {
                 let w = card.windows[key] ?? nil
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
-                    Text(Format.ratio(w?.roas)).font(DS.Font.number).foregroundStyle(w?.roas == nil ? DS.Color.inkMuted : (w?.roas ?? 0) >= 1 ? DS.Color.ink : DS.Color.bad)
+                    Text(Format.ratio(w?.roas)).font(DS.Font.number).foregroundStyle(w?.roas == nil ? DS.Color.inkMuted : (w?.roas ?? 0) >= 1 ? DS.Color.ink : DS.Color.bad).numericTransition(w?.roas)
                     Text("gasto " + Format.compactMoney(w?.spend) + " · front " + (w?.frontOrders.map { String(Int($0)) } ?? "N/D")).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(1).minimumScaleFactor(0.8)
                 }
                 .padding(.horizontal, DS.Space.s).padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
-                .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                .tile()
             }
         }
         .help("ROAS por janela (hoje é parcial). Gasto na moeda do projeto.")
@@ -150,7 +150,7 @@ struct OwnerAdjustView: View {
                 periodsStrip(card)
                 if let s = card.suggestion {
                     HStack(alignment: .top, spacing: DS.Space.s) {
-                        Image(systemName: s.origin == "diagnostic" ? "stethoscope" : "person.3.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(DS.Color.inkMuted).frame(width: 14)
+                        Image(systemName: s.origin == "diagnostic" ? "stethoscope" : "person.3.fill").font(DS.Icon.m).foregroundStyle(DS.Color.inkMuted).frame(width: 14)
                         Text(OwnerAdjust.suggestionLine(s)).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(3).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -170,15 +170,18 @@ struct OwnerAdjustView: View {
                         let selected = m.action == a
                         Button { withAnimation(DS.Motion.quick) { m.action = a } } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: OwnerAdjust.symbols[a] ?? "circle").font(.system(size: 10, weight: .bold))
+                                Image(systemName: OwnerAdjust.symbols[a] ?? "circle").font(DS.Icon.m)
                                 Text(OwnerAdjust.label(a)).font(DS.Font.bodyStrong)
                             }
                             .frame(maxWidth: .infinity).padding(.vertical, 7)
-                            .foregroundStyle(!ok ? DS.Color.inkMuted : selected ? Color.black.opacity(0.85) : DS.Color.ink)
-                            .background(selected ? DS.Color.accent : DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous).stroke(selected ? Color.clear : DS.Color.stroke))
+                            .foregroundStyle(!ok ? DS.Color.inkMuted : selected ? DS.Color.onAccent : DS.Color.ink)
+                            .background(selected ? DS.Color.accent : notch.hovered == "act:" + a && ok ? DS.Color.surfaceHover : DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous).strokeBorder(selected ? Color.clear : DS.Color.stroke))
+                            .opacity(ok ? 1 : DS.Opacity.disabled + 0.15)
                             .contentShape(Rectangle())
-                        }.buttonStyle(.plain).disabled(!ok || m.busy).help(ok ? OwnerAdjust.label(a) : "Indisponível com a leitura atual desta campanha")
+                        }.buttonStyle(.pressable)
+                        .onHover { inside in withAnimation(DS.Motion.hover) { if inside { notch.hovered = "act:" + a } else if notch.hovered == "act:" + a { notch.hovered = nil } } }
+                        .accessibilityAddTraits(selected ? .isSelected : []).disabled(!ok || m.busy).help(ok ? OwnerAdjust.label(a) : "Indisponível com a leitura atual desta campanha")
                     }
                 }
                 if needsPercent {
@@ -186,12 +189,15 @@ struct OwnerAdjustView: View {
                         ForEach(["10", "20", "30", "50"], id: \.self) { v in
                             let on = m.percentText == v
                             Button { m.percentText = v } label: {
-                                Text(v + "%").font(DS.Font.caption).monospacedDigit().padding(.horizontal, 8).padding(.vertical, 4)
+                                Text(v + "%").font(DS.Font.captionStrong).monospacedDigit().padding(DS.Inset.chip)
                                     .foregroundStyle(on ? DS.Color.ink : DS.Color.inkSoft)
                                     .background(on ? DS.Color.surfaceSelected : DS.Color.surface, in: Capsule())
-                            }.buttonStyle(.plain)
+                                    .overlay(Capsule().strokeBorder(on ? DS.Color.accent.opacity(0.6) : .clear))
+                            }.buttonStyle(.pressable)
+                            .accessibilityLabel(v + " por cento")
+                            .accessibilityAddTraits(on ? .isSelected : [])
                         }
-                        TextField("%", text: $m.percentText).textFieldStyle(.island).monospacedDigit().frame(width: 54)
+                        TextField("%", text: $m.percentText).textFieldStyle(.island).monospacedDigit().frame(width: DS.Size.fieldPercent)
                         Text("%").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                         Spacer(minLength: 0)
                     }
@@ -212,8 +218,8 @@ struct OwnerAdjustView: View {
                         } else {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Text(Format.money(budget, currency: currency)).font(DS.Font.number).foregroundStyle(DS.Color.inkMuted).strikethrough()
-                                Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(DS.Color.inkMuted)
-                                Text(Format.money(preview, currency: currency)).font(DS.Font.stat).foregroundStyle(tone.color)
+                                Image(systemName: "arrow.right").font(DS.Icon.m).foregroundStyle(DS.Color.inkMuted)
+                                Text(Format.money(preview, currency: currency)).font(DS.Font.stat).foregroundStyle(tone.color).numericTransition(preview)
                                 Text("/dia").font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
                             }
                         }
@@ -224,8 +230,9 @@ struct OwnerAdjustView: View {
                     }
                 }
                 .padding(DS.Space.m)
-                .background(tone.color.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).stroke(tone.color.opacity(0.25)))
+                .background(tone.wash, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).strokeBorder(tone.rim))
+                .accessibilityElement(children: .combine)
             }
             TextField("Motivo (opcional)", text: $m.reason).textFieldStyle(.island)
             // 3 · One primary action: execute when it can run now; otherwise ask the team.
@@ -233,18 +240,18 @@ struct OwnerAdjustView: View {
                 if m.action == "keep", let card {
                     ActionButton(title: "Registrar manter", icon: "touchid", leadingIcon: true, prominent: true, help: "Registra sua decisão de manter (Touch ID). Não altera a Meta.") {
                         Task { await sendIntent(card, revision: revision, percent: nil) }
-                    }.disabled(!canAsk).opacity(canAsk ? 1 : 0.5)
+                    }.disabled(!canAsk)
                 } else {
                     ActionButton(title: "Executar agora", icon: "touchid", leadingIcon: true, prominent: canOrder, help: canOrder ? "Touch ID autoriza este valor exato. O executor Cloudflare confere o valor atual na Malva, envia uma vez pela Malva e relê." : "Execução direta indisponível agora: veja o motivo abaixo.") {
                         Task {
                             if let direct { await sendDirect(direct, percent: needsPercent ? percent : nil) }
                             else if let card { await sendOrder(card, revision: revision, percent: needsPercent ? percent : nil) }
                         }
-                    }.disabled(!canOrder).opacity(canOrder ? 1 : 0.45)
+                    }.disabled(!canOrder)
                     if let card {
                         ActionButton(title: "Pedir à equipe", icon: "person.3", leadingIcon: true, prominent: !canOrder && canAsk, help: "Os agentes preparam a proposta exata, que volta em \"Aguardando você\". Não altera a Meta agora.") {
                             Task { await sendIntent(card, revision: revision, percent: needsPercent ? percent : nil) }
-                        }.disabled(!canAsk).opacity(canAsk ? 1 : 0.45)
+                        }.disabled(!canAsk)
                     }
                 }
                 Spacer(minLength: 0)
@@ -263,7 +270,8 @@ struct OwnerAdjustView: View {
                     ForEach(blockers.prefix(4), id: \.self) { b in Text("• " + b).font(DS.Font.micro).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true) }
                 }
                 .padding(DS.Space.s).frame(maxWidth: .infinity, alignment: .leading)
-                .background(DS.Color.warn.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                .background(Tone.warn.wash, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous).strokeBorder(Tone.warn.rim.opacity(0.6)))
             }
             if !info.isEmpty {
                 Text("Informativo (não trava sua ordem): " + info.joined(separator: " ")).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).fixedSize(horizontal: false, vertical: true)

@@ -268,15 +268,15 @@ struct BunkBubble: View {
             // The topic is a campaign (or the approvals): open its adjustment, where "Já fiz" lives.
             if let target = notch.bunkTarget {
                 Button { withAnimation(DS.Motion.quick) { notch.bunkSays = nil; notch.adjust = target } } label: {
-                    Text(target.campaignId == nil ? "Ver propostas" : "Ajustar").font(DS.Font.bodyStrong).foregroundStyle(.black.opacity(0.85))
+                    Text(target.campaignId == nil ? "Ver propostas" : "Ajustar").font(DS.Font.bodyStrong).foregroundStyle(DS.Color.onAccent)
                         .padding(.horizontal, 8).padding(.vertical, 3).background(DS.Color.accent, in: Capsule())
-                }.buttonStyle(.plain)
+                }.buttonStyle(.pressable)
             }
-            Button { withAnimation(DS.Motion.quick) { notch.bunkSays = nil } } label: { Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(DS.Color.inkMuted) }.buttonStyle(.plain)
+            Button { withAnimation(DS.Motion.quick) { notch.bunkSays = nil } } label: { Image(systemName: "xmark").font(DS.Icon.s).foregroundStyle(DS.Color.inkMuted).frame(width: 20, height: 20).contentShape(Rectangle()) }.buttonStyle(.pressable).help("Dispensar").accessibilityLabel("Dispensar a fala do Bunk")
         }
         .padding(.horizontal, DS.Space.m).padding(.vertical, DS.Space.s)
-        .background(DS.Color.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).stroke(DS.Color.accent.opacity(0.35), lineWidth: 1))
+        .background(Tone.accent.fill, in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous).strokeBorder(Tone.accent.rim, lineWidth: DS.Size.hairline))
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
