@@ -40,7 +40,8 @@ test('Read-only callers use the shared view; writes and the engine keep a fresh 
  assert.match(src,/const run=this\.writeChain\.then\(async\(\)=>\{const current=await this\.read\(\);/);
  assert.match(src,/createCloudEngine\(\{read:\(\)=>this\.read\(\)/);
  assert.match(src,/commitPersistedState\(this\.db\(\),current\.state,current\.revision\);this\.viewCache=null;/,'a commit drops the old copy');
- assert.equal((src.match(/this\.read\(\)/g)||[]).length,6,'only view() (cache fill and probe fallbacks), write() and the engine (read, readCurrent) read a fresh copy');
+ assert.equal((src.match(/this\.read\(\)/g)||[]).length,3,'only write() and the engine (read, readCurrent) read a full fresh copy');
+ assert.equal((src.match(/this\.read\(\{lean:true\}\)/g)||[]).length,3,'view() (cache fill and probe fallbacks) reads the lean display copy');
 });
 
 test('The shared view hydrates once per central revision, concurrent callers share it, and a commit drops it',async()=>{
@@ -62,8 +63,12 @@ test('The shared view hydrates once per central revision, concurrent callers sha
 test('The engine releases its first copy before rereading the central (never two copies across a long wait)',()=>{
  const src=fs.readFileSync(new URL('../lib/cloud-engine.mjs',import.meta.url),'utf8');
  assert.match(src,/let s=\(await read\(\)\)\.state;const work=cloudNext\(s,/);
- assert.match(src,/phase='reservation';s=null;const collectionState=\(await read\(\)\)\.state;/);
- assert.match(src,/s=null;const claim=await write\(st=>claimCollaboration\(st,claimArgs,now\(\)\)\),latest=\(await read\(\)\)\.state;/);
+ assert.match(src,/phase='reservation';s=null;let collectionState=\(await read\(\)\)\.state;/);
+ assert.match(src,/phase='persist';collectionState=null;draft=null;\n\s*const committed=await write\(/,'the collection copies are released before its commit');
+ assert.match(src,/s=null;const claim=await write\(st=>claimCollaboration\(st,claimArgs,now\(\)\)\);let latest=\(await read\(\)\)\.state;/);
+ assert.match(src,/\.map\(m=>m\.id\);latest=null;\n/,'the analysis copy is released before the unit writes');
+ const after=src.slice(src.indexOf('latest=null;'),src.indexOf("if(work.kind==='ownerQuestion'")>src.indexOf('latest=null;')?src.indexOf("if(work.kind==='ownerQuestion'"):src.length);
+ assert.ok(!/\blatest\b/.test(after.slice('latest=null;'.length,after.indexOf('\n  }\n')>0?after.indexOf('\n  }\n'):undefined)),'no use of the released copy after it is dropped');
  const exec=fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8');
  assert.match(exec,/viewIdleMs=20000/);
 });

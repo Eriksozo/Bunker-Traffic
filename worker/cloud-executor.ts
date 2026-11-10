@@ -56,20 +56,21 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private viewCache:{revision:number,value:any}|null=null;
  private viewRead:Promise<any>|null=null;
  private async view(){
-  // A failed probe falls back to a full read (which reports the storage failure the same way as before).
+  // A failed probe falls back to a fresh lean read (which reports the storage failure the same way as before).
   let revision:number;
-  try{const row:any=await this.db().prepare('SELECT revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first();revision=Number(row?.revision);}catch{return this.read();}
-  if(!Number.isFinite(revision))return this.read();
+  try{const row:any=await this.db().prepare('SELECT revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first();revision=Number(row?.revision);}catch{return this.read({lean:true});}
+  if(!Number.isFinite(revision))return this.read({lean:true});
   if(this.viewCache&&this.viewCache.revision===revision){this.keepView();return this.viewCache.value;}
   this.viewCache=null;
-  if(!this.viewRead)this.viewRead=this.read().then(v=>{this.viewCache={revision:Number(v.revision),value:v};this.keepView();return v;}).finally(()=>{this.viewRead=null;});
+  if(!this.viewRead)this.viewRead=this.read({lean:true}).then(v=>{this.viewCache={revision:Number(v.revision),value:v};this.keepView();return v;}).finally(()=>{this.viewRead=null;});
   return this.viewRead;
  }
  /** The shared copy is dropped after `viewIdleMs` without use, so it is not held through a heavy pulse's model wait. */
  static readonly viewIdleMs=20000;
  private viewTimer:any=null;
  private keepView(){if(this.viewTimer)clearTimeout(this.viewTimer);this.viewTimer=setTimeout(()=>{this.viewCache=null;this.viewTimer=null;},BunkerCloudExecutor.viewIdleMs);}
- private async read(){const current=await readPersistedState(this.db(),empty);this.centralView={paused:current.state.paused,cadence:current.state.cadence,at:new Date().toISOString()};this.storagePressure=(current as any).storage?.pressure??null;return current;}
+ // `lean` (lib/history-storage.mjs `leanHistory`): display readers only; a lean copy is refused by every commit.
+ private async read(opts:{lean?:boolean}={}){const current=await readPersistedState(this.db(),empty,opts);this.centralView={paused:current.state.paused,cadence:current.state.cadence,at:new Date().toISOString()};this.storagePressure=(current as any).storage?.pressure??null;return current;}
  // Storage alarm for the notch (lib/history-storage.mjs storagePressure): warns at 85% of the central or ledger limit.
  private storagePressure:any=null;
  /** Central writes of this object run one at a time: the fast lane may write while a long heavy unit waits for the
