@@ -872,3 +872,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Rollout em dois passos: leitor publicado primeiro (`5542242`) e confirmado no executor (`status.storageFormat.journalReader`) antes de ligar a gravação.
 - Simulação com a central real: diários idênticos na volta; a central compactada cai para pouco mais da metade do limite.
 - Pendente com o dono: as cópias antigas de leituras (`snapshots:<digest>`) não referenciadas se acumulam no banco a cada gravação; limpar é apagar dados e exige decisão dele.
+
+## Retenção das cópias de leituras (registro escrito às 2026-11-10 03:22:16 UTC por `date -u`)
+
+- Decisão do dono em 09/11 ("Yes, keep 24h"): cópias antigas de leituras (`snapshots:<digest>`) sem referência são apagadas, guardando as últimas 24h.
+- `bunker_store` (migração `20261109231000_snapshot_retention.sql`, aplicada): no commit vencedor da central, apaga `snapshots:` gravados há mais de 24h, nunca o que a central nova referencia. A central é a única leitora desses registros (conferido: nenhum outro registro cita essas chaves).
+- Limpeza única feita com a mesma regra, seguida de `VACUUM FULL` em `bunker_records` fora da cadência; a leitura da central e `/health` conferidos depois.
