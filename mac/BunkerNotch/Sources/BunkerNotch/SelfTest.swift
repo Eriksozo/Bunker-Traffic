@@ -35,6 +35,11 @@ enum SelfTest {
          "agents":{"recent":[]},"executor":null,"notice":"Somente leitura."}
         """
         let s = try JSONDecoder().decode(Summary.self, from: Data(json.utf8))
+        check(s.days == nil, #line)
+        // The "Dias" block must survive the section-tolerant decoder of the whole summary (it was dropped once).
+        let withDays = json.replacingOccurrences(of: #""notice":"Somente leitura."}"#, with: #""notice":"Somente leitura.","days":{"rows":[{"day":"2026-11-10","spend":100,"orders":2,"cpa":50,"revenueNet":150,"profit":20,"roas":1.5,"roi":1.18}],"currency":"BRL","today":"2026-11-10","at":null,"stale":false,"missing":[],"failing":[],"error":null}}"#)
+        let sd = try JSONDecoder().decode(Summary.self, from: Data(withDays.utf8))
+        check(sd.days?.rows.first?.cpa == 50 && sd.days?.today == "2026-11-10", #line)
         check(s.queue.first?.amount == 420, #line)
         check(s.today.yesterday == nil, #line)
         check(s.activity.recent[0].before?.number == 1000, #line)
