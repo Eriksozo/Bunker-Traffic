@@ -954,6 +954,8 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Pico medido localmente, heap limitado, dados reais: gravação da via rápida de 100 para 85 MB; coleta de mais de 115 para 85 MB.
   - **Ainda não coberto:** durante a espera do modelo, o motor segura uma cópia completa, porque o contexto da análise usa o histórico inteiro. Se uma gravação da via rápida (ordem do dono, conferência ou autonomia) ocorrer nesse intervalo, o pico ainda passa de 115 MB.
   - **Próximo passo se os reinícios persistirem:** reler a central só depois do modelo, o que muda a semântica da evidência e precisa de decisão; ou ajustar `hotDays` do registro de mudanças, o que muda o aprendizado e é decisão do dono.
+  - **Resultado em produção (registro escrito às 2026-11-10 14:48:54 UTC por `date -u`):** publicado às 14:00:28 UTC. Entre 14:05 e 14:48 houve 2 reinícios por memória (14:14 e 14:27), contra ~1 a cada 7 min antes. O notch recebeu só 200 em `/api/companion` e no pulse. As etapas dos analistas e uma ordem confirmada pela via rápida seguiram normalmente.
+  - **Ainda pesa:** o executor roda no mesmo script que o site inteiro (`dist/server` tem 18 MB), e esse código ocupa memória do mesmo isolate de 128 MB. Separar o executor num Worker próprio é a maior folga possível, mas é mudança de arquitetura e de deploy, para combinar com o dono.
 
 ## Notch: aba Dias, resultado por dia (registro escrito às 2026-11-10 13:54:56 UTC por `date -u`)
 
