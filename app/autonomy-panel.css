@@ -71,10 +71,53 @@
 .autonomy:not(#_) .aut-limit__input .ds-field::placeholder{font-family:var(--ds-font-text)}
 .autonomy:not(#_) .aut-limit__unit{position:absolute;top:50%;right:var(--ds-space-m);transform:translateY(-50%);font:var(--ds-weight-semibold) var(--ds-font-caption)/1 var(--ds-font-text);color:var(--ds-ink-muted);pointer-events:none}
 .autonomy:not(#_) .aut-exceptions .autonomy-exception{display:flex;align-items:center;gap:var(--ds-space-s);min-width:0;padding:var(--ds-space-xs) 0}
-.autonomy:not(#_) .autonomy-exception__name{flex:1;min-width:0;font:var(--ds-weight-regular) var(--ds-font-body)/1.35 var(--ds-font-text);color:var(--ds-ink)}
+.autonomy:not(#_) .autonomy-exception__name{flex:1;color:var(--ds-ink)}
 .autonomy:not(#_) .autonomy-exception .ds-field{width:auto;flex:none;min-width:132px}
-.autonomy:not(#_) .autonomy-exception.add{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ds-space-s);margin-top:var(--ds-space-xs)}
-.autonomy:not(#_) .autonomy-exception.add .ds-field{flex:1 1 220px;min-width:0}
+
+/* Nome de campanha: cabeça comum (data, tags) apagada, cauda distintiva (código do criativo) em tinta e sempre visível. */
+.autonomy:not(#_) .aut-cname{display:flex;min-width:0;overflow:hidden;white-space:nowrap;font:var(--ds-weight-regular) var(--ds-font-body)/1.35 var(--ds-font-text)}
+.autonomy:not(#_) .aut-cname__head{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:pre;color:var(--ds-ink-muted)}
+.autonomy:not(#_) .aut-cname__tail{flex:0 0 auto;max-width:100%;overflow:hidden;text-overflow:ellipsis;color:var(--ds-ink);font-weight:var(--ds-weight-medium)}
+/* Situação: ponto + glifo (play/pausa) + texto oculto; nunca só cor. */
+.autonomy:not(#_) .aut-status{display:inline-flex;align-items:center;gap:var(--ds-space-xxs);flex:none;color:var(--ds-ink-muted)}
+.autonomy:not(#_) .aut-status.is-active{color:var(--ds-good)}
+.autonomy:not(#_) .aut-status.is-inactive{color:var(--ds-ink-faint)}
+.autonomy:not(#_) .aut-status>svg{width:var(--ds-size-icon-xs);height:var(--ds-size-icon-xs)}
+
+/* Exceções: cabeçalho com o gatilho; o seletor abre embutido logo abaixo, nunca uma lista gigante na página.
+   Superfície no fluxo (cartão, sem sombra de sobreposição) e raio concêntrico: m do detalhe − 16 px de recuo → mínimo xs. */
+.autonomy:not(#_) .aut-exc__head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--ds-space-xs) var(--ds-space-s);min-width:0}
+.autonomy:not(#_) .aut-exc__head>h3.ds-eyebrow{margin:0}
+.autonomy:not(#_) .aut-pick{--ds-card-radius:var(--ds-radius-xs);--ds-card-stroke:var(--ds-stroke-strong);display:flex;flex-direction:column;min-width:0;overflow:hidden;box-shadow:none;animation:aut-reveal var(--ds-dur-open) var(--ds-ease-spring)}
+@media (prefers-reduced-motion:reduce){.autonomy:not(#_) .aut-pick{animation:none}}
+.autonomy:not(#_) .aut-pick__top{display:flex;flex-direction:column;gap:var(--ds-space-s);padding:var(--ds-space-m);border-bottom:var(--ds-size-hairline) solid var(--ds-stroke)}
+.autonomy:not(#_) .aut-pick__search{position:relative;display:flex;align-items:center;min-width:0}
+.autonomy:not(#_) .aut-pick__search-icon{position:absolute;left:var(--ds-space-m);color:var(--ds-ink-muted);pointer-events:none}
+.autonomy:not(#_) .aut-pick__search .ds-field{width:100%;margin:0;padding-left:calc(var(--ds-space-m) + var(--ds-size-icon-s) + var(--ds-space-s));padding-right:calc(var(--ds-size-icon-button) + var(--ds-space-s))}
+.autonomy:not(#_) .aut-pick__search .ds-field::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+.autonomy:not(#_) .aut-pick__clear{position:absolute;right:var(--ds-space-xxs)}
+.autonomy:not(#_) .aut-pick__chips{display:flex;flex-wrap:wrap;gap:var(--ds-space-xs)}
+.autonomy:not(#_) .aut-pick__chip[aria-pressed=false]{color:var(--ds-ink-soft);background:transparent}
+.autonomy:not(#_) .aut-pick__count{font-family:var(--ds-font-rounded);font-variant-numeric:tabular-nums;font-weight:var(--ds-weight-medium);color:var(--ds-ink-muted)}
+.autonomy:not(#_) .aut-pick__meta{margin:0;font:var(--ds-weight-regular) var(--ds-font-caption)/1.45 var(--ds-font-text);font-variant-numeric:tabular-nums;color:var(--ds-ink-muted)}
+.autonomy:not(#_) .aut-pick__list{max-height:min(420px,55vh);overflow-y:auto;overscroll-behavior:contain;padding:0 var(--ds-space-xs) var(--ds-space-xs);outline:none}
+.autonomy:not(#_) .aut-pick__group-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:var(--ds-space-s);min-width:0;padding:var(--ds-space-s) var(--ds-space-s) var(--ds-space-xxs);background:var(--ds-card-bg,var(--ds-surface));font:var(--ds-weight-semibold) var(--ds-font-eyebrow)/1.3 var(--ds-font-text);letter-spacing:var(--ds-tracking-eyebrow);color:var(--ds-ink-soft)}
+.autonomy:not(#_) .aut-pick__opt{display:flex;align-items:center;gap:var(--ds-space-s);min-width:0;min-height:var(--ds-size-control);padding:var(--ds-space-xs) var(--ds-space-s);border-radius:var(--ds-radius-xs);cursor:pointer;scroll-margin-top:calc(var(--ds-size-control) + var(--ds-space-xs));-webkit-tap-highlight-color:transparent;transition:background-color var(--ds-dur-hover) var(--ds-ease-out)}
+.autonomy:not(#_) .aut-pick__opt:hover{background:var(--ds-fill-hover)}
+.autonomy:not(#_) .aut-pick__opt.is-selected{background:var(--ds-fill-selected)}
+.autonomy:not(#_) .aut-pick__list:focus .aut-pick__opt.is-active{background:var(--ds-fill-hover)}
+.autonomy:not(#_) .aut-pick__list:focus-visible .aut-pick__opt.is-active{outline:var(--ds-focus-width) solid var(--ds-focus);outline-offset:calc(var(--ds-focus-width) * -1)}
+.autonomy:not(#_) .aut-pick__opt .aut-cname{flex:1}
+.autonomy:not(#_) .aut-pick__spend{flex:none;margin-left:auto;font:var(--ds-weight-semibold) var(--ds-font-caption)/1 var(--ds-font-rounded);font-variant-numeric:tabular-nums;color:var(--ds-ink-soft);white-space:nowrap}
+.autonomy:not(#_) .aut-check{display:inline-grid;place-items:center;flex:none;width:var(--ds-size-icon);height:var(--ds-size-icon);border:var(--ds-size-hairline) solid var(--ds-stroke-strong);border-radius:var(--ds-radius-xs);background:var(--ds-fill);color:var(--ds-on-accent);transition:background-color var(--ds-dur-select) var(--ds-ease-firm),border-color var(--ds-dur-select) var(--ds-ease-firm)}
+.autonomy:not(#_) .aut-pick__opt.is-selected .aut-check{border-color:var(--ds-accent);background:var(--ds-accent)}
+.autonomy:not(#_) .aut-pick__empty{display:flex;flex-direction:column;gap:var(--ds-space-s);padding:var(--ds-space-m)}
+.autonomy:not(#_) .aut-pick__empty-actions{display:flex;flex-wrap:wrap;gap:var(--ds-space-s)}
+.autonomy:not(#_) .aut-pick__more{align-self:center;margin:var(--ds-space-xxs) 0 var(--ds-space-xs)}
+.autonomy:not(#_) .aut-pick__foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--ds-space-s) var(--ds-space-m);padding:var(--ds-space-s) var(--ds-space-m);border-top:var(--ds-size-hairline) solid var(--ds-stroke)}
+.autonomy:not(#_) .aut-pick__sel{margin:0;font:var(--ds-weight-regular) var(--ds-font-caption)/1.45 var(--ds-font-text);font-variant-numeric:tabular-nums;color:var(--ds-ink-soft)}
+.autonomy:not(#_) .aut-pick__link{display:inline-flex;align-items:center;min-height:var(--ds-size-hit-min);vertical-align:middle;margin:0;padding:0;border:0;background:none;color:var(--ds-accent);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.autonomy:not(#_) .aut-pick__foot-actions{display:flex;flex-wrap:wrap;gap:var(--ds-space-s);margin-left:auto}
 
 /* Barra de salvar: fica presa embaixo enquanto a lista rola; mostra não salvo / salvando / salvo / erro com glifo. */
 .autonomy:not(#_) .aut-savebar{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--ds-space-s) var(--ds-space-m);margin-top:var(--ds-space-s);padding:var(--ds-space-m) var(--ds-inset-card);border-top:var(--ds-size-hairline) solid var(--ds-stroke);border-radius:0 0 calc(var(--ds-radius-l) - 1px) calc(var(--ds-radius-l) - 1px);background:var(--ds-surface-overlay)}
@@ -119,4 +162,10 @@
  .autonomy:not(#_) .aut-detail{padding:var(--ds-space-m)}
  .autonomy:not(#_) .aut-savebar__actions{width:100%}
  .autonomy:not(#_) .aut-savebar__actions .ds-btn{flex:1}
+ .autonomy:not(#_) .autonomy-exception .ds-field{min-width:108px}
+ .autonomy:not(#_) .aut-pick__top{padding:var(--ds-space-s)}
+ .autonomy:not(#_) .aut-pick__list{max-height:50vh}
+ .autonomy:not(#_) .aut-pick__foot{padding:var(--ds-space-s)}
+ .autonomy:not(#_) .aut-pick__foot-actions{width:100%}
+ .autonomy:not(#_) .aut-pick__foot-actions .ds-btn{flex:1}
 }

@@ -1,10 +1,83 @@
 'use client';
-import {useEffect,useId,useMemo,useState} from 'react';
-import type {CSSProperties} from 'react';
-import {Bot,CircleOff,Eye,FingerprintPattern,Power,Save,Trash2,Zap} from 'lucide-react';
+import {memo,useCallback,useDeferredValue,useEffect,useId,useMemo,useRef,useState} from 'react';
+import type {CSSProperties,KeyboardEvent as ReactKeyboardEvent} from 'react';
+import {Archive,Bot,Check,CircleOff,Eye,FingerprintPattern,Pause,Play,Plus,Power,Save,Search,Trash2,X,Zap} from 'lucide-react';
 import {autonomyView,autonomyModes,autonomyActions,autonomyLimits,modeLabels,actionLabels,campaignKey} from '../lib/autonomy-grant.mjs';
+import {isWarmupCampaign} from '../lib/campaign-scope.mjs';
 import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
 import './autonomy-panel.css';
+
+// picker-helpers:start
+/* Campaign picker helpers for "Exceções por campanha" (presentation only, 10/11/2026). Pure: no React, no DOM; tested by
+ * tests/autonomy-campaign-picker.test.mjs. Nothing here decides permissions: saving still writes {mode:'off',name} under
+ * campaignKey through the row's edit(), and lib/autonomy-grant.mjs stays the only judge. Out-of-scope uses the same
+ * isWarmupCampaign the policy uses to block warm-up/engagement orders. */
+const pickerPageSize=50;
+const pickerFinite=(v:any)=>typeof v==='number'&&Number.isFinite(v);
+/** Accent- and case-insensitive text for matching. */
+const foldText=(v:any)=>String(v??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const statusLabels:Record<string,string>={ACTIVE:'Ativa',PAUSED:'Pausada',ARCHIVED:'Arquivada',DELETED:'Excluída'};
+/** 'active' | 'paused' | 'inactive' (archived, deleted or any other Meta status) | null (no status in the reading). */
+function campaignStatusKind(status:any):'active'|'paused'|'inactive'|null{const s=String(status||'').toUpperCase();return !s?null:s==='ACTIVE'?'active':s==='PAUSED'?'paused':'inactive';}
+function campaignStatusLabel(status:any):string|null{const s=String(status||'').toUpperCase();return !s?null:statusLabels[s]||'Inativa';}
+const pickerCollator=typeof Intl!=='undefined'?new Intl.Collator('pt-BR',{sensitivity:'base',numeric:true}):null;
+const pickerCmp=(a:any,b:any)=>pickerCollator?pickerCollator.compare(String(a??''),String(b??'')):String(a??'').localeCompare(String(b??''));
+const accountLabel=(e:any)=>e.accountName||e.accountId;
+const statusRank:Record<string,number>={active:0,paused:1,inactive:2};
+/** Account, then active, paused, inactive (no status with paused), then today's spend (highest first, no reading last), then name. */
+function comparePickerRows(a:any,b:any){return pickerCmp(accountLabel(a),accountLabel(b))||pickerCmp(a.accountId,b.accountId)||(statusRank[a.status]??1)-(statusRank[b.status]??1)||(b.spend??-1)-(a.spend??-1)||pickerCmp(a.name,b.name)||pickerCmp(a.key,b.key);}
+/** Entries from today's campaign snapshot rows: Meta only, one per campaignKey (same key and name the panel always saved). */
+function campaignPickerRows(rows:any){
+ const seen=new Set<string>(),out:any[]=[];
+ for(const r of Array.isArray(rows)?rows:[]){
+  if(!r||String(r.provider||'').toLowerCase()!=='meta')continue;
+  const key=campaignKey(r.adAccountId,r.externalId);if(seen.has(key))continue;seen.add(key);
+  const name=r.name||r.externalId,accountName=typeof r.accountName==='string'&&r.accountName.trim()?r.accountName.trim():null,accountId=String(r.adAccountId??'');
+  out.push({key,id:String(r.externalId??''),name,status:campaignStatusKind(r.status),statusLabel:campaignStatusLabel(r.status),spend:pickerFinite(r.spend)?r.spend:null,accountId,accountName,warmup:isWarmupCampaign(r.name),haystack:foldText([name,r.externalId,accountName,accountId].join(' '))});
+ }
+ return out.sort(comparePickerRows);
+}
+const isTaken=(taken:any,key:string)=>!!taken&&(taken instanceof Set?taken.has(key):Object.prototype.hasOwnProperty.call(taken,key));
+/** Search (every term must match name, ID or account; accents and case ignored), status chips (OR between them; none = any),
+ * "Com gasto hoje" (spend > 0). Already-added campaigns never appear (takenSales counts the sales ones); warm-up/engagement is
+ * counted apart and hidden. Chip counts follow the search, not the chips themselves. */
+function filterCampaignPicker(entries:any[],{query='',active=false,paused=false,inactive=false,withSpend=false,taken=null}:{query?:string;active?:boolean;paused?:boolean;inactive?:boolean;withSpend?:boolean;taken?:any}={}){
+ const terms=foldText(query).split(/\s+/).filter(Boolean),counts:Record<'active'|'paused'|'inactive'|'withSpend',number>={active:0,paused:0,inactive:0,withSpend:0},rows:any[]=[];
+ const anyStatus=active||paused||inactive;
+ let outOfScope=0,available=0,takenSales=0,matched=0;
+ for(const e of entries||[]){
+  if(isTaken(taken,e.key)){if(!e.warmup)takenSales++;continue;}
+  if(!e.warmup)available++;
+  if(terms.length&&!terms.every(t=>e.haystack.includes(t)))continue;
+  if(e.warmup){outOfScope++;continue;}
+  matched++;
+  if(e.status==='active'||e.status==='paused'||e.status==='inactive')counts[e.status as 'active'|'paused'|'inactive']++;
+  if(e.spend>0)counts.withSpend++;
+  if(anyStatus&&!((active&&e.status==='active')||(paused&&e.status==='paused')||(inactive&&e.status==='inactive')))continue;
+  if(withSpend&&!(e.spend>0))continue;
+  rows.push(e);
+ }
+ return {rows,counts,matched,outOfScope,available,takenSales,terms:terms.length};
+}
+/** Consecutive rows of the same ad account become one group (rows arrive sorted by account). */
+function groupPickerRows(rows:any[]){
+ const groups:{id:string;label:string;accountId:string;rows:any[]}[]=[];
+ for(const e of rows||[]){const last=groups[groups.length-1];if(last&&last.id===e.accountId)last.rows.push(e);else groups.push({id:e.accountId,label:accountLabel(e)||'Conta sem nome',accountId:e.accountId,rows:[e]});}
+ return groups;
+}
+/** Long names like "07/11 - [CBO] - [JOHN] - [TESTE] - [1-3-1] - JHON_A_457_H1": the last segment (the creative code) is the
+ * distinctive tail, the rest is the shared head. A trailing "Cópia"/"Copy" keeps the segment before it. No separator: all tail. */
+function splitCampaignName(name:any){
+ const s=String(name??''),parts=s.split(/(\s+[-–—|]\s+)/);
+ if(parts.length<3)return {head:'',tail:s};
+ let i=parts.length-1;
+ if(i>=2&&/^(?:c[oó]pia|copy)(?:\s*\d+)?$/i.test(parts[i].trim()))i-=2;
+ const head=parts.slice(0,i).join(''),tail=parts.slice(i).join('');
+ return tail.trim()&&head.trim()?{head,tail}:{head:'',tail:s};
+}
+/** Today's spend in the reading's currency (ISO code from the snapshot); without one, a bare number, never an invented R$. */
+const pickerMoney=(v:number,currency?:string|null)=>currency&&/^[A-Z]{3}$/.test(currency)?v.toLocaleString('pt-BR',{style:'currency',currency,maximumFractionDigits:2}):v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+// picker-helpers:end
 
 /** Autonomy module (owner request of 09/11/2026). The owner sets what the Bunk may do; only "Automático" sends orders,
  * and only within these permissions, through the same executor path as the owner's direct order.
@@ -46,7 +119,8 @@ export default function AutonomyPanel({state,write,saving}:any){
  const [remote,setRemote]=useState<{log:Log[];shadowProjects:string[]|null;status:any}|null>(null);
  useEffect(()=>{let alive=true;const load=()=>fetch('/api/autonomy',{cache:'no-store'}).then(r=>r.ok?r.json():null).then((d:any)=>{if(alive&&d)setRemote({log:d.log||[],shadowProjects:d.shadowProjects??null,status:d.status||null});}).catch(()=>{});load();const t=setInterval(load,30000);return()=>{alive=false;clearInterval(t);};},[]);
  const orders=useMemo(()=>ownerOrderReceipts(state,{now:Date.now()}).filter((o:any)=>o.by==='bunk'),[state]);
- const edit=(id:string,fn:(p:any)=>any)=>{setLast(null);setDraft(prev=>({base:prev?.base||savedKey,projects:(prev?.projects||saved.projects).map((p:any)=>p.id===id?fn(structuredClone(p)):p)}));};
+ /** Stable between renders (same body as before) so each ProjectRow is memoized and only the edited project re-renders. */
+ const edit=useCallback((id:string,fn:(p:any)=>any)=>{setLast(null);setDraft(prev=>({base:prev?.base||savedKey,projects:(prev?.projects||saved.projects).map((p:any)=>p.id===id?fn(structuredClone(p)):p)}));},[savedKey,saved.projects]);
  const payload=(enabled:boolean)=>({enabled,projects:Object.fromEntries(projects.map((p:any)=>[p.id,{mode:p.mode,actions:p.actions,limits:p.limits,campaigns:p.campaigns}]))});
  async function save(enabled=saved.enabled){
   setError('');if(conflict){setError('As permissões salvas mudaram em outra sessão. Carregue as salvas antes de editar.');return;}
@@ -99,7 +173,7 @@ export default function AutonomyPanel({state,write,saving}:any){
     <span className="ds-caption aut-projects__count">{projects.length===1?'1 projeto':`${projects.length} projetos`}{draftAuto?` · ${draftAuto} com Automático`:''}</span>
    </header>
    {!projects.length?<p className="ds-empty aut-projects__empty">Nenhum projeto configurado no Bunker ainda: as permissões aparecem aqui quando houver projeto.</p>:
-    <ul className="ds-list ds-list--divided aut-list">{projects.map((p:any)=><ProjectRow key={p.id} p={p} state={state} covered={covered(p.id)} disabled={saving} dirty={!!draft&&savedById[p.id]!==JSON.stringify(p)} edit={(fn:any)=>edit(p.id,fn)}/>)}</ul>}
+    <ul className="ds-list ds-list--divided aut-list">{projects.map((p:any)=><ProjectRow key={p.id} p={p} state={state} covered={covered(p.id)} disabled={saving} dirty={!!draft&&savedById[p.id]!==JSON.stringify(p)} editProject={edit}/>)}</ul>}
    <div className="aut-savebar">
     <p className={`aut-savebar__status tone-${saveStatus.tone}`} id={saveStatusId} role="status">{saveStatus.tone==='busy'?<span className="ds-spinner" aria-hidden="true"/>:<span className={`ds-glyph ${statusGlyph[saveStatus.tone]}`} aria-hidden="true"/>}<span>{saveStatus.text}</span></p>
     <div className="aut-savebar__actions">
@@ -123,18 +197,35 @@ export default function AutonomyPanel({state,write,saving}:any){
  </div>;
 }
 
-function ProjectRow({p,state,covered,disabled,dirty,edit}:{p:any;state:any;covered:boolean;disabled:boolean;dirty:boolean;edit:(fn:(p:any)=>any)=>void}){
- const rows=useMemo(()=>{const s=(state.snapshots||[]).filter((x:any)=>x.projectId===p.id&&x.level==='campaign'&&x.period==='today').sort((a:any,b:any)=>Date.parse(b.fetchedAt)-Date.parse(a.fetchedAt))[0];return (s?.rows||[]).filter((r:any)=>String(r.provider||'').toLowerCase()==='meta').map((r:any)=>({key:campaignKey(r.adAccountId,r.externalId),name:r.name||r.externalId,status:r.status})).sort((a:any,b:any)=>String(a.name).localeCompare(String(b.name)));},[state,p.id]);
- const [pick,setPick]=useState('');
+const EMPTY_CAMPAIGNS:Record<string,any>=Object.freeze({}) as Record<string,any>;
+const EMPTY_ENTRIES:any[]=[];
+const plural=(n:number,one:string,many:string)=>`${n.toLocaleString('pt-BR')} ${n===1?one:many}`;
+/** Full name in the tooltip; the shared head (date, tags) muted and the distinctive tail (creative code) in ink, kept visible when narrow. */
+function CampaignName({name,className=''}:{name:string;className?:string}){const {head,tail}=splitCampaignName(name);return <span className={`aut-cname ${className}`} title={name}>{head&&<span className="aut-cname__head">{head}</span>}<span className="aut-cname__tail">{tail}</span></span>;}
+/** Status as dot + glyph + hidden text (never color alone, never a "(PAUSED)" suffix). */
+const statusIcon:Record<string,typeof Play>={active:Play,paused:Pause,inactive:Archive};
+function StatusMark({kind,label}:{kind:string|null;label:string|null}){if(!kind)return null;const Icon=statusIcon[kind]||Archive;return <span className={`aut-status is-${kind}`} title={label||undefined}><span className={`ds-dot ds-dot--sm ${kind==='active'?'ds-dot--good':'ds-dot--neutral'}`} aria-hidden="true"/><Icon size={10} aria-hidden="true"/><span className="ds-sr-only">{label}</span></span>;}
+
+const ProjectRow=memo(function ProjectRow({p,state,covered,disabled,dirty,editProject}:{p:any;state:any;covered:boolean;disabled:boolean;dirty:boolean;editProject:(id:string,fn:(p:any)=>any)=>void}){
+ const edit=useCallback((fn:(p:any)=>any)=>editProject(p.id,fn),[editProject,p.id]);
  const [open,setOpen]=useState(false);
- const uid=useId(),detailId=`${uid}-detail`;
+ const [picking,setPicking]=useState(false);
+ /** Today's Meta campaign reading, built only while the row is open (same source as before: latest campaign/today snapshot of the project). */
+ const reading=useMemo(()=>{if(!open)return null;const s=(state.snapshots||[]).filter((x:any)=>x.projectId===p.id&&x.level==='campaign'&&x.period==='today').sort((a:any,b:any)=>Date.parse(b.fetchedAt)-Date.parse(a.fetchedAt))[0];return {at:s?.fetchedAt||null,currency:typeof s?.currency==='string'&&/^[A-Z]{3}$/.test(s.currency)?s.currency:null,entries:campaignPickerRows(s?.rows||[])};},[open,state,p.id]);
+ const entries=reading?.entries||EMPTY_ENTRIES;
+ const byKey=useMemo(()=>new Map(entries.map((e:any)=>[e.key,e])),[entries]);
+ const uid=useId(),detailId=`${uid}-detail`,pickerId=`${uid}-picker`,noReadId=`${uid}-noread`;
+ const trigger=useRef<HTMLButtonElement>(null);
+ /** Focus goes back to the trigger only when it can take it (it is disabled while saving or without a reading). */
+ const closePicker=useCallback(()=>{setPicking(false);requestAnimationFrame(()=>{const t=trigger.current;if(t&&!t.disabled)t.focus();});},[]);
+ const addCampaigns=useCallback((list:any[])=>{for(const r of list)edit(x=>{x.campaigns[r.key]={mode:'off',name:r.name};return x;});closePicker();},[edit,closePicker]);
  const exceptions=Object.entries(p.campaigns||{}) as [string,any][];
  const invalid=hasIssue(p),modeIndex=Math.max(0,autonomyModes.indexOf(p.mode));
  const autoExceptions=exceptions.filter(([,c])=>c.mode==='auto').length;
  const limit=(k:string,label:string,unit:string,hint:string)=>{const id=`${uid}-${k}`,issue=limitIssue(k,p.limits[k]);return <div className="ds-form-row aut-limit"><label className="ds-label" htmlFor={id}>{label}</label><div className="aut-limit__input"><input id={id} className="ds-field" type="number" min="0" step="any" inputMode="decimal" value={p.limits[k]??''} placeholder="Não definido" disabled={disabled} aria-invalid={issue?true:undefined} aria-describedby={`${id}-hint${issue?` ${id}-err`:''}`} onChange={e=>edit(x=>{x.limits[k]=numOrNull(e.target.value);return x;})}/><span className="aut-limit__unit" aria-hidden="true">{unit}</span></div><p className="ds-hint" id={`${id}-hint`}>{hint}</p>{issue&&<p className="ds-hint ds-hint--error" id={`${id}-err`}>{issue}</p>}</div>;};
  return <li className={`aut-project autonomy-project mode-${p.mode} ${open?'is-open':''}`}>
   <div className="aut-project__row">
-   <button type="button" className="aut-project__toggle" aria-expanded={open} aria-controls={open?detailId:undefined} onClick={()=>setOpen(v=>!v)}>
+   <button type="button" className="aut-project__toggle" aria-expanded={open} aria-controls={open?detailId:undefined} onClick={()=>{if(open)setPicking(false);setOpen(!open);}}>
     <span className="ds-glyph ds-glyph--chevron aut-project__chevron" aria-hidden="true"/>
     <span className={`ds-monogram ${p.mode==='auto'?'ds-monogram--accent':'ds-monogram--tag'}`} aria-hidden="true">{String(p.name||p.id).trim().charAt(0)}</span>
     <span className="aut-project__main">
@@ -169,13 +260,116 @@ function ProjectRow({p,state,covered,disabled,dirty,edit}:{p:any;state:any;cover
      </div>
     </div>
    </div>
-   <div className="aut-block">
-    <h3 className="ds-eyebrow">Exceções por campanha</h3>
+   <div className="aut-block aut-exc">
+    <div className="aut-exc__head">
+     <h3 className="ds-eyebrow">Exceções por campanha</h3>
+     <button ref={trigger} type="button" className="ds-btn ds-btn--ghost ds-btn--sm" aria-expanded={picking} aria-controls={picking?pickerId:undefined} aria-describedby={!entries.length?noReadId:undefined} disabled={disabled||!entries.length} onClick={()=>picking?closePicker():setPicking(true)}><Plus size={14} aria-hidden="true"/>Adicionar campanha</button>
+    </div>
+    {!entries.length&&<p className="ds-empty ds-empty--waiting" id={noReadId}>Sem leitura de hoje das campanhas. A lista para escolher aparece quando a leitura de hoje chegar.</p>}
+    {picking&&!!entries.length&&<CampaignPicker id={pickerId} entries={entries} taken={p.campaigns||EMPTY_CAMPAIGNS} readAt={reading?.at||null} currency={reading?.currency||null} disabled={disabled} onAdd={addCampaigns} onClose={closePicker}/>}
     {!exceptions.length&&<p className="ds-empty">Nenhuma. Todas as campanhas de vendas Meta do projeto seguem o nível acima (aquecimento/engajamento ficam sempre de fora).</p>}
-    {!!exceptions.length&&<ul className="ds-list ds-list--divided aut-exceptions">{exceptions.map(([key,c])=><li className="autonomy-exception" key={key}><span className="ds-truncate autonomy-exception__name" title={c.name||key}>{c.name||key}</span><select className="ds-field ds-field--sm" aria-label={`Nível de ${c.name||key}`} value={c.mode} disabled={disabled} onChange={e=>edit(x=>{x.campaigns[key].mode=e.target.value;return x;})}>{autonomyModes.map(m=><option key={m} value={m}>{modeLabels[m]}</option>)}</select><button type="button" className="ds-btn ds-btn--icon ds-btn--sm" aria-label={`Remover exceção ${c.name||key}`} title="Remover exceção" disabled={disabled} onClick={()=>edit(x=>{delete x.campaigns[key];return x;})}><Trash2 size={14} aria-hidden="true"/></button></li>)}</ul>}
-    <div className="autonomy-exception add"><select className="ds-field ds-field--sm" aria-label="Campanha para exceção" value={pick} disabled={disabled||!rows.length} onChange={e=>setPick(e.target.value)}><option value="">{rows.length?'Escolha uma campanha…':'Sem leitura de hoje das campanhas'}</option>{rows.filter((r:any)=>!p.campaigns[r.key]).map((r:any)=><option key={r.key} value={r.key}>{r.name}{r.status&&r.status!=='ACTIVE'?` (${r.status})`:''}</option>)}</select>
-     <button type="button" className="ds-btn ds-btn--sm" disabled={disabled||!pick} title={!pick?'Escolha uma campanha primeiro.':undefined} onClick={()=>{const r=rows.find((x:any)=>x.key===pick);if(!r)return;edit(x=>{x.campaigns[r.key]={mode:'off',name:r.name};return x;});setPick('');}}>Adicionar (começa Desligado)</button></div>
+    {!!exceptions.length&&<ul className="ds-list ds-list--divided aut-exceptions">{exceptions.map(([key,c])=>{const e:any=byKey.get(key);return <li className="autonomy-exception" key={key}><StatusMark kind={e?.status||null} label={e?.statusLabel||null}/><CampaignName name={c.name||key} className="autonomy-exception__name"/><select className="ds-field ds-field--sm" aria-label={`Nível de ${c.name||key}`} value={c.mode} disabled={disabled} onChange={ev=>edit(x=>{x.campaigns[key].mode=ev.target.value;return x;})}>{autonomyModes.map(m=><option key={m} value={m}>{modeLabels[m]}</option>)}</select><button type="button" className="ds-btn ds-btn--icon ds-btn--sm" aria-label={`Remover exceção ${c.name||key}`} title="Remover exceção" disabled={disabled} onClick={()=>edit(x=>{delete x.campaigns[key];return x;})}><Trash2 size={14} aria-hidden="true"/></button></li>;})}</ul>}
    </div>
   </div>}
  </li>;
-}
+});
+
+type PickerChips={active:boolean;paused:boolean;inactive:boolean;withSpend:boolean};
+const NO_CHIPS:PickerChips={active:false,paused:false,inactive:false,withSpend:false};
+
+/** One option row. Memoized with a stable onPick: an arrow move or a toggle re-renders only the 1–2 rows that changed. */
+const PickerOption=memo(function PickerOption({entry,optionId,active,selected,currency,onPick}:{entry:any;optionId:string;active:boolean;selected:boolean;currency:string|null;onPick:(key:string)=>void}){
+ return <div id={optionId} role="option" aria-selected={selected} className={`aut-pick__opt${active?' is-active':''}${selected?' is-selected':''}`} onMouseDown={ev=>ev.preventDefault()} onClick={()=>onPick(entry.key)}>
+  <span className="aut-check" aria-hidden="true">{selected&&<Check size={12}/>}</span>
+  <StatusMark kind={entry.status} label={entry.statusLabel}/>
+  <CampaignName name={entry.name}/>
+  {entry.spend>0&&<span className="aut-pick__spend" title={currency?'Gasto de hoje':'Gasto de hoje (moeda N/D)'}>{pickerMoney(entry.spend,currency)}</span>}
+ </div>;
+});
+
+/** Inline picker: search, status/spend chips with counts, results grouped by ad account (listbox, several at once),
+ * at most pickerPageSize per page. Adding hands the chosen entries back; the row saves each one as {mode:'off',name}. */
+const CampaignPicker=memo(function CampaignPicker({id,entries,taken,readAt,currency,disabled,onAdd,onClose}:{id:string;entries:any[];taken:Record<string,any>;readAt:string|null;currency:string|null;disabled:boolean;onAdd:(list:any[])=>void;onClose:()=>void}){
+ const uid=useId(),search=useRef<HTMLInputElement>(null),list=useRef<HTMLDivElement>(null);
+ const hasStatus=useMemo(()=>entries.some((e:any)=>e.status),[entries]),hasInactive=useMemo(()=>entries.some((e:any)=>e.status==='inactive'),[entries]),hasSpend=useMemo(()=>entries.some((e:any)=>e.spend!==null),[entries]);
+ const [query,setQueryState]=useState('');const q=useDeferredValue(query);
+ const [chips,setChipsState]=useState<PickerChips>({...NO_CHIPS,active:hasStatus});
+ const [selected,setSelected]=useState<ReadonlySet<string>>(()=>new Set());
+ const [pageLimit,setPageLimit]=useState(pickerPageSize);
+ const [activeKey,setActiveKey]=useState<string|null>(null);
+ /** A new search or filter starts again at the first page, in the same update (no extra render with the old large slice). */
+ const setQuery=(v:string)=>{setQueryState(v);setPageLimit(pickerPageSize);};
+ const setChips=(fn:(c:PickerChips)=>PickerChips)=>{setChipsState(fn);setPageLimit(pickerPageSize);};
+ const result=useMemo(()=>filterCampaignPicker(entries,{query:q,...chips,taken}),[entries,q,chips,taken]);
+ const visible=useMemo(()=>result.rows.slice(0,pageLimit),[result.rows,pageLimit]);
+ const groups=useMemo(()=>groupPickerRows(visible),[visible]);
+ const indexOf=useMemo(()=>new Map<string,number>(visible.map((e:any,i:number)=>[e.key,i])),[visible]);
+ const byKey=useMemo(()=>new Map(entries.map((e:any)=>[e.key,e])),[entries]);
+ const chosen=useMemo(()=>[...selected].map(k=>byKey.get(k)).filter((e:any)=>e&&!Object.prototype.hasOwnProperty.call(taken,e.key)),[selected,byKey,taken]);
+ const activeIndex=activeKey!==null&&indexOf.has(activeKey)?indexOf.get(activeKey) as number:-1;
+ const optId=(i:number)=>`${uid}-o${i}`;
+ useEffect(()=>{search.current?.focus();},[]);
+ useEffect(()=>{if(activeIndex>=0)document.getElementById(optId(activeIndex))?.scrollIntoView({block:'nearest'});},[activeIndex]);// eslint-disable-line react-hooks/exhaustive-deps
+ const toggle=useCallback((key:string)=>setSelected(prev=>{const next=new Set(prev);if(next.has(key))next.delete(key);else next.add(key);return next;}),[]);
+ const onPick=useCallback((key:string)=>{list.current?.focus();setActiveKey(key);toggle(key);},[toggle]);
+ const go=(i:number)=>{if(!visible.length)return;setActiveKey(visible[Math.max(0,Math.min(visible.length-1,i))].key);};
+ function onListKey(e:ReactKeyboardEvent<HTMLDivElement>){
+  const at=activeIndex<0?-1:activeIndex;
+  if(e.key==='ArrowDown'){e.preventDefault();go(at+1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();if(at<=0){search.current?.focus();setActiveKey(null);}else go(at-1);}
+  else if(e.key==='Home'){e.preventDefault();go(0);}
+  else if(e.key==='End'){e.preventDefault();go(visible.length-1);}
+  else if(e.key===' '||e.key==='Enter'){e.preventDefault();const k=at>=0?visible[at]?.key:visible[0]?.key;if(k){setActiveKey(k);toggle(k);}}
+ }
+ function onSearchKey(e:ReactKeyboardEvent<HTMLInputElement>){
+  if(e.key==='Escape'&&query){e.preventDefault();e.stopPropagation();setQuery('');}
+  else if(e.key==='ArrowDown'||e.key==='Enter'){e.preventDefault();if(visible.length){list.current?.focus();go(activeIndex<0?0:activeIndex);}}
+ }
+ /** The list subtree is rebuilt only when the results, the active row or the selection change, not on every keystroke. */
+ const listBody=useMemo(()=>groups.map(g=>{const first=indexOf.get(g.rows[0].key),gid=`${uid}-g-${first}`;return <div key={g.id+':'+first} role="group" aria-labelledby={gid} className="aut-pick__group">
+   <div id={gid} className="aut-pick__group-head" title={g.label!==g.accountId?`Conta ${g.accountId}`:undefined}><span className="ds-truncate">{g.label}</span><span className="aut-pick__count">{g.rows.length.toLocaleString('pt-BR')}</span></div>
+   {g.rows.map((e:any)=>{const i=indexOf.get(e.key) as number;return <PickerOption key={e.key} entry={e} optionId={`${uid}-o${i}`} active={i===activeIndex} selected={selected.has(e.key)} currency={currency} onPick={onPick}/>;})}
+  </div>;}),[groups,indexOf,activeIndex,selected,currency,onPick,uid]);
+ const chip=(k:keyof PickerChips,label:string,n:number)=><button type="button" className="ds-chip ds-chip--neutral ds-chip--outlined aut-pick__chip" aria-pressed={chips[k]} onClick={()=>setChips(c=>({...c,[k]:!c[k]}))}>{chips[k]&&<Check aria-hidden="true"/>}{label}<span className="aut-pick__count">{n.toLocaleString('pt-BR')}</span></button>;
+ const filtered=chips.active||chips.paused||chips.inactive||chips.withSpend,rest=result.rows.length-visible.length,n=chosen.length;
+ const time=readAt?new Date(readAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):null;
+ const countText=result.rows.length?plural(result.rows.length,'campanha','campanhas'):'Nenhuma campanha encontrada';
+ /** Screen readers hear only the short count, once typing settles; the reading time and the scope note stay plain text. */
+ const [announce,setAnnounce]=useState('');
+ useEffect(()=>{const t=setTimeout(()=>setAnnounce(countText),600);return()=>clearTimeout(t);},[countText]);
+ return <div className="ds-card ds-card--flush aut-pick" id={id} role="group" aria-label="Escolher campanhas para exceção" onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();onClose();}}}>
+  <div className="aut-pick__top">
+   <div className="aut-pick__search" role="search">
+    <Search size={14} aria-hidden="true" className="aut-pick__search-icon"/>
+    <input ref={search} type="search" className="ds-field ds-field--sm" placeholder="Buscar por nome ou ID" aria-label="Buscar campanha por nome ou ID" aria-controls={result.rows.length?`${uid}-list`:undefined} autoComplete="off" spellCheck={false} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={onSearchKey}/>
+    {query&&<button type="button" className="ds-btn ds-btn--icon ds-btn--sm aut-pick__clear" aria-label="Limpar busca" title="Limpar busca" onClick={()=>{setQuery('');search.current?.focus();}}><X size={14} aria-hidden="true"/></button>}
+   </div>
+   {(hasStatus||hasSpend)&&<div className="aut-pick__chips" role="group" aria-label="Filtros">
+    {hasStatus&&chip('active','Ativas',result.counts.active)}
+    {hasStatus&&chip('paused','Pausadas',result.counts.paused)}
+    {hasInactive&&chip('inactive','Inativas',result.counts.inactive)}
+    {hasSpend&&chip('withSpend','Com gasto hoje',result.counts.withSpend)}
+   </div>}
+   <p className="aut-pick__meta"><span>{countText}</span>{rest>0?` · mostrando ${visible.length.toLocaleString('pt-BR')}`:''}{time?` · leitura de hoje às ${time}`:''}{result.outOfScope?<span className="aut-pick__scope" title="O Bunk não dá ordens de vendas em campanhas de aquecimento ou engajamento, em nenhum nível."> · {result.outOfScope.toLocaleString('pt-BR')} fora do escopo (aquecimento/engajamento)</span>:null}</p>
+   <span className="ds-sr-only" role="status">{announce}</span>
+  </div>
+  {!result.rows.length?<div className="aut-pick__empty">
+    {!result.available?(result.takenSales?<p className="ds-empty ds-empty--clear">Todas as campanhas de vendas da leitura de hoje já são exceções deste projeto.</p>
+     :<p className="ds-empty">Nenhuma campanha de vendas na leitura de hoje (só aquecimento/engajamento, que ficam sempre de fora).</p>)
+    :query.trim()?<p className="ds-empty">Nenhuma campanha encontrada para “{query.trim()}”{filtered?' com os filtros marcados':''}. Confira a grafia ou busque pelo ID.</p>
+    :<p className="ds-empty">Nenhuma campanha com os filtros marcados.</p>}
+    {!!result.available&&<div className="aut-pick__empty-actions">{query&&<button type="button" className="ds-btn ds-btn--sm" onClick={()=>{setQuery('');search.current?.focus();}}>Limpar busca</button>}{filtered&&<button type="button" className="ds-btn ds-btn--sm" onClick={()=>setChips(()=>NO_CHIPS)}>Tirar filtros</button>}</div>}
+   </div>:
+   <div ref={list} id={`${uid}-list`} className="aut-pick__list" role="listbox" aria-multiselectable="true" aria-label="Campanhas da leitura de hoje" tabIndex={0} aria-activedescendant={activeIndex>=0?optId(activeIndex):undefined} onKeyDown={onListKey} onFocus={()=>{if(activeIndex<0)go(0);}}>
+    {listBody}
+   </div>}
+  {rest>0&&<button type="button" className="ds-btn ds-btn--ghost ds-btn--sm aut-pick__more" onClick={()=>setPageLimit(l=>l+pickerPageSize)}>Mostrar mais {Math.min(pickerPageSize,rest).toLocaleString('pt-BR')} <span className="aut-pick__count">de {rest.toLocaleString('pt-BR')} restantes</span></button>}
+  <div className="aut-pick__foot">
+   <p className="aut-pick__sel" aria-live="polite">{n?plural(n,'selecionada','selecionadas'):'Marque uma ou mais campanhas.'}{n?<> <button type="button" className="aut-pick__link" onClick={()=>setSelected(new Set())}>Limpar seleção</button></>:null}</p>
+   <div className="aut-pick__foot-actions">
+    <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm" onClick={onClose}>Cancelar</button>
+    <button type="button" className="ds-btn ds-btn--primary ds-btn--sm" disabled={disabled||!n} title={!n?'Marque ao menos uma campanha.':undefined} onClick={()=>onAdd(chosen)}>{n===1?'Adicionar 1 (começa Desligado)':n?`Adicionar ${n.toLocaleString('pt-BR')} (começam Desligado)`:'Adicionar (começam Desligado)'}</button>
+   </div>
+  </div>
+ </div>;
+});
