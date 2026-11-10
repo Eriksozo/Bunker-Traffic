@@ -68,3 +68,16 @@ test('No display reader of the executor reaches the fields a lean read leaves ou
  const exec=fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8');
  assert.doesNotMatch(exec,omitted,'the executor itself never reads them');
 });
+
+// The analysis unit keeps only {snapshots, collaborationRounds, collaborationMessages} of its read during the model wait
+// (lib/cloud-engine.mjs); the functions that check the answer against it must read nothing else from the state.
+test('The answer checks read only the part of the read kept during the model wait',()=>{
+ const body=(file,name)=>{const src=fs.readFileSync(new URL('../lib/'+file,import.meta.url),'utf8'),i=src.indexOf('export function '+name+'(');assert.ok(i>=0,name);const next=src.indexOf('\nexport ',i+1);const fn=src.slice(i,next<0?undefined:next);return fn.slice(fn.indexOf('{'));};
+ const allowed=new Set(['snapshots','collaborationRounds','collaborationMessages']);
+ for(const [file,name] of [['campaign-learning-coverage.mjs','normalizeCampaignReadings'],['agent-development.mjs','normalizeAgentReflection'],['cloud-analysis.mjs','cloudEvidence']]){
+  const b=body(file,name),used=[...b.matchAll(/\bstate\??\.([A-Za-z]+)/g)].map(m=>m[1]);
+  assert.ok(used.length,name+' reads the state');
+  assert.deepEqual(used.filter(f=>!allowed.has(f)),[],name+' reads only the kept fields');
+  assert.doesNotMatch(b,/[A-Za-z_]\((?:[^()]*,)?\s*state\s*[,)]/,name+' passes the state to no other function');
+ }
+});

@@ -66,9 +66,14 @@ test('The engine releases its first copy before rereading the central (never two
  assert.match(src,/phase='reservation';s=null;let collectionState=\(await read\(\)\)\.state;/);
  assert.match(src,/phase='persist';collectionState=null;draft=null;\n\s*const committed=await write\(/,'the collection copies are released before its commit');
  assert.match(src,/s=null;const claim=await write\(st=>claimCollaboration\(st,claimArgs,now\(\)\)\);let latest=\(await read\(\)\)\.state;/);
- assert.match(src,/\.map\(m=>m\.id\);latest=null;\n/,'the analysis copy is released before the unit writes');
- const after=src.slice(src.indexOf('latest=null;'),src.indexOf("if(work.kind==='ownerQuestion'")>src.indexOf('latest=null;')?src.indexOf("if(work.kind==='ownerQuestion'"):src.length);
- assert.ok(!/\blatest\b/.test(after.slice('latest=null;'.length,after.indexOf('\n  }\n')>0?after.indexOf('\n  }\n'):undefined)),'no use of the released copy after it is dropped');
+ // During the model wait only the readings, rounds and messages of the same read are kept (what the answer is checked
+ // against); the full copy is released before runCloudAnalyst and is never read again in this unit.
+ assert.match(src,/kept=\{snapshots:latest\.snapshots,collaborationRounds:latest\.collaborationRounds,collaborationMessages:latest\.collaborationMessages\};latest=null;\n\s*out=await runCloudAnalyst\(/);
+ const dropped=src.indexOf('latest=null;\n'),unitEnd=src.indexOf('const completed=await write(',dropped);
+ assert.ok(dropped>0&&unitEnd>dropped);
+ assert.doesNotMatch(src.slice(dropped+'latest=null;'.length,unitEnd),/\blatest\b/,'the full copy is not read after the model call');
+ assert.match(src,/\.map\(m=>m\.id\);kept=null;\n/,'the kept part is released before the unit writes');
+ for(const fn of ['normalizeCampaignReadings','normalizeAgentReflection','cloudEvidence'])assert.match(src,new RegExp(fn+'\\([^;]*kept'),fn+' checks against the kept part');
  const exec=fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8');
  assert.match(exec,/viewIdleMs=20000/);
 });
