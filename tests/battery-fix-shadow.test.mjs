@@ -34,7 +34,8 @@ test('#0/#40 after midnight the previous day cut is not "today": no rule runs on
 
 test('#1 a pause in the same pulse wins: the increase on that object is blocked with a reason',()=>{
  const now=Date.parse('2026-11-09T03:25:00Z'),n='08/11 - [CBO] - [PRE] GRANDE',x={dailyBudget:1500,budgetCurrency:'USD',budgetRate:5};
- const y=row('g1',n,m(2000,4200,6,6,20),x),s=analysis('2026-11-09',now-300000,{today:[row('g1',n,m(130,0,0,0,0),x)],y:[y],d3:[y],d7:[y]});
+ // Yesterday's profit (R$100) does not cover today's R$130 without a sale, so the partial-day hold (lib/partial-day.mjs) stays out.
+ const y=row('g1',n,m(300,400,1,1,20),x),s=analysis('2026-11-09',now-300000,{today:[row('g1',n,m(130,0,0,0,0),x)],y:[y],d3:[y],d7:[y]});
  const d=evaluateShadow(s,{project:'p',params:{budgetCap:20000},now,accuracy:proven}).decisions;
  const pause=d.find(e=>e.rule==='test-no-sale'),inc=d.find(e=>e.rule==='night-increase');
  assert.equal(pause.wouldExecute,true);assert.equal(inc.wouldExecute,false);

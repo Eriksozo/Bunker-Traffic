@@ -128,6 +128,28 @@ Não muda limiar, não cria proposta no sistema, não aprova e não executa. Li�
   - bandits e Thompson para alocar orçamento, porque a aprovação humana e o retorno atrasado quebram as premissas;
   - MMM (Robyn, Meridian), que pede anos de dados semanais.
 
+## Dia parcial depois de um ontem lucrativo (10/11/2026)
+
+- **Origem:** o dono passou o contexto de um gestor: ontem deu lucro, hoje gastou só meio ticket, não faz sentido mexer (paráfrase, sem valores).
+- **Regra** (`lib/partial-day.mjs`): a campanha fica segurada quando valem as três condições:
+  - fechou ontem com lucro conhecido (resultado > 0, nunca N/D);
+  - hoje gastou menos de 1 ticket;
+  - o gasto de hoje ainda cabe no lucro de ontem.
+- **Efeito:** corte e pausa baseados em hoje ficam segurados. Nesse ponto a falta de venda de hoje ainda não é evidência.
+- **Ticket:**
+  - o ticket front do projeto na política privada (em BRL);
+  - sem ele, o custo por venda front de 7 dias da própria campanha;
+  - sem nenhum dos dois, N/D, e nada é segurado.
+- **Bunk (propostas):**
+  - cada campanha do pacote leva `partialDay`;
+  - sugestão de reduzir ou pausar em campanha segurada cai com o código `partial_day_after_profit`;
+  - aumentos e manter passam.
+- **Sombra:** `test-no-sale`, `new-sale-loss` e `bad-day-reduce` continuam registradas e pontuadas, mas recebem um bloqueio com o motivo e não executam no Automático.
+- **Decisão de 08/11 preservada:** teste de 2º dia que vendeu ontem com lucro pequeno e hoje já gastou mais que esse lucro sem vender continua indo ao teto das primeiras 24h.
+- **Fora da regra:**
+  - teste de 1º dia não tem ontem, então o protocolo de lançamento mantém a revisão prioritária desde o primeiro dia;
+  - a regra só segura, nunca executa nada.
+
 ## Módulo de autonomia (09/11/2026)
 
 Pedido do proprietário: "quero poder ativar quando for pra ele assumir o controle das campanhas ... Vou setar o que ele pode fazer". Escolhas dele: quatro níveis, projeto com exceções por campanha, as quatro ações como permissão e o placar da Sombra respeitado.

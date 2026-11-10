@@ -983,3 +983,25 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Notch: seção "Resultado por dia" no detalhe da campanha (`CampaignDaysView`), com a mesma tabela da aba Dias (`DayTable`). Consulta ao abrir o detalhe e repete até 3 vezes enquanto a leitura está pendente.
 - **Validação:** suíte completa (1427), typecheck, build, self-test nativo. Em produção, depois das publicações de 14:54:49 e 14:57:06 UTC: `/health` 200; a rota responde 401 "Credencial do app não autorizada" com credencial errada, 401 sem credencial e 401 em POST.
 - **Conferido pelo dono** (registro escrito às 2026-11-10 17:05:56 UTC por `date -u`): perguntado se a tabela por dia aparece ao abrir uma campanha no notch, respondeu "Sim, aparece". A conferência foi feita por ele na tela; daqui não há acesso à credencial do app (Chaves) nem à tela. Sem pendências deste item.
+
+## Otimizações: dia parcial depois de um ontem lucrativo (registro escrito às 2026-11-10 17:15:25 UTC por `date -u`)
+
+- **Pedido do dono:** usar nas otimizações o contexto de um gestor: ontem deu lucro, hoje gastou só meio ticket, não faz sentido mexer (paráfrase, sem valores).
+- **Regra** (`lib/partial-day.mjs`; descrição em `docs/autonomy-policy.md`): corte e pausa baseados em hoje ficam segurados quando valem as três condições:
+  - fechou ontem com lucro conhecido;
+  - hoje gastou menos de 1 ticket;
+  - esse gasto ainda cabe no lucro de ontem.
+- **Ticket:**
+  - `ticketFront` da política privada, que o executor passa ao motor pela `ops.ticketFront` sem copiar o valor para fora;
+  - sem ele, o custo por venda front de 7 dias da campanha;
+  - sem nenhum dos dois, N/D, e nada é segurado.
+- **Onde atua:**
+  - pacote do Bunk (`partialDay` por campanha, mais a instrução);
+  - filtro das sugestões (`partial_day_after_profit`);
+  - bloqueio nas regras de corte e pausa da Sombra, que não executam no Automático.
+- **Primeira versão e ajuste:**
+  - a primeira versão, sem a condição do lucro cobrindo o gasto, quebrou 3 testes da decisão de 08/11: teste de 2º dia com lucro pequeno ontem e gasto maior hoje;
+  - a condição foi adicionada e a decisão de 08/11 segue igual;
+  - o teste de precedência pausa/aumento (`tests/battery-fix-shadow.test.mjs`) passou a usar um ontem cujo lucro não cobre o gasto de hoje, mantendo o que ele verifica.
+- **Validação:** `tests/partial-day.test.mjs` (4), suíte completa (1432), typecheck e build.
+
