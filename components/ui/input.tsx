@@ -8,9 +8,10 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30",
-        "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        "aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
+        /* Notch: .ds-field (fill translúcido, fio que acende no violeta ao focar, coral quando inválido). */
+        "h-(--ds-size-control) w-full min-w-0 px-2.5 py-1.5 font-(family-name:--ds-font-text) rounded-(--ds-radius-s) border border-(--ds-stroke) bg-(--ds-fill) text-(length:--ds-font-body) text-(--ds-ink) shadow-none transition-[border-color,background-color] duration-(--ds-dur-hover) ease-(--ds-ease-out) outline-none placeholder:text-(--ds-ink-muted) hover:not-disabled:not-focus:border-(--ds-stroke-strong) disabled:cursor-not-allowed disabled:opacity-(--ds-opacity-disabled) selection:bg-(--ds-accent-selection) selection:text-(--ds-ink) file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-(length:--ds-font-caption) file:font-semibold file:text-(--ds-ink)",
+        "focus:border-[color-mix(in_srgb,var(--ds-accent)_80%,transparent)] focus:bg-(--ds-fill-hover) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-solid focus-visible:outline-[color-mix(in_srgb,var(--ds-accent)_45%,transparent)]",
+        "aria-invalid:border-(--ds-bad)",
         className
       )}
       {...props}

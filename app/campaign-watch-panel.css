@@ -1,1 +1,38 @@
-.campaign-watch{margin-block:16px}.watch-heading{display:flex;justify-content:space-between;align-items:start;gap:20px}.watch-heading .eyebrow{display:flex;align-items:center;gap:6px}.watch-heading h3{margin:8px 0}.watch-heading p{margin:5px 0}.watch-counts{display:flex;flex-wrap:wrap;gap:10px 24px;margin-top:16px;font-size:12px;color:var(--muted-foreground,#b0a7bf)}.watch-counts strong{color:var(--foreground,#eee8f5);font-variant-numeric:tabular-nums;margin-right:4px}.watch-list{display:grid;gap:8px;margin-top:14px}.watch-item{display:flex;align-items:center;gap:16px;border:1px solid var(--border,#393045);border-radius:12px;padding:14px}.watch-item>div{min-width:0;flex:1}.watch-item strong,.watch-item span,.watch-item small{display:block;overflow-wrap:anywhere}.watch-item strong{font-size:13px;color:#c7b3f6;margin-bottom:5px}.watch-item span{font-size:13px;line-height:1.5}.watch-item small,.watch-item p{font-size:12px;line-height:1.6;color:var(--muted-foreground,#b0a7bf)}.watch-item p{margin:6px 0 0}.watch-source strong,.watch-source-clock strong,.watch-coverage strong,.watch-loss strong{color:#e5b854}@media(max-width:640px){.watch-heading{flex-direction:column;gap:10px}.watch-counts{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
+/* Campanhas · acompanhamento proativo. Só tokens do notch (app/notch-ds.css). */
+body .app .campaign-watch{margin-block:var(--ds-space-l)}
+body .app .campaign-watch .watch-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--ds-space-xl)}
+body .app .campaign-watch .watch-heading-copy{min-width:0}
+body .app .campaign-watch .watch-eyebrow.ds-eyebrow:not(#_){display:flex;align-items:center;gap:var(--ds-space-xs)}
+body .app .campaign-watch .watch-eyebrow svg{flex-shrink:0;color:var(--ds-ink-muted)}
+body .app .campaign-watch .watch-heading h3{display:flex;align-items:center;gap:var(--ds-space-s);margin:var(--ds-space-xxs) 0 var(--ds-space-xs)}
+body .app .campaign-watch .watch-heading h3 .ds-glyph{--ds-glyph-size:18px}
+body .app .campaign-watch .watch-toggle{flex-shrink:0}
+body .app .campaign-watch [data-slot=button].ds-btn:not(#_){height:auto}
+body .app .campaign-watch [data-slot=button].ds-btn--icon:not(#_){height:var(--ds-btn-h,var(--ds-size-icon-button))}
+body .app .campaign-watch .watch-chevron{transition:transform var(--ds-dur-select) var(--ds-ease-firm)}
+body .app .campaign-watch .watch-toggle[aria-expanded=true] .watch-chevron{transform:rotate(180deg)}
+
+/* Contadores: tiles com número arredondado tabular; zero fica quieto. */
+body .app .campaign-watch .watch-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--ds-space-s);margin-top:var(--ds-space-l)}
+body .app .campaign-watch .watch-count{display:flex;flex-direction:column;gap:var(--ds-space-xxs);min-width:0;padding:var(--ds-space-m);border-radius:var(--ds-radius-m);background:var(--ds-fill);font:var(--ds-weight-regular) var(--ds-font-caption)/1.4 var(--ds-font-text);color:var(--ds-ink-soft)}
+body .app .campaign-watch .watch-count strong{font:var(--ds-weight-semibold) var(--ds-font-stat)/1.15 var(--ds-font-rounded);font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--ds-ink)}
+body .app .campaign-watch .watch-count.is-zero{color:var(--ds-ink-muted)}
+body .app .campaign-watch .watch-count.is-zero strong{color:var(--ds-ink-muted)}
+
+/* Detalhes e lista de pontos. */
+body .app .campaign-watch .watch-details{display:flex;flex-direction:column;gap:var(--ds-space-s);margin-top:var(--ds-space-l);padding-top:var(--ds-space-l);border-top:var(--ds-size-hairline) solid var(--ds-stroke)}
+body .app .campaign-watch .watch-details>p{max-width:110ch}
+body .app .campaign-watch .watch-list{display:grid;gap:var(--ds-space-s);margin:var(--ds-space-xs) 0}
+body .app .campaign-watch .watch-item{display:flex;align-items:flex-start;gap:var(--ds-space-m);padding:var(--ds-space-m) var(--ds-space-l);border:var(--ds-size-hairline) solid transparent;border-radius:var(--ds-radius-m);background:var(--ds-fill);transition:background-color var(--ds-dur-hover) var(--ds-ease-out),border-color var(--ds-dur-hover) var(--ds-ease-out)}
+body .app .campaign-watch .watch-item:hover{background:var(--ds-fill-hover);border-color:var(--ds-stroke)}
+body .app .campaign-watch .watch-item-glyph{--ds-glyph-size:16px;margin-top:2px}
+body .app .campaign-watch .watch-item>div{min-width:0;flex:1}
+body .app .campaign-watch .watch-item>div>strong,body .app .campaign-watch .watch-item>div>span,body .app .campaign-watch .watch-item>div>small{display:block;overflow-wrap:anywhere}
+body .app .campaign-watch .watch-item>div>strong{font:var(--ds-weight-semibold) var(--ds-font-title)/var(--ds-leading-tight) var(--ds-font-text);color:var(--ds-ink);margin-bottom:var(--ds-space-xs)}
+body .app .campaign-watch .watch-item>div>span{font:var(--ds-weight-regular) var(--ds-font-body)/1.45 var(--ds-font-text);color:var(--ds-ink-soft)}
+body .app .campaign-watch .watch-item>div>small{margin-top:var(--ds-space-xxs);font-size:var(--ds-font-caption);line-height:1.5;color:var(--ds-ink-muted)}
+body .app .campaign-watch .watch-item>div>p{margin:var(--ds-space-s) 0 0;font-size:var(--ds-font-caption);line-height:1.55;color:var(--ds-ink-soft)}
+body .app .campaign-watch .watch-open{flex-shrink:0;align-self:center}
+body .app .campaign-watch .watch-source,body .app .campaign-watch .watch-source-clock,body .app .campaign-watch .watch-coverage,body .app .campaign-watch .watch-loss{border-color:var(--ds-warn-rim);background:var(--ds-warn-wash)}
+
+@media(max-width:640px){body .app .campaign-watch{--ds-card-pad:var(--ds-space-l)}body .app .campaign-watch .watch-heading{flex-direction:column;gap:var(--ds-space-m)}body .app .campaign-watch .watch-counts{grid-template-columns:1fr 1fr}body .app .campaign-watch .watch-item{padding:var(--ds-space-m)}body .app .campaign-watch{--ds-btn-h:36px}}

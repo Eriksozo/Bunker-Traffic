@@ -1,0 +1,712 @@
+/* Bunker · design system do notch na web.
+   Fonte única: mac/BunkerNotch/Sources/BunkerNotch/DesignSystem.swift (Palette → Token → DS → componentes).
+   Guia: docs/web-design-system.md. Três camadas, como no Mac:
+     1. Paleta crua (--ds-raw-*), cada cor com gêmeo de Aumentar contraste.
+     2. Tokens semânticos (--ds-*): superfícies, tinta (ink), traço, tons, tipo, espaço, raio, movimento.
+     3. Componentes (.ds-*), feitos só de tokens.
+   Ponte legada: as variáveis antigas (malva-theme.css, uix.css, globals.css, shadcn) apontam para os tokens,
+   então todas as telas mudam juntas. A ponte usa especificidade (0,2,0), maior que a do tema antigo (0,1,0),
+   e por isso vence sem depender da ordem de importação.
+   Componentes usam a trava `:not(#_)` (especificidade 1,1,0) para vencer as regras antigas `body .app …`
+   em qualquer ordem de carga. Para ajustar um componente numa seção, use as variáveis de gancho
+   documentadas (--ds-card-pad, --ds-btn-h…) ou repita a trava no seletor da seção. */
+
+/* ───────────────────────── 1 · Paleta crua ───────────────────────── */
+:root {
+  --ds-raw-canvas: #0a0a0c;      /* quase preto opaco (o notch usa #000; na web suaviza o halo do texto) */
+  --ds-raw-canvas-hc: #000000;
+  --ds-raw-violet: #b89ce8;      /* 0.72 0.61 0.91 */
+  --ds-raw-violet-hc: #d1baff;   /* 0.82 0.73 1.00 */
+  --ds-raw-mint: #3dcc9e;        /* 0.24 0.80 0.62 */
+  --ds-raw-mint-hc: #66ebbd;     /* 0.40 0.92 0.74 */
+  --ds-raw-coral: #f2737a;       /* 0.95 0.45 0.48 */
+  --ds-raw-coral-hc: #ff999e;    /* 1.00 0.60 0.62 */
+  --ds-raw-amber: #f5bd66;       /* 0.96 0.74 0.40 */
+  --ds-raw-amber-hc: #ffd68a;    /* 1.00 0.84 0.54 */
+  --ds-raw-white: #ffffff;
+  --ds-raw-black: #000000;
+}
+
+/* ───────────────────────── 2 · Tokens semânticos ───────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* Superfícies opacas (branco sobre o canvas), uma por nível de ênfase. */
+  --ds-canvas: var(--ds-raw-canvas);
+  --ds-surface-sunken: color-mix(in srgb, var(--ds-raw-white) 3%, var(--ds-canvas));
+  --ds-surface: color-mix(in srgb, var(--ds-raw-white) 5.5%, var(--ds-canvas));
+  --ds-surface-overlay: color-mix(in srgb, var(--ds-raw-white) 7.5%, var(--ds-canvas));
+  --ds-surface-hover: color-mix(in srgb, var(--ds-raw-white) 9%, var(--ds-canvas));
+  --ds-surface-selected: color-mix(in srgb, var(--ds-raw-white) 12%, var(--ds-canvas));
+
+  /* Preenchimentos translúcidos: somam sobre o que estiver embaixo (tile no card, botão, campo). */
+  --ds-fill: rgb(255 255 255 / .055);
+  --ds-fill-hover: rgb(255 255 255 / .09);
+  --ds-fill-selected: rgb(255 255 255 / .12);
+
+  /* Traços e luz. */
+  --ds-stroke: rgb(255 255 255 / .08);
+  --ds-stroke-strong: rgb(255 255 255 / .16);
+  --ds-highlight: rgb(255 255 255 / .07);   /* luz na borda de cima do card */
+  --ds-rim: rgb(255 255 255 / .08);         /* aro sutil de superfícies flutuantes */
+
+  /* Tinta (texto): principal → secundária → terciária. */
+  --ds-ink: rgb(255 255 255 / .94);
+  --ds-ink-soft: rgb(255 255 255 / .72);
+  --ds-ink-muted: rgb(255 255 255 / .56);
+  --ds-ink-pill: rgb(255 255 255 / .64);    /* texto do pill neutro */
+  --ds-ink-faint: rgb(255 255 255 / .30);   /* só decorativo: divisórias, chevron em repouso */
+  --ds-on-accent: rgb(0 0 0 / .86);         /* texto sobre o violeta */
+
+  /* Tons. Violeta = identidade e ação principal; menta = bom; coral = ruim; âmbar = atenção. */
+  --ds-accent: var(--ds-raw-violet);
+  --ds-good: var(--ds-raw-mint);
+  --ds-bad: var(--ds-raw-coral);
+  --ds-warn: var(--ds-raw-amber);
+  --ds-neutral: var(--ds-ink-muted);
+  --ds-accent-hover: color-mix(in srgb, var(--ds-accent), var(--ds-raw-white) 12%);
+
+  /* Uma única regra de tinta por tom: fill (pill, chip, badge), wash (área grande), rim (fio). */
+  --ds-tint-fill: 15%;
+  --ds-tint-wash: 8%;
+  --ds-tint-rim: 30%;
+  --ds-tint-hover: 20%;   /* chip, botão de perigo e ícone ativo ao passar o mouse */
+  --ds-accent-fill: color-mix(in srgb, var(--ds-accent) var(--ds-tint-fill), transparent);
+  --ds-good-fill: color-mix(in srgb, var(--ds-good) var(--ds-tint-fill), transparent);
+  --ds-bad-fill: color-mix(in srgb, var(--ds-bad) var(--ds-tint-fill), transparent);
+  --ds-warn-fill: color-mix(in srgb, var(--ds-warn) var(--ds-tint-fill), transparent);
+  --ds-neutral-fill: color-mix(in srgb, var(--ds-ink-muted) 12%, transparent);
+  --ds-tag-fill: rgb(255 255 255 / .07);
+  --ds-accent-wash: color-mix(in srgb, var(--ds-accent) var(--ds-tint-wash), transparent);
+  --ds-good-wash: color-mix(in srgb, var(--ds-good) var(--ds-tint-wash), transparent);
+  --ds-bad-wash: color-mix(in srgb, var(--ds-bad) var(--ds-tint-wash), transparent);
+  --ds-warn-wash: color-mix(in srgb, var(--ds-warn) var(--ds-tint-wash), transparent);
+  --ds-accent-rim: color-mix(in srgb, var(--ds-accent) var(--ds-tint-rim), transparent);
+  --ds-good-rim: color-mix(in srgb, var(--ds-good) var(--ds-tint-rim), transparent);
+  --ds-bad-rim: color-mix(in srgb, var(--ds-bad) var(--ds-tint-rim), transparent);
+  --ds-warn-rim: color-mix(in srgb, var(--ds-warn) var(--ds-tint-rim), transparent);
+  --ds-accent-selection: color-mix(in srgb, var(--ds-accent) 35%, transparent);
+
+  /* Foco, véu e rolagem. */
+  --ds-focus: var(--ds-accent);
+  --ds-focus-width: 2px;
+  --ds-focus-offset: 2px;
+  --ds-scrim: rgb(0 0 0 / .62);
+  --ds-scrim-blur: 6px;
+  --ds-scrollbar: rgb(255 255 255 / .16);
+  --ds-scrollbar-hover: rgb(255 255 255 / .30);
+
+  /* Tipografia: fonte do sistema como no notch; números arredondados com dígitos de largura fixa. */
+  --ds-font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", "Instrument Sans Variable", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ds-font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", "Instrument Sans Variable", sans-serif;
+  --ds-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono Variable", Consolas, monospace;
+  /* Escala: as razões do notch (10 · 10,5 · 12 · 12,5 · 13 · 20 pt) com corpo de 13,5 px e piso de 11 px. */
+  --ds-font-micro: 11px;      /* notch micro 10 */
+  --ds-font-pill: 11px;       /* notch pill 10 semibold */
+  --ds-font-caption: 12px;    /* notch caption/eyebrow 10,5 */
+  --ds-font-eyebrow: 12px;
+  --ds-font-body: 13.5px;     /* notch body 12 */
+  --ds-font-number: 14px;     /* notch number 12,5 */
+  --ds-font-title: 14.5px;    /* notch title 13 */
+  --ds-font-headline: 18px;   /* só web: título de seção */
+  --ds-font-stat: 22px;       /* notch stat 20 */
+  --ds-font-display: 26px;    /* só web: título da página */
+  --ds-weight-regular: 400;
+  --ds-weight-medium: 500;
+  --ds-weight-semibold: 600;
+  --ds-weight-bold: 700;
+  --ds-weight-heavy: 800;
+  --ds-leading-tight: 1.25;
+  --ds-leading-body: 1.5;
+  --ds-leading-relaxed: 1.65;
+  --ds-tracking-eyebrow: .01em;
+
+  /* Espaço: grade de 4 px (2 só para fios). */
+  --ds-space-xxs: 2px;
+  --ds-space-xs: 4px;
+  --ds-space-s: 8px;
+  --ds-space-m: 12px;
+  --ds-space-l: 16px;
+  --ds-space-xl: 20px;
+  --ds-space-xxl: 24px;
+  --ds-space-3xl: 32px;
+  --ds-space-4xl: 40px;
+  --ds-space-5xl: 48px;
+  /* Padding por família de controle: o mesmo tipo de controle tem o mesmo tamanho em todo lugar. */
+  --ds-inset-pill: 2px 8px;
+  --ds-inset-chip: 4px 10px;
+  --ds-inset-control: 6px 14px;
+  --ds-inset-tab: 6px 12px;
+  --ds-inset-row: 8px 12px;
+  --ds-inset-field: 7px 10px;
+  --ds-inset-card: 16px;
+  --ds-inset-card-lg: 20px;
+
+  /* Raio: contínuo e concêntrico. Raio interno = externo − recuo (mínimo xs). */
+  --ds-radius-bar: 1px;
+  --ds-radius-xs: 4px;
+  --ds-radius-s: 6px;
+  --ds-radius-m: 10px;
+  --ds-radius-l: 14px;
+  --ds-radius-xl: 20px;
+  --ds-radius-pill: 999px;
+
+  /* Tamanhos. Alvo de clique ≥ 24 px; 28 é o padrão; controles de texto com 32. */
+  --ds-size-hit-min: 24px;
+  --ds-size-icon-button: 28px;
+  --ds-size-control-sm: 28px;
+  --ds-size-control: 32px;
+  --ds-size-badge: 28px;
+  --ds-size-dot: 7px;
+  --ds-size-dot-sm: 6px;
+  --ds-size-hairline: 1px;
+  --ds-size-icon-xs: 12px;
+  --ds-size-icon-s: 14px;
+  --ds-size-icon: 16px;
+  --ds-size-icon-l: 18px;
+
+  /* Opacidades de estado. */
+  --ds-opacity-disabled: .45;
+  --ds-opacity-quiet: .55;
+  --ds-opacity-switching: .4;
+  --ds-opacity-resting-hint: .35;
+  --ds-opacity-pressed: .82;
+
+  /* Elevação: card sem sombra, só luz no topo; sombra só no que flutua. */
+  --ds-elevation-card: inset 0 1px 0 0 var(--ds-highlight);
+  --ds-elevation-peek: 0 5px 12px rgb(0 0 0 / .30), inset 0 1px 0 0 var(--ds-highlight);
+  --ds-elevation-overlay: 0 10px 24px rgb(0 0 0 / .50), inset 0 1px 0 0 var(--ds-highlight);
+
+  /* Movimento: curto (< 2 s), abrir vivo, fechar firme. */
+  --ds-dur-hover: 120ms;
+  --ds-dur-quick: 150ms;
+  --ds-dur-press: 220ms;
+  --ds-dur-select: 320ms;
+  --ds-dur-close: 360ms;
+  --ds-dur-open: 420ms;
+  --ds-dur-number: 450ms;
+  --ds-dur-breathe: 900ms;
+  --ds-dur-pulse: 1600ms;
+  --ds-ease-out: cubic-bezier(0, 0, .58, 1);
+  --ds-ease-in-out: cubic-bezier(.42, 0, .58, 1);
+  --ds-ease-spring: cubic-bezier(.34, 1.2, .64, 1);   /* mola 0,42 / 0,8: abre com um leve passo além */
+  --ds-ease-firm: cubic-bezier(.22, 1, .36, 1);       /* mola sem rebote: fechar e selecionar */
+  --ds-ease-press: cubic-bezier(.34, 1.4, .64, 1);    /* mola 0,22 / 0,7 do pressionar */
+  --ds-press-scale: .97;
+  --ds-row-press-scale: .99;
+  --ds-chevron-shift: 2px;
+
+  /* Glifos: o estado nunca vai só pela cor (✓ bom · ⓘ info · ⛔ erro · ⚠ atenção · ✦ destaque · relógio espera). */
+  --ds-glyph-good: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='white'/%3E%3Cpath d='M7.6 12.4l3 3 5.9-6.3' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/mask%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='10' mask='url(%23m)'/%3E%3C/svg%3E");
+  --ds-glyph-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='white'/%3E%3Cpath d='M12 11v5.6' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='7.6' r='1.45'/%3E%3C/mask%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='10' mask='url(%23m)'/%3E%3C/svg%3E");
+  --ds-glyph-bad: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='white'/%3E%3Cpath d='M12 6.9v6.2' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='16.9' r='1.45'/%3E%3C/mask%3E%3C/defs%3E%3Cpath d='M8.1 2h7.8L22 8.1v7.8L15.9 22H8.1L2 15.9V8.1z' stroke='black' stroke-width='1' stroke-linejoin='round' mask='url(%23m)'/%3E%3C/svg%3E");
+  --ds-glyph-warn: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='white'/%3E%3Cpath d='M12 9.2v4.5' stroke='black' stroke-width='2.3' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='17' r='1.35'/%3E%3C/mask%3E%3C/defs%3E%3Cpath d='M10.27 3.2a2 2 0 0 1 3.46 0l8.06 14a2 2 0 0 1-1.73 3H3.94a2 2 0 0 1-1.73-3z' mask='url(%23m)'/%3E%3C/svg%3E");
+  --ds-glyph-accent: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M11 2.5c.6 4.6 3 7 7.5 7.5-4.5.6-6.9 3-7.5 7.5-.6-4.5-3-6.9-7.5-7.5 4.5-.5 6.9-2.9 7.5-7.5zM18.5 14.5c.3 2.2 1.3 3.2 3.5 3.5-2.2.3-3.2 1.3-3.5 3.5-.3-2.2-1.3-3.2-3.5-3.5 2.2-.3 3.2-1.3 3.5-3.5z'/%3E%3C/svg%3E");
+  --ds-glyph-clear: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M8 12.3l2.8 2.8 5.2-5.6'/%3E%3C/svg%3E");
+  --ds-glyph-info-line: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5.2'/%3E%3Ccircle cx='12' cy='7.8' r='.6' fill='black'/%3E%3C/svg%3E");
+  --ds-glyph-waiting: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5V12l3 2'/%3E%3C/svg%3E");
+  --ds-glyph-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.5 6l6 6-6 6'/%3E%3C/svg%3E");
+}
+
+/* Aumentar contraste: superfícies, tintas, tons e traços mais fortes; sem luz no topo (o traço já faz o papel). */
+@media (prefers-contrast: more) {
+  :root {
+    --ds-canvas: var(--ds-raw-canvas-hc);
+    --ds-surface-sunken: color-mix(in srgb, var(--ds-raw-white) 6%, var(--ds-canvas));
+    --ds-surface: color-mix(in srgb, var(--ds-raw-white) 10%, var(--ds-canvas));
+    --ds-surface-overlay: color-mix(in srgb, var(--ds-raw-white) 12%, var(--ds-canvas));
+    --ds-surface-hover: color-mix(in srgb, var(--ds-raw-white) 15%, var(--ds-canvas));
+    --ds-surface-selected: color-mix(in srgb, var(--ds-raw-white) 19%, var(--ds-canvas));
+    --ds-fill: rgb(255 255 255 / .10);
+    --ds-fill-hover: rgb(255 255 255 / .15);
+    --ds-fill-selected: rgb(255 255 255 / .19);
+    --ds-stroke: rgb(255 255 255 / .24);
+    --ds-stroke-strong: rgb(255 255 255 / .36);
+    --ds-highlight: rgb(255 255 255 / 0);
+    --ds-rim: rgb(255 255 255 / .22);
+    --ds-ink: rgb(255 255 255 / 1);
+    --ds-ink-soft: rgb(255 255 255 / .86);
+    --ds-ink-muted: rgb(255 255 255 / .74);
+    --ds-ink-pill: rgb(255 255 255 / .82);
+    --ds-ink-faint: rgb(255 255 255 / .50);
+    --ds-accent: var(--ds-raw-violet-hc);
+    --ds-good: var(--ds-raw-mint-hc);
+    --ds-bad: var(--ds-raw-coral-hc);
+    --ds-warn: var(--ds-raw-amber-hc);
+    --ds-tint-fill: 22%;
+    --ds-tint-wash: 14%;
+    --ds-tint-rim: 60%;
+    --ds-tint-hover: 30%;
+    --ds-tag-fill: rgb(255 255 255 / .12);
+    --ds-scrollbar: rgb(255 255 255 / .36);
+    --ds-scrollbar-hover: rgb(255 255 255 / .5);
+  }
+}
+
+/* Reduzir movimento: sem molas, sem escala, sem pulso; a seleção vira um fade curto. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-dur-select: 120ms;
+    --ds-dur-open: 180ms;
+    --ds-dur-close: 180ms;
+    --ds-ease-spring: var(--ds-ease-in-out);
+    --ds-ease-firm: var(--ds-ease-in-out);
+    --ds-ease-press: var(--ds-ease-in-out);
+    --ds-press-scale: 1;
+    --ds-row-press-scale: 1;
+    --ds-chevron-shift: 0px;
+  }
+}
+
+/* Reduzir transparência: véus opacos, sem desfoque. */
+@media (prefers-reduced-transparency: reduce) {
+  :root { --ds-scrim: rgb(0 0 0 / .88); --ds-scrim-blur: 0px; }
+  .overlay, .ds-scrim,
+  [data-slot=dialog-overlay], [data-slot=sheet-overlay], [data-slot=alert-dialog-overlay], [data-slot=drawer-overlay] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* ───────────────────────── Ponte legada ─────────────────────────
+   Cada variável antiga aponta para um token. Mesmos elementos que o malva-theme.css usa,
+   com :root na frente (0,2,0 > 0,1,0), para vencer sem depender da ordem de importação. */
+:root:root,
+:root .app,
+:root .workspace-dialog,
+:root .dc-modal,
+:root .uix-mobile-nav,
+:root [data-slot=tooltip-content] {
+  /* malva-theme.css */
+  --canvas: var(--ds-canvas);
+  --surface: var(--ds-surface);
+  --surface-subtle: var(--ds-surface-sunken);
+  --surface-hover: var(--ds-surface-hover);
+  --surface-raised: var(--ds-surface-selected);
+  --line-subtle: var(--ds-stroke);
+  --line-strong: var(--ds-stroke-strong);
+  --ink: var(--ds-ink);
+  --ink-soft: var(--ds-ink-soft);
+  --ink-muted: var(--ds-ink-muted);
+  --brand: var(--ds-accent);
+  --brand-hover: var(--ds-accent-hover);
+  --brand-soft: var(--ds-accent-fill);
+  --selection: var(--ds-accent);
+  --primary: var(--ds-accent);
+  --primary-foreground: var(--ds-on-accent);
+  --success: var(--ds-good);
+  --success-soft: var(--ds-good-wash);
+  --success-line: var(--ds-good-rim);
+  --warning: var(--ds-warn);
+  --warning-soft: var(--ds-warn-wash);
+  --warning-line: var(--ds-warn-rim);
+  --danger: var(--ds-bad);
+  --danger-soft: var(--ds-bad-wash);
+  --danger-line: var(--ds-bad-rim);
+  --info: var(--ds-ink-soft);
+  --radius-control: var(--ds-radius-m);
+  --radius-card: var(--ds-radius-l);
+  --radius-dialog: var(--ds-radius-xl);
+  --shadow-surface: var(--ds-elevation-card);
+  --font-ui: var(--ds-font-text);
+  --font-mono: var(--ds-font-mono);
+  /* shadcn / Tailwind */
+  --background: var(--ds-canvas);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-surface);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-surface-overlay);
+  --popover-foreground: var(--ds-ink);
+  --secondary: var(--ds-surface-selected);
+  --secondary-foreground: var(--ds-ink);
+  --surface-muted: var(--ds-surface-sunken);
+  --muted-foreground: var(--ds-ink-soft);
+  /* As seções usam var(--accent, #b79ce8) esperando o violeta; o hover do shadcn lê --color-accent (globals.css). */
+  --accent: var(--ds-accent);
+  --accent-foreground: var(--ds-ink);
+  --accent-soft: var(--ds-accent-fill);
+  --amber: var(--ds-warn);
+  --border: var(--ds-stroke);
+  --input: var(--ds-stroke-strong);
+  --ring: var(--ds-focus);
+  --destructive: var(--ds-bad);
+  --radius: var(--ds-radius-m);
+  /* globals.css (nomes antigos) */
+  --bg: var(--ds-canvas);
+  --panel: var(--ds-surface);
+  --line: var(--ds-stroke);
+  --text: var(--ds-ink);
+  --muted: var(--ds-ink-soft);
+  --green: var(--ds-good);
+  --teal: var(--ds-good);
+  --orange: var(--ds-warn);
+  --red: var(--ds-bad);
+  /* uix.css e painéis */
+  --uix-surface: var(--ds-surface);
+  --uix-subtle: var(--ds-surface-sunken);
+  --uix-hover: var(--ds-surface-hover);
+  --dc-ink: var(--ds-ink);
+  --dc-muted: var(--ds-ink-soft);
+  --dc-line: var(--ds-stroke);
+  --dc-mint: var(--ds-accent);
+  --dc-gold: var(--ds-warn);
+  --cp-ink: var(--ds-ink);
+  --cp-muted: var(--ds-ink-soft);
+  --cp-line: var(--ds-stroke);
+  --cp-green: var(--ds-accent);
+}
+
+/* Correções da ponte onde o tema antigo escreve cor fixa (texto branco sobre o violeta claro ficaria ilegível). */
+html body .app .button.primary:not(:disabled):hover,
+html .workspace-dialog .button.primary:not(:disabled):hover,
+html .dc-modal .dc-button.dc-primary:not(:disabled):hover,
+html body .app .dc-button.dc-primary:not(:disabled):hover,
+html body .app .cp-button.cp-primary:not(:disabled):hover { color: var(--ds-on-accent); }
+html .uix-skip-link { color: var(--ds-on-accent); }
+/* Rótulos de seção: semibold na fonte do texto, como o eyebrow do notch (antes monoespaçado). */
+html body .app .eyebrow,
+html .workspace-dialog .eyebrow,
+html .dc-modal .dc-eyebrow,
+html body .app .vo-kicker { font-family: var(--ds-font-text); font-weight: var(--ds-weight-semibold); }
+/* Números: arredondados com dígitos de largura fixa. */
+html body .app .kpi strong,
+html body .app .kpi .kpi-value,
+html .workspace-dialog .kpi .kpi-value,
+html body .app .signal strong,
+html body .app .budget-number,
+html body .app .priority-metric,
+html body .app .window-row strong { font-family: var(--ds-font-rounded); font-variant-numeric: tabular-nums; }
+
+/* ───────────────────────── 3 · Componentes ───────────────────────── */
+
+/* Texto */
+.ds-eyebrow:not(#_) { display: block; font: var(--ds-weight-semibold) var(--ds-font-eyebrow)/1.3 var(--ds-font-text); letter-spacing: var(--ds-tracking-eyebrow); color: var(--ds-ink-soft); margin: 0 0 var(--ds-space-xs); }
+.ds-display:not(#_) { font: var(--ds-weight-semibold) var(--ds-font-display)/1.2 var(--ds-font-text); letter-spacing: -.02em; color: var(--ds-ink); margin: 0; text-wrap: balance; }
+.ds-headline:not(#_) { font: var(--ds-weight-semibold) var(--ds-font-headline)/1.3 var(--ds-font-text); letter-spacing: -.01em; color: var(--ds-ink); margin: 0; text-wrap: balance; }
+.ds-title:not(#_) { font: var(--ds-weight-semibold) var(--ds-font-title)/var(--ds-leading-tight) var(--ds-font-text); color: var(--ds-ink); margin: 0; }
+.ds-body:not(#_) { font: var(--ds-weight-regular) var(--ds-font-body)/var(--ds-leading-body) var(--ds-font-text); color: var(--ds-ink-soft); margin: 0; }
+.ds-body-strong:not(#_) { font: var(--ds-weight-semibold) var(--ds-font-body)/var(--ds-leading-body) var(--ds-font-text); color: var(--ds-ink); margin: 0; }
+.ds-caption:not(#_) { font: var(--ds-weight-regular) var(--ds-font-caption)/1.45 var(--ds-font-text); color: var(--ds-ink-muted); margin: 0; }
+.ds-caption-strong:not(#_) { font: var(--ds-weight-semibold) var(--ds-font-caption)/1.45 var(--ds-font-text); color: var(--ds-ink-soft); margin: 0; }
+.ds-micro:not(#_) { font: var(--ds-weight-regular) var(--ds-font-micro)/1.4 var(--ds-font-text); color: var(--ds-ink-muted); margin: 0; }
+.ds-num:not(#_) { font-family: var(--ds-font-rounded); font-size: var(--ds-font-number); font-weight: var(--ds-weight-semibold); font-variant-numeric: tabular-nums; color: var(--ds-ink); white-space: nowrap; }
+.ds-stat:not(#_) { display: block; font: var(--ds-weight-semibold) var(--ds-font-stat)/1.15 var(--ds-font-rounded); font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--ds-ink); white-space: nowrap; }
+.ds-tabular:not(#_) { font-variant-numeric: tabular-nums; }
+.ds-mono:not(#_) { font-family: var(--ds-font-mono); font-size: .92em; }
+.ds-text-ink:not(#_) { color: var(--ds-ink); }
+.ds-text-soft:not(#_) { color: var(--ds-ink-soft); }
+.ds-text-muted:not(#_) { color: var(--ds-ink-muted); }
+.ds-text-good:not(#_) { color: var(--ds-good); }
+.ds-text-bad:not(#_) { color: var(--ds-bad); }
+.ds-text-warn:not(#_) { color: var(--ds-warn); }
+.ds-text-accent:not(#_) { color: var(--ds-accent); }
+.ds-truncate:not(#_) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-sr-only:not(#_) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Número que acabou de mudar: entra suave (troque a `key` do elemento para repetir). */
+.ds-num-enter:not(#_) { animation: ds-number-in var(--ds-dur-number) var(--ds-ease-firm); }
+@keyframes ds-number-in { from { opacity: .35; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+/* Layout */
+.ds-stack:not(#_) { display: flex; flex-direction: column; gap: var(--ds-stack-gap, var(--ds-space-m)); min-width: 0; }
+.ds-cluster:not(#_) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-cluster-gap, var(--ds-space-s)); min-width: 0; }
+.ds-divider:not(#_) { height: var(--ds-size-hairline); border: 0; margin: var(--ds-space-m) 0; background: var(--ds-stroke); }
+
+/* Cabeçalho de seção (SectionHeader): eyebrow + detalhe + ações à direita. */
+.ds-header:not(#_) { display: flex; align-items: baseline; gap: var(--ds-space-s); min-width: 0; margin: 0 0 var(--ds-space-m); }
+.ds-header__title:not(#_) { font: var(--ds-weight-semibold) var(--ds-font-eyebrow)/1.3 var(--ds-font-text); letter-spacing: var(--ds-tracking-eyebrow); color: var(--ds-ink-soft); margin: 0; }
+.ds-header__detail:not(#_) { min-width: 0; flex: 1; font-size: var(--ds-font-caption); color: var(--ds-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-header__actions:not(#_) { margin-left: auto; display: flex; align-items: center; gap: var(--ds-space-s); align-self: center; }
+
+/* Card: superfície, fio, luz no topo, raio concêntrico. */
+.ds-card:not(#_) {
+  position: relative; min-width: 0;
+  background: var(--ds-card-bg, var(--ds-surface));
+  border: var(--ds-size-hairline) solid var(--ds-card-stroke, var(--ds-stroke));
+  border-radius: var(--ds-card-radius, var(--ds-radius-l));
+  padding: var(--ds-card-pad, var(--ds-inset-card));
+  box-shadow: var(--ds-elevation-card);
+  color: var(--ds-ink);
+  transition: background-color var(--ds-dur-hover) var(--ds-ease-out), border-color var(--ds-dur-hover) var(--ds-ease-out), transform var(--ds-dur-press) var(--ds-ease-press);
+}
+.ds-card--lg:not(#_) { padding: var(--ds-card-pad, var(--ds-inset-card-lg)); }
+.ds-card--flush:not(#_) { padding: 0; overflow: hidden; }
+.ds-card--sunken:not(#_) { background: var(--ds-card-bg, var(--ds-surface-sunken)); box-shadow: none; }
+.ds-card--interactive:not(#_) { cursor: pointer; }
+.ds-card--interactive:not(#_):hover { background: var(--ds-surface-hover); border-color: var(--ds-stroke-strong); }
+.ds-card--interactive:not(#_):active { transform: scale(var(--ds-row-press-scale)); }
+.ds-card--selected:not(#_), .ds-card[aria-selected=true]:not(#_), .ds-card[aria-current=true]:not(#_) { background: var(--ds-surface-selected); border-color: color-mix(in srgb, var(--ds-accent) 70%, transparent); }
+.ds-card--good:not(#_) { border-color: var(--ds-good-rim); background: linear-gradient(var(--ds-good-wash), var(--ds-good-wash)) var(--ds-surface); }
+.ds-card--bad:not(#_) { border-color: var(--ds-bad-rim); background: linear-gradient(var(--ds-bad-wash), var(--ds-bad-wash)) var(--ds-surface); }
+.ds-card--warn:not(#_) { border-color: var(--ds-warn-rim); background: linear-gradient(var(--ds-warn-wash), var(--ds-warn-wash)) var(--ds-surface); }
+.ds-card--accent:not(#_) { border-color: var(--ds-accent-rim); background: linear-gradient(var(--ds-accent-wash), var(--ds-accent-wash)) var(--ds-surface); }
+/* Tile: caixa dentro do card (raio m = card l − recuo 4). */
+.ds-tile:not(#_) { min-width: 0; background: var(--ds-fill); border-radius: var(--ds-tile-radius, var(--ds-radius-m)); padding: var(--ds-tile-pad, var(--ds-space-m)); }
+/* Superfície flutuante: popover, menu, diálogo. */
+.ds-popover:not(#_) { background: var(--ds-surface-overlay); border: var(--ds-size-hairline) solid var(--ds-stroke-strong); border-radius: var(--ds-radius-l); box-shadow: var(--ds-elevation-overlay); color: var(--ds-ink); }
+.ds-scrim:not(#_) { background: var(--ds-scrim); -webkit-backdrop-filter: blur(var(--ds-scrim-blur)); backdrop-filter: blur(var(--ds-scrim-blur)); }
+
+/* Tons compartilhados: pill, chip, banner, ponto, badge, monograma, glifo. Um só lugar define cada tom. */
+:is(.ds-pill, .ds-chip, .ds-badge, .ds-monogram, .ds-banner, .ds-dot, .ds-glyph, .ds-meter):not(#_) { --_tone: var(--ds-neutral); --_ink: var(--ds-ink-pill); --_fill: var(--ds-neutral-fill); --_rim: var(--ds-stroke-strong); --_glyph: var(--ds-glyph-info); }
+:is(.ds-chip, .ds-badge, .ds-monogram, .ds-meter):not(#_) { --_tone: var(--ds-accent); --_ink: var(--ds-accent); --_fill: var(--ds-accent-fill); --_rim: var(--ds-accent-rim); --_glyph: var(--ds-glyph-accent); }
+:is(.ds-pill--neutral, .ds-chip--neutral, .ds-badge--neutral, .ds-monogram--neutral, .ds-banner--neutral, .ds-banner--info, .ds-dot--neutral, .ds-glyph--neutral, .ds-glyph--info, .ds-meter--neutral):not(#_) { --_tone: var(--ds-neutral); --_ink: var(--ds-ink-pill); --_fill: var(--ds-neutral-fill); --_rim: var(--ds-stroke-strong); --_glyph: var(--ds-glyph-info); }
+:is(.ds-pill--tag, .ds-chip--tag, .ds-badge--tag, .ds-monogram--tag):not(#_) { --_tone: var(--ds-ink-soft); --_ink: var(--ds-ink-soft); --_fill: var(--ds-tag-fill); --_rim: var(--ds-stroke-strong); --_glyph: var(--ds-glyph-info); }
+:is(.ds-pill--accent, .ds-chip--accent, .ds-badge--accent, .ds-monogram--accent, .ds-banner--accent, .ds-dot--accent, .ds-glyph--accent, .ds-meter--accent):not(#_) { --_tone: var(--ds-accent); --_ink: var(--ds-accent); --_fill: var(--ds-accent-fill); --_rim: var(--ds-accent-rim); --_glyph: var(--ds-glyph-accent); }
+:is(.ds-pill--good, .ds-chip--good, .ds-badge--good, .ds-monogram--good, .ds-banner--good, .ds-dot--good, .ds-glyph--good, .ds-meter--good):not(#_) { --_tone: var(--ds-good); --_ink: var(--ds-good); --_fill: var(--ds-good-fill); --_rim: var(--ds-good-rim); --_glyph: var(--ds-glyph-good); }
+:is(.ds-pill--bad, .ds-chip--bad, .ds-badge--bad, .ds-monogram--bad, .ds-banner--bad, .ds-dot--bad, .ds-glyph--bad, .ds-meter--bad):not(#_) { --_tone: var(--ds-bad); --_ink: var(--ds-bad); --_fill: var(--ds-bad-fill); --_rim: var(--ds-bad-rim); --_glyph: var(--ds-glyph-bad); }
+:is(.ds-pill--warn, .ds-chip--warn, .ds-badge--warn, .ds-monogram--warn, .ds-banner--warn, .ds-dot--warn, .ds-glyph--warn, .ds-meter--warn):not(#_) { --_tone: var(--ds-warn); --_ink: var(--ds-warn); --_fill: var(--ds-warn-fill); --_rim: var(--ds-warn-rim); --_glyph: var(--ds-glyph-warn); }
+
+/* Glifo por tom (máscara SVG pintada com currentColor). */
+.ds-glyph:not(#_) { display: inline-block; flex: none; width: var(--ds-glyph-size, 1.1em); height: var(--ds-glyph-size, 1.1em); vertical-align: -.18em; color: var(--_tone); background: currentColor; -webkit-mask: var(--_glyph) center / contain no-repeat; mask: var(--_glyph) center / contain no-repeat; }
+.ds-glyph--clear:not(#_) { --_tone: var(--ds-good); --_glyph: var(--ds-glyph-clear); }
+.ds-glyph--waiting:not(#_) { --_tone: var(--ds-ink-muted); --_glyph: var(--ds-glyph-waiting); }
+.ds-glyph--chevron:not(#_) { --_tone: currentColor; --_glyph: var(--ds-glyph-chevron); }
+
+/* Pill: rótulo pequeno (contagens, variações, nomes de projeto). */
+.ds-pill:not(#_) { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; padding: var(--ds-inset-pill); border-radius: var(--ds-radius-pill); font: var(--ds-weight-semibold) var(--ds-font-pill)/1.35 var(--ds-font-text); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--_ink); background: var(--_fill); border: 0; }
+.ds-pill:not(#_) > svg { width: var(--ds-size-icon-xs); height: var(--ds-size-icon-xs); flex: none; }
+
+/* Chip: cápsula com tinta e glifo (ação rápida, veredito, "abrir"). Mesmo tamanho em todo lugar. */
+.ds-chip:not(#_) { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-space-xs); min-height: var(--ds-size-hit-min); padding: var(--ds-inset-chip); border-radius: var(--ds-radius-pill); font: var(--ds-weight-semibold) var(--ds-font-micro)/1.3 var(--ds-font-text); white-space: nowrap; color: var(--_ink); background: var(--_fill); border: var(--ds-size-hairline) solid transparent; text-decoration: none; -webkit-tap-highlight-color: transparent; transition: background-color var(--ds-dur-hover) var(--ds-ease-out), border-color var(--ds-dur-hover) var(--ds-ease-out), transform var(--ds-dur-press) var(--ds-ease-press), opacity var(--ds-dur-hover) var(--ds-ease-out); }
+.ds-chip:not(#_) > svg { width: var(--ds-size-icon-xs); height: var(--ds-size-icon-xs); flex: none; }
+.ds-chip--outlined:not(#_) { border-color: var(--_rim); }
+:is(button, a, [role=button]).ds-chip:not(#_) { cursor: pointer; }
+:is(button, a, [role=button]).ds-chip:not(#_):hover:not(:disabled):not([aria-disabled=true]) { background: color-mix(in srgb, var(--_tone) var(--ds-tint-hover), transparent); border-color: var(--_rim); }
+:is(button, a, [role=button]).ds-chip:not(#_):active:not(:disabled):not([aria-disabled=true]) { transform: scale(var(--ds-press-scale)); opacity: var(--ds-opacity-pressed); }
+.ds-chip[aria-pressed=true]:not(#_), .ds-chip[aria-selected=true]:not(#_) { border-color: var(--_tone); background: color-mix(in srgb, var(--_tone) var(--ds-tint-hover), transparent); }
+
+/* Badge de ícone (início da linha) e monograma (iniciais de projeto e agente). Decorativos: aria-hidden. */
+.ds-badge:not(#_), .ds-monogram:not(#_) { display: inline-grid; place-items: center; flex: none; width: var(--ds-size-badge); height: var(--ds-size-badge); border-radius: var(--ds-radius-s); color: var(--_tone); background: var(--_fill); }
+.ds-badge:not(#_) > svg { width: var(--ds-size-icon-s); height: var(--ds-size-icon-s); }
+.ds-monogram:not(#_) { font: var(--ds-weight-bold) var(--ds-font-caption)/1 var(--ds-font-rounded); text-transform: uppercase; }
+.ds-monogram--circle:not(#_) { border-radius: 50%; }
+
+/* Ponto de estado com halo; --pulse para dado velho ou erro (sem pulso com Reduzir movimento). */
+.ds-dot:not(#_) { position: relative; display: inline-block; flex: none; width: var(--ds-size-dot); height: var(--ds-size-dot); border-radius: 50%; background: var(--_tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--_tone) 25%, transparent); vertical-align: middle; }
+.ds-dot--sm:not(#_) { width: var(--ds-size-dot-sm); height: var(--ds-size-dot-sm); }
+.ds-dot--pulse:not(#_)::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--_tone); animation: ds-pulse var(--ds-dur-pulse) var(--ds-ease-out) infinite; pointer-events: none; }
+@keyframes ds-pulse { from { transform: scale(1); opacity: .7; } to { transform: scale(2.4); opacity: 0; } }
+
+/* Botões. Uma ação principal violeta por tela; o resto é quieto. Passar o mouse clareia, pressionar encolhe 3 %. */
+.ds-btn:not(#_) {
+  --_bg: var(--ds-fill); --_bg-hover: var(--ds-fill-hover);
+  --_ink: var(--ds-ink); --_ink-hover: var(--ds-ink);
+  --_bd: var(--ds-stroke); --_bd-hover: var(--ds-stroke-strong);
+  --_gloss: none; --_gloss-hover: none;
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--ds-btn-h, var(--ds-size-control)); min-width: var(--ds-size-hit-min);
+  padding: 0 var(--ds-btn-pad-x, 14px); margin: 0;
+  border: var(--ds-size-hairline) solid var(--_bd); border-radius: var(--ds-btn-radius, var(--ds-radius-pill));
+  background-color: var(--_bg); background-image: var(--_gloss);
+  color: var(--_ink);
+  font: var(--ds-weight-semibold) var(--ds-font-body)/1.2 var(--ds-font-text);
+  white-space: nowrap; text-decoration: none; text-align: center; cursor: pointer; user-select: none;
+  box-shadow: none; -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--ds-dur-hover) var(--ds-ease-out), border-color var(--ds-dur-hover) var(--ds-ease-out), color var(--ds-dur-hover) var(--ds-ease-out), transform var(--ds-dur-press) var(--ds-ease-press), opacity var(--ds-dur-hover) var(--ds-ease-out);
+}
+.ds-btn:not(#_) > svg { width: var(--ds-size-icon); height: var(--ds-size-icon); flex: none; }
+.ds-btn:not(#_):hover:not(:disabled):not([aria-disabled=true]) { background-color: var(--_bg-hover); background-image: var(--_gloss-hover); border-color: var(--_bd-hover); color: var(--_ink-hover); }
+.ds-btn:not(#_):active:not(:disabled):not([aria-disabled=true]) { transform: scale(var(--ds-press-scale)); opacity: var(--ds-opacity-pressed); }
+.ds-btn:not(#_):focus-visible { outline: var(--ds-focus-width) solid var(--ds-focus); outline-offset: var(--ds-focus-offset); }
+.ds-btn:not(#_):is(:disabled, [aria-disabled=true]) { opacity: var(--ds-opacity-disabled); cursor: not-allowed; transform: none; }
+.ds-btn[aria-busy=true]:not(#_) { cursor: progress; }
+.ds-btn--primary:not(#_) { --_bg: var(--ds-accent); --_bg-hover: var(--ds-accent); --_ink: var(--ds-on-accent); --_ink-hover: var(--ds-on-accent); --_bd: transparent; --_bd-hover: transparent; --_gloss: linear-gradient(rgb(255 255 255 / .12), rgb(255 255 255 / 0)); --_gloss-hover: linear-gradient(rgb(255 255 255 / .22), rgb(255 255 255 / 0)); }
+.ds-btn--secondary:not(#_) { --_bg: var(--ds-fill); --_bg-hover: var(--ds-fill-hover); }
+.ds-btn--ghost:not(#_) { --_bg: transparent; --_bg-hover: var(--ds-fill-hover); --_bd: transparent; --_bd-hover: transparent; --_ink: var(--ds-ink-soft); }
+.ds-btn--danger:not(#_) { --_bg: var(--ds-bad-fill); --_bg-hover: color-mix(in srgb, var(--ds-bad) var(--ds-tint-hover), transparent); --_ink: var(--ds-bad); --_ink-hover: var(--ds-bad); --_bd: var(--ds-bad-rim); --_bd-hover: var(--ds-bad); }
+.ds-btn--sm:not(#_) { min-height: var(--ds-btn-h, var(--ds-size-control-sm)); padding: 0 var(--ds-btn-pad-x, 10px); font-size: var(--ds-font-caption); gap: var(--ds-space-xs); }
+.ds-btn--sm:not(#_) > svg { width: var(--ds-size-icon-s); height: var(--ds-size-icon-s); }
+.ds-btn--block:not(#_) { display: flex; width: 100%; }
+.ds-btn--icon:not(#_) { --_ink: var(--ds-ink-soft); --_bd: transparent; --_bd-hover: var(--ds-stroke); width: var(--ds-btn-h, var(--ds-size-icon-button)); min-height: var(--ds-btn-h, var(--ds-size-icon-button)); height: var(--ds-btn-h, var(--ds-size-icon-button)); padding: 0; border-radius: 50%; }
+.ds-btn--icon[aria-pressed=true]:not(#_), .ds-btn--icon.is-active:not(#_) { --_ink: var(--ds-accent); --_ink-hover: var(--ds-accent); --_bg: color-mix(in srgb, var(--ds-accent) 18%, transparent); --_bg-hover: color-mix(in srgb, var(--ds-accent) var(--ds-tint-hover), transparent); --_bd-hover: transparent; }
+.ds-btn--icon:not(#_) > svg { width: var(--ds-size-icon); height: var(--ds-size-icon); }
+/* Spinner pequeno ao lado da ação ocupada (parado e esmaecido com Reduzir movimento). */
+.ds-spinner:not(#_) { display: inline-block; flex: none; width: var(--ds-size-icon-s); height: var(--ds-size-icon-s); border-radius: 50%; border: 2px solid var(--ds-stroke-strong); border-top-color: currentColor; animation: ds-spin .9s linear infinite; }
+@keyframes ds-spin { to { transform: rotate(360deg); } }
+
+/* Segmentado (períodos, filtros curtos). Indicador desliza com --ds-seg-index/--ds-seg-count no estilo inline;
+   sem eles, o item marcado (aria-selected/aria-pressed/aria-checked/.is-selected) recebe o fundo direto. */
+.ds-segmented:not(#_) { --_gap: 2px; position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--_gap); padding: 2px; max-width: 100%; border-radius: var(--ds-radius-pill); background: var(--ds-fill); border: var(--ds-size-hairline) solid var(--ds-stroke); isolation: isolate; }
+.ds-segmented:not(#_) > :is(button, a, label, [role=tab], [role=radio], [role=option]) {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-space-xs);
+  min-height: var(--ds-size-control-sm); min-width: 0; padding: var(--ds-inset-tab); margin: 0;
+  border: 0; border-radius: var(--ds-radius-pill); background: transparent; color: var(--ds-ink-soft);
+  font: var(--ds-weight-medium) var(--ds-font-caption)/1.2 var(--ds-font-text); white-space: nowrap; cursor: pointer; box-shadow: none;
+  transition: background-color var(--ds-dur-hover) var(--ds-ease-out), color var(--ds-dur-hover) var(--ds-ease-out);
+}
+.ds-segmented:not(#_) > :is(button, a, label, [role=tab], [role=radio], [role=option]):hover:not(:disabled):not([aria-disabled=true]) { color: var(--ds-ink); background: var(--ds-fill-hover); }
+.ds-segmented:not(#_) > :is([aria-selected=true], [aria-pressed=true], [aria-checked=true], [aria-current=true], .is-selected, label:has(input:checked)) { color: var(--ds-ink); background: var(--ds-fill-selected); font-weight: var(--ds-weight-semibold); box-shadow: inset 0 1px 0 0 var(--ds-highlight); }
+.ds-segmented:not(#_) > :is(:disabled, [aria-disabled=true]) { opacity: var(--ds-opacity-disabled); cursor: not-allowed; }
+.ds-segmented:not(#_) > label > input:is([type=radio], [type=checkbox]) { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.ds-segmented:not(#_) > label:has(input:focus-visible) { outline: var(--ds-focus-width) solid var(--ds-focus); outline-offset: 1px; }
+.ds-segmented--sliding:not(#_)::before { content: ""; position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px - (var(--ds-seg-count, 2) - 1) * var(--_gap)) / var(--ds-seg-count, 2)); border-radius: var(--ds-radius-pill); background: var(--ds-fill-selected); box-shadow: inset 0 1px 0 0 var(--ds-highlight); transform: translateX(calc(var(--ds-seg-index, 0) * (100% + var(--_gap)))); transition: transform var(--ds-dur-select) var(--ds-ease-firm); pointer-events: none; }
+.ds-segmented--sliding:not(#_) > :is([aria-selected=true], [aria-pressed=true], [aria-checked=true], [aria-current=true], .is-selected, label:has(input:checked)) { background: transparent; box-shadow: none; }
+.ds-segmented--block:not(#_) { display: grid; width: 100%; }
+
+/* Abas (role=tablist). Itens de largura livre; o selecionado ganha a pílula. Para deslizar, informe
+   --ds-tab-x e --ds-tab-w (px) do item ativo no contêiner e use .ds-tabs--sliding. */
+.ds-tabs:not(#_) { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-xs); min-width: 0; isolation: isolate; }
+.ds-tabs--scroll:not(#_) { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.ds-tabs:not(#_) > :is(button, a, [role=tab]) {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px;
+  min-height: var(--ds-size-control); padding: var(--ds-inset-tab); margin: 0;
+  border: 0; border-radius: var(--ds-radius-pill); background: transparent; color: var(--ds-ink-soft);
+  font: var(--ds-weight-medium) var(--ds-font-body)/1.2 var(--ds-font-text); white-space: nowrap; cursor: pointer; box-shadow: none; text-decoration: none;
+  transition: background-color var(--ds-dur-hover) var(--ds-ease-out), color var(--ds-dur-hover) var(--ds-ease-out);
+}
+.ds-tabs:not(#_) > :is(button, a, [role=tab]) > svg { width: var(--ds-size-icon); height: var(--ds-size-icon); flex: none; }
+.ds-tabs:not(#_) > :is(button, a, [role=tab]):hover:not(:disabled):not([aria-disabled=true]) { color: var(--ds-ink); background: var(--ds-fill-hover); }
+.ds-tabs:not(#_) > :is([aria-selected=true], [aria-current=page], [aria-current=true], .is-selected) { color: var(--ds-ink); background: var(--ds-fill-selected); font-weight: var(--ds-weight-semibold); }
+.ds-tabs:not(#_) > :is(:disabled, [aria-disabled=true]) { opacity: var(--ds-opacity-disabled); cursor: not-allowed; }
+.ds-tabs--sliding:not(#_)::before { content: ""; position: absolute; z-index: 0; top: 0; left: 0; height: var(--ds-size-control); width: var(--ds-tab-w, 0px); border-radius: var(--ds-radius-pill); background: var(--ds-fill-selected); transform: translateX(var(--ds-tab-x, 0px)); transition: transform var(--ds-dur-select) var(--ds-ease-firm), width var(--ds-dur-select) var(--ds-ease-firm); pointer-events: none; }
+.ds-tabs--sliding:not(#_) > :is([aria-selected=true], [aria-current=page], [aria-current=true], .is-selected) { background: transparent; }
+.ds-tabs--underline:not(#_) { gap: var(--ds-space-l); border-bottom: var(--ds-size-hairline) solid var(--ds-stroke); }
+.ds-tabs--underline:not(#_) > :is(button, a, [role=tab]) { border-radius: 0; padding-left: 0; padding-right: 0; background: transparent; box-shadow: inset 0 -2px 0 0 transparent; }
+.ds-tabs--underline:not(#_) > :is(button, a, [role=tab]):hover:not(:disabled) { background: transparent; box-shadow: inset 0 -2px 0 0 var(--ds-stroke-strong); }
+.ds-tabs--underline:not(#_) > :is([aria-selected=true], [aria-current=page], [aria-current=true], .is-selected) { background: transparent; box-shadow: inset 0 -2px 0 0 var(--ds-accent); }
+
+/* Interruptor: <input type=checkbox class="ds-switch"> ou <button role="switch" aria-checked class="ds-switch">. */
+.ds-switch:not(#_) {
+  --_thumb: var(--ds-ink-soft);
+  -webkit-appearance: none; appearance: none; position: relative; display: inline-block; flex: none; vertical-align: middle;
+  width: 36px; height: 20px; min-width: 36px; min-height: 0; margin: 2px 0; padding: 0;
+  border-radius: var(--ds-radius-pill); border: var(--ds-size-hairline) solid var(--ds-stroke-strong);
+  background-color: var(--ds-fill-selected);
+  background-image: radial-gradient(circle, var(--_thumb) 6.5px, transparent 7.2px);
+  background-size: 18px 18px; background-repeat: no-repeat; background-position: 0 50%;
+  cursor: pointer; box-shadow: none; color: transparent; font-size: 0;
+  transition: background-color var(--ds-dur-quick) var(--ds-ease-out), border-color var(--ds-dur-quick) var(--ds-ease-out), background-position var(--ds-dur-select) var(--ds-ease-firm);
+}
+.ds-switch:not(#_):hover:not(:disabled):not([aria-disabled=true]) { border-color: var(--ds-ink-faint); }
+.ds-switch:not(#_):is(:checked, [aria-checked=true]) { --_thumb: var(--ds-on-accent); background-color: var(--ds-accent); border-color: var(--ds-accent); background-position: 100% 50%; }
+.ds-switch:not(#_):focus-visible { outline: var(--ds-focus-width) solid var(--ds-focus); outline-offset: var(--ds-focus-offset); }
+.ds-switch:not(#_):is(:disabled, [aria-disabled=true]) { opacity: var(--ds-opacity-disabled); cursor: not-allowed; }
+/* Linha de opção com interruptor: rótulo e explicação à esquerda, controle à direita. A linha inteira é clicável. */
+.ds-switch-row:not(#_) { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ds-space-m); margin: 0; padding: var(--ds-inset-row); border-radius: var(--ds-radius-m); color: var(--ds-ink); font-size: var(--ds-font-body); cursor: pointer; transition: background-color var(--ds-dur-hover) var(--ds-ease-out); }
+.ds-switch-row:not(#_):hover { background: var(--ds-fill-hover); }
+.ds-switch-row:not(#_):has(:disabled) { cursor: not-allowed; }
+.ds-switch-row:not(#_):has(:disabled):hover { background: transparent; }
+
+/* Campos: mesma superfície, raio e fio dos cards; foco acende o fio no violeta. */
+.ds-field:not(#_) {
+  display: block; width: 100%; min-width: 0; min-height: var(--ds-size-control); margin: 0;
+  padding: var(--ds-inset-field);
+  background: var(--ds-fill); color: var(--ds-ink);
+  border: var(--ds-size-hairline) solid var(--ds-stroke); border-radius: var(--ds-radius-s);
+  font: var(--ds-weight-regular) var(--ds-font-body)/1.4 var(--ds-font-text); box-shadow: none;
+  transition: border-color var(--ds-dur-hover) var(--ds-ease-out), background-color var(--ds-dur-hover) var(--ds-ease-out);
+}
+.ds-field:not(#_)::placeholder { color: var(--ds-ink-muted); opacity: 1; }
+.ds-field:not(#_):hover:not(:disabled):not(:focus) { border-color: var(--ds-stroke-strong); }
+.ds-field:not(#_):focus { outline: none; border-color: color-mix(in srgb, var(--ds-accent) 80%, transparent); background-color: var(--ds-fill-hover); }
+.ds-field:not(#_):focus-visible { outline: var(--ds-focus-width) solid color-mix(in srgb, var(--ds-accent) 45%, transparent); outline-offset: 1px; }
+.ds-field:not(#_):is([aria-invalid=true], .is-invalid) { border-color: var(--ds-bad); }
+.ds-field:not(#_):disabled { opacity: var(--ds-opacity-disabled); cursor: not-allowed; }
+textarea.ds-field:not(#_) { min-height: 88px; resize: vertical; line-height: var(--ds-leading-body); }
+select.ds-field:not(#_) { -webkit-appearance: none; appearance: none; padding-right: 30px; cursor: pointer; }
+select.ds-field:not(#_) { background-image: linear-gradient(45deg, transparent 50%, var(--ds-ink-muted) 50%), linear-gradient(135deg, var(--ds-ink-muted) 50%, transparent 50%); background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+select.ds-field:not(#_) option { background: var(--ds-surface-overlay); color: var(--ds-ink); }
+.ds-field--sm:not(#_) { min-height: var(--ds-size-control-sm); padding: 4px 8px; font-size: var(--ds-font-caption); }
+/* Rótulo + campo + dica. */
+.ds-label:not(#_) { display: block; margin: 0 0 var(--ds-space-xs); font: var(--ds-weight-semibold) var(--ds-font-caption)/1.35 var(--ds-font-text); color: var(--ds-ink-soft); }
+.ds-form-row:not(#_) { display: flex; flex-direction: column; gap: var(--ds-space-xs); min-width: 0; margin: 0 0 var(--ds-space-l); }
+.ds-hint:not(#_) { display: flex; align-items: flex-start; gap: 6px; margin: 0; font: var(--ds-weight-regular) var(--ds-font-caption)/1.45 var(--ds-font-text); color: var(--ds-ink-muted); }
+.ds-hint--error:not(#_) { color: var(--ds-bad); }
+.ds-hint--error:not(#_)::before { content: ""; flex: none; width: 1.1em; height: 1.1em; margin-top: .1em; background: currentColor; -webkit-mask: var(--ds-glyph-bad) center / contain no-repeat; mask: var(--ds-glyph-bad) center / contain no-repeat; }
+.ds-hint--warn:not(#_) { color: var(--ds-warn); }
+.ds-hint--warn:not(#_)::before { content: ""; flex: none; width: 1.1em; height: 1.1em; margin-top: .1em; background: currentColor; -webkit-mask: var(--ds-glyph-warn) center / contain no-repeat; mask: var(--ds-glyph-warn) center / contain no-repeat; }
+/* Motivo de um controle desabilitado: aparece logo abaixo dele (o desabilitado sempre explica por quê). */
+.ds-disabled-reason:not(#_) { display: flex; align-items: flex-start; gap: 6px; margin: var(--ds-space-xs) 0 0; font-size: var(--ds-font-caption); line-height: 1.45; color: var(--ds-ink-muted); }
+.ds-disabled-reason:not(#_)::before { content: ""; flex: none; width: 1.1em; height: 1.1em; margin-top: .1em; background: currentColor; -webkit-mask: var(--ds-glyph-info-line) center / contain no-repeat; mask: var(--ds-glyph-info-line) center / contain no-repeat; }
+
+/* Aviso no topo: glifo pelo tom (✓ ⓘ ⚠ ⛔ ✦) e fio da cor. Um <svg> como primeiro filho substitui o glifo automático. */
+.ds-banner:not(#_) { display: flex; align-items: flex-start; gap: var(--ds-space-s); min-width: 0; margin: 0; padding: 10px var(--ds-space-m); border-radius: var(--ds-radius-m); background: color-mix(in srgb, var(--_tone) 10%, transparent); border: var(--ds-size-hairline) solid color-mix(in srgb, var(--_tone) 22%, transparent); color: var(--ds-ink); font: var(--ds-weight-regular) var(--ds-font-body)/var(--ds-leading-body) var(--ds-font-text); }
+.ds-banner:not(#_)::before { content: ""; flex: none; width: var(--ds-size-icon); height: var(--ds-size-icon); margin-top: calc((1em * 1.5 - var(--ds-size-icon)) / 2); background: var(--_tone); -webkit-mask: var(--_glyph) center / contain no-repeat; mask: var(--_glyph) center / contain no-repeat; }
+.ds-banner:not(#_):has(> svg:first-child)::before { display: none; }
+.ds-banner:not(#_) > svg:first-child { flex: none; width: var(--ds-size-icon); height: var(--ds-size-icon); margin-top: calc((1em * 1.5 - var(--ds-size-icon)) / 2); color: var(--_tone); }
+.ds-banner__body:not(#_) { flex: 1; min-width: 0; }
+.ds-banner__body:not(#_) > :is(strong, b) { display: block; color: var(--ds-ink); font-weight: var(--ds-weight-semibold); }
+.ds-banner__body:not(#_) > :is(p, small, span) { margin: 2px 0 0; color: var(--ds-ink-soft); }
+.ds-banner__actions:not(#_) { display: flex; align-items: center; gap: var(--ds-space-s); flex-wrap: wrap; margin-left: auto; align-self: center; }
+
+/* Vazio e espera. --clear (✓ verde) só quando "nada a fazer" é boa notícia; --info (ⓘ, padrão) quando falta dado; --waiting (relógio). */
+.ds-empty:not(#_) { --_ico: var(--ds-glyph-info-line); --_ico-ink: var(--ds-ink-muted); display: flex; align-items: flex-start; gap: var(--ds-space-s); margin: 0; padding: var(--ds-space-s) 0; color: var(--ds-ink-muted); font: var(--ds-weight-regular) var(--ds-font-body)/var(--ds-leading-body) var(--ds-font-text); }
+.ds-empty:not(#_)::before { content: ""; flex: none; width: var(--ds-size-icon); height: var(--ds-size-icon); margin-top: calc((1em * 1.5 - var(--ds-size-icon)) / 2); background: var(--_ico-ink); -webkit-mask: var(--_ico) center / contain no-repeat; mask: var(--_ico) center / contain no-repeat; }
+.ds-empty--clear:not(#_) { --_ico: var(--ds-glyph-clear); --_ico-ink: var(--ds-good); }
+.ds-empty--info:not(#_) { --_ico: var(--ds-glyph-info-line); --_ico-ink: var(--ds-ink-muted); }
+.ds-empty--waiting:not(#_) { --_ico: var(--ds-glyph-waiting); --_ico-ink: var(--ds-ink-muted); }
+.ds-empty--block:not(#_) { flex-direction: column; align-items: center; text-align: center; gap: var(--ds-space-s); padding: var(--ds-space-3xl) var(--ds-space-xl); }
+.ds-empty--block:not(#_)::before { width: 24px; height: 24px; margin: 0 0 var(--ds-space-xs); }
+.ds-empty--block:not(#_) > :is(h3, strong) { display: block; margin: 0; color: var(--ds-ink); font: var(--ds-weight-semibold) var(--ds-font-title)/1.35 var(--ds-font-text); }
+.ds-empty--block:not(#_) > p { margin: 0; max-width: 46ch; color: var(--ds-ink-soft); }
+
+/* Esqueleto no primeiro carregamento: a forma do conteúdo, com respiração suave (parada com Reduzir movimento). */
+.ds-skeleton:not(#_) { display: block; width: var(--ds-skeleton-w, 100%); height: var(--ds-skeleton-h, 12px); border-radius: var(--ds-radius-xs); background: var(--ds-fill-hover); animation: ds-breathe var(--ds-dur-breathe) var(--ds-ease-in-out) infinite alternate; }
+.ds-skeleton--text:not(#_) { height: .9em; margin: .3em 0; }
+.ds-skeleton--title:not(#_) { height: 16px; width: var(--ds-skeleton-w, 40%); }
+.ds-skeleton--stat:not(#_) { height: 22px; width: var(--ds-skeleton-w, 72px); border-radius: var(--ds-radius-s); }
+.ds-skeleton--block:not(#_) { height: var(--ds-skeleton-h, 64px); border-radius: var(--ds-radius-m); }
+.ds-skeleton--circle:not(#_) { width: var(--ds-skeleton-w, var(--ds-size-badge)); height: var(--ds-skeleton-w, var(--ds-size-badge)); border-radius: 50%; }
+@keyframes ds-breathe { from { opacity: 1; } to { opacity: .45; } }
+
+/* Lista e linha. A linha que abre algo mostra o chevron, que desliza 2 px ao passar o mouse. */
+.ds-list:not(#_) { display: flex; flex-direction: column; gap: var(--ds-list-gap, 2px); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.ds-list--divided:not(#_) { gap: 0; }
+.ds-list--divided:not(#_) > * + * { border-top: var(--ds-size-hairline) solid var(--ds-stroke); }
+.ds-row:not(#_) {
+  display: flex; align-items: center; gap: var(--ds-space-m); width: 100%; min-width: 0; min-height: var(--ds-size-control);
+  margin: 0; padding: var(--ds-inset-row); border: 0; border-radius: var(--ds-radius-m);
+  background: transparent; color: var(--ds-ink); text-align: left; text-decoration: none;
+  font: var(--ds-weight-regular) var(--ds-font-body)/var(--ds-leading-tight) var(--ds-font-text); box-shadow: none;
+  transition: background-color var(--ds-dur-hover) var(--ds-ease-out), transform var(--ds-dur-press) var(--ds-ease-press);
+}
+:is(button, a, [role=button], [tabindex]).ds-row:not(#_), .ds-row--interactive:not(#_) { cursor: pointer; }
+:is(button, a, [role=button], [tabindex]).ds-row:not(#_):hover:not(:disabled), .ds-row--interactive:not(#_):hover { background: var(--ds-fill-hover); }
+:is(button, a, [role=button]).ds-row:not(#_):active:not(:disabled), .ds-row--interactive:not(#_):active { transform: scale(var(--ds-row-press-scale)); }
+.ds-row:not(#_):is([aria-selected=true], [aria-current=true], [aria-current=page], .is-selected) { background: var(--ds-fill-selected); }
+.ds-row:not(#_):is(:disabled, [aria-disabled=true]) { opacity: var(--ds-opacity-disabled); cursor: not-allowed; }
+.ds-row--quiet:not(#_) { opacity: var(--ds-opacity-quiet); }
+.ds-row__lead:not(#_) { flex: none; display: inline-flex; align-items: center; }
+.ds-row__main:not(#_) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ds-row__title:not(#_) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-ink); font-weight: var(--ds-weight-semibold); }
+.ds-row__sub:not(#_) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-ink-muted); font-size: var(--ds-font-caption); }
+.ds-row__trail:not(#_) { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; font-family: var(--ds-font-rounded); font-variant-numeric: tabular-nums; }
+.ds-row__chevron:not(#_) { flex: none; width: var(--ds-size-icon-s); height: var(--ds-size-icon-s); background: var(--ds-ink-faint); -webkit-mask: var(--ds-glyph-chevron) center / contain no-repeat; mask: var(--ds-glyph-chevron) center / contain no-repeat; transition: transform var(--ds-dur-hover) var(--ds-ease-out), background-color var(--ds-dur-hover) var(--ds-ease-out); }
+.ds-row:not(#_):hover .ds-row__chevron, .ds-row:not(#_):focus-visible .ds-row__chevron { background: var(--ds-ink-soft); transform: translateX(var(--ds-chevron-shift)); }
+
+/* KPI: rótulo, número grande (o maior texto do bloco), legenda e variação com período. */
+.ds-kpi:not(#_) { display: flex; flex-direction: column; gap: var(--ds-space-xs); min-width: 0; padding: var(--ds-kpi-pad, var(--ds-space-l)); border-radius: var(--ds-radius-l); background: var(--ds-surface); border: var(--ds-size-hairline) solid var(--ds-stroke); box-shadow: var(--ds-elevation-card); }
+.ds-kpi--tile:not(#_) { background: var(--ds-fill); border-color: transparent; box-shadow: none; border-radius: var(--ds-radius-m); padding: var(--ds-kpi-pad, var(--ds-space-m)); }
+.ds-kpi__label:not(#_) { display: flex; align-items: center; gap: var(--ds-space-xs); font: var(--ds-weight-semibold) var(--ds-font-eyebrow)/1.3 var(--ds-font-text); color: var(--ds-ink-soft); }
+.ds-kpi__value:not(#_) { display: block; margin: 2px 0; font: var(--ds-weight-semibold) var(--ds-font-stat)/1.15 var(--ds-font-rounded); font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--ds-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ds-kpi__foot:not(#_) { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--ds-space-s); font-size: var(--ds-font-caption); line-height: 1.4; color: var(--ds-ink-muted); }
+.ds-kpi__delta:not(#_) { font-family: var(--ds-font-rounded); font-weight: var(--ds-weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ds-kpi__delta--good:not(#_) { color: var(--ds-good); }
+.ds-kpi__delta--bad:not(#_) { color: var(--ds-bad); }
+.ds-kpi__delta--warn:not(#_) { color: var(--ds-warn); }
+.ds-kpi-grid:not(#_) { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--ds-kpi-min, 168px), 1fr)); gap: var(--ds-space-m); min-width: 0; }
+
+/* Medidor (ritmo, orçamento): trilho + barra no tom. Valor em --ds-meter-value (0–100). */
+.ds-meter:not(#_) { position: relative; display: block; width: 100%; height: 6px; border-radius: var(--ds-radius-pill); background: var(--ds-fill-selected); overflow: hidden; }
+.ds-meter:not(#_)::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--ds-meter-value, 0) * 1%); max-width: 100%; border-radius: inherit; background: var(--_tone); transition: width var(--ds-dur-number) var(--ds-ease-firm); }
+
+/* Rolagem que some suave na borda em vez de cortar uma linha ao meio. */
+.ds-scroll-fade:not(#_) { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--ds-fade, 16px)), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - var(--ds-fade, 16px)), transparent); }
+.ds-scroll-fade--both:not(#_) { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--ds-fade, 16px), #000 calc(100% - var(--ds-fade, 16px)), transparent); mask-image: linear-gradient(to bottom, transparent, #000 var(--ds-fade, 16px), #000 calc(100% - var(--ds-fade, 16px)), transparent); }
+.ds-scroll-fade--x:not(#_) { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--ds-fade, 16px)), transparent); mask-image: linear-gradient(to right, #000 calc(100% - var(--ds-fade, 16px)), transparent); }
+
+/* Estado de troca (projeto mudando): os números antigos esmaecem enquanto o novo carrega. */
+.ds-switching:not(#_) { opacity: var(--ds-opacity-switching); transition: opacity var(--ds-dur-quick) var(--ds-ease-out); }
+.ds-quiet:not(#_) { opacity: var(--ds-opacity-quiet); }
+
+/* Reduzir movimento: sem pulso, sem respiração, sem giro (o spinner fica parado e esmaecido). */
+@media (prefers-reduced-motion: reduce) {
+  .ds-dot--pulse:not(#_)::after, .ds-skeleton:not(#_), .ds-num-enter:not(#_) { animation: none; }
+  .ds-spinner:not(#_) { animation: none; opacity: .5; }
+}
+
+/* Cores forçadas (Windows): bordas visíveis e glifos na cor do sistema. */
+@media (forced-colors: active) {
+  :is(.ds-card, .ds-btn, .ds-field, .ds-segmented, .ds-switch, .ds-banner, .ds-chip, .ds-kpi):not(#_) { border: 1px solid CanvasText; }
+  :is(.ds-glyph, .ds-row__chevron, .ds-dot, .ds-meter):not(#_), :is(.ds-banner, .ds-empty, .ds-hint--error, .ds-hint--warn, .ds-disabled-reason):not(#_)::before { forced-color-adjust: none; background: CanvasText; }
+  .ds-segmented:not(#_) > :is([aria-selected=true], [aria-pressed=true], [aria-checked=true], .is-selected, label:has(input:checked)), .ds-tabs:not(#_) > :is([aria-selected=true], [aria-current=page], .is-selected) { outline: 2px solid Highlight; }
+}

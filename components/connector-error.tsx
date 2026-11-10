@@ -2,7 +2,8 @@ import { LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { connectorErrorRecovery } from "@/lib/connector-errors.mjs";
 
-/** Render in the affected feature, leaving the rest of the Site usable. */
+/** Render in the affected feature, leaving the rest of the Site usable.
+ *  Notch banner: glifo ⛔ e fio coral marcam o erro; o texto fica legível em ink e a única ação é a recuperação. */
 export function ConnectorError({
   error,
   connectorName,
@@ -16,20 +17,25 @@ export function ConnectorError({
   return (
     <div
       role="alert"
-      className="flex min-w-0 flex-col items-start gap-3 text-sm"
+      className="ds-banner ds-banner--bad flex-wrap"
     >
-      <p className="break-words">{recovery.message}</p>
+      <div className="ds-banner__body basis-[min(100%,16rem)]">
+        <p className="break-words">{recovery.message}</p>
+      </div>
       {recovery.action && (
-        <Button
-          asChild
-          variant="outline"
-          className="h-auto min-h-9 max-w-full whitespace-normal text-left"
-        >
-          <a href={recovery.action.href} target="_top">
-            <LinkIcon aria-hidden="true" />
-            <span className="min-w-0 break-words">{recovery.action.label}</span>
-          </a>
-        </Button>
+        <div className="ds-banner__actions max-w-full">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-auto min-h-(--ds-size-control-sm) max-w-full py-1 whitespace-normal text-left"
+          >
+            <a href={recovery.action.href} target="_top">
+              <LinkIcon aria-hidden="true" />
+              <span className="min-w-0 break-words">{recovery.action.label}</span>
+            </a>
+          </Button>
+        </div>
       )}
     </div>
   );

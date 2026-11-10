@@ -4,20 +4,25 @@ import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+/* Notch pill (ver .ds-pill em app/notch-ds.css): cápsula de 11 px semibold com dígitos de largura fixa,
+   tinta do tom sobre o fill do tom. default = violeta (identidade), secondary = neutro, destructive = coral,
+   outline = rótulo de contexto com fio. */
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit max-w-full shrink-0 items-center justify-center gap-[3px] overflow-hidden rounded-(--ds-radius-pill) border border-transparent px-2 py-0.5 font-(family-name:--ds-font-text) text-(length:--ds-font-pill) leading-[1.35] font-semibold whitespace-nowrap tabular-nums transition-[color,background-color,border-color] duration-(--ds-dur-hover) ease-(--ds-ease-out) outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-(--ds-focus) aria-invalid:border-(--ds-bad-rim) [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
+        default:
+          "bg-(--ds-accent-fill) text-(--ds-accent) [a&]:hover:bg-[color-mix(in_srgb,var(--ds-accent)_var(--ds-tint-hover),transparent)]",
         secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+          "bg-(--ds-neutral-fill) text-(--ds-ink-pill) [a&]:hover:bg-(--ds-fill-hover)",
         destructive:
-          "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
+          "bg-(--ds-bad-fill) text-(--ds-bad) [a&]:hover:bg-[color-mix(in_srgb,var(--ds-bad)_var(--ds-tint-hover),transparent)]",
         outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+          "border-(--ds-stroke-strong) bg-(--ds-tag-fill) text-(--ds-ink-soft) [a&]:hover:bg-(--ds-fill-hover) [a&]:hover:text-(--ds-ink)",
+        ghost:
+          "text-(--ds-ink-soft) [a&]:hover:bg-(--ds-fill-hover) [a&]:hover:text-(--ds-ink)",
+        link: "text-(--ds-accent) underline-offset-4 [a&]:hover:underline",
       },
     },
     defaultVariants: {

@@ -1,5 +1,5 @@
 'use client';
-import {useMemo,useState} from 'react';
+import {useMemo,useState,type CSSProperties} from 'react';
 import {ArrowDownRight,ArrowUpRight,ChevronDown,History,Pause,Play,UserRound} from 'lucide-react';
 import {activityActions,activityRanges,activityForRange,activitySummary,cardActivity,metricEvolution} from '../lib/campaign-activity.mjs';
 import './campaign-activity.css';
@@ -45,7 +45,7 @@ export function MetricEvolution({card}:{card:any}){
 function EventRow({e,showCampaign,timezone}:{e:any;showCampaign:boolean;timezone?:string}){
  const Icon=icons[e.action]||History;
  return <li className={'ca-event ca-event-'+e.action}>
-  <span className="ca-event-icon"><Icon size={14} aria-hidden="true"/></span>
+  <span className="ca-event-icon" aria-hidden="true"><Icon size={14} aria-hidden="true"/></span>
   <span className="ca-event-body">
    <strong>{changeSentence(e)}</strong>
    <span>{changeDetail(e)}</span>
@@ -58,9 +58,9 @@ function EventRow({e,showCampaign,timezone}:{e:any;showCampaign:boolean;timezone
 /** Full log of one campaign (card detail and campaign analysis). */
 export function CampaignActivityLog({card,state,now}:{card:any;state:any;now:number}){
  const activity=useMemo(()=>cardActivity(state,card,{now}),[state,card,now]);
- return <details className="ca-log" open={activity.sinceAnalysis.length>0}><summary><History size={14}/>Atividade na campanha · últimas 72h <span>{activity.events.length}</span><ChevronDown size={13}/></summary>
-  {activity.events.length?<ul>{activity.events.map((e:any)=><EventRow key={e.id} e={e} showCampaign={false}/>)}</ul>:<p className="ca-empty">Nenhuma mudança de orçamento ou status registrada nas últimas 72h.</p>}
-  <p className="ca-note">Autor e horário exatos vêm do histórico de edições da Malva; mudanças vistas só nas leituras aparecem sem autor e com o intervalo entre as leituras.</p>
+ return <details className="ca-log" open={activity.sinceAnalysis.length>0}><summary><History size={14} aria-hidden="true"/>Atividade na campanha · últimas 72h <span className="ds-pill">{activity.events.length}</span><ChevronDown size={13} className="ca-chevron" aria-hidden="true"/></summary>
+  {activity.events.length?<ul>{activity.events.map((e:any)=><EventRow key={e.id} e={e} showCampaign={false}/>)}</ul>:<p className="ca-empty ds-empty">Nenhuma mudança de orçamento ou status registrada nas últimas 72h.</p>}
+  <p className="ca-note ds-caption">Autor e horário exatos vêm do histórico de edições da Malva; mudanças vistas só nas leituras aparecem sem autor e com o intervalo entre as leituras.</p>
  </details>;
 }
 
@@ -70,16 +70,17 @@ export function ActivityOverview({state,project,now}:{state:any;project:string;n
  const [range,setRange]=useState<keyof typeof ranges>('day'),[open,setOpen]=useState<string|null>(null);
  const {events,timezone}=useMemo(()=>activityForRange(state,{project,range,now}),[state,project,now,range]);
  const summary=useMemo(()=>activitySummary(events),[events]),shown=open?events.filter((e:any)=>e.action===open):[];
- return <section className="panel ca-overview" aria-label="Atividade recente dos gestores">
-  <div className="panel-title"><div><span className="eyebrow">ATIVIDADE DOS GESTORES</span><h2>Mudanças de orçamento e status</h2><p className="hint">Inclui gestores, regras automáticas e o Bunker. Clique numa caixa para ver quem fez, quando e de quanto para quanto.</p></div>
-   <div className="ca-range" role="group" aria-label="Período da atividade">{(Object.keys(ranges) as unknown as (keyof typeof ranges)[]).map(h=><button type="button" key={h} className={h===range?'is-selected':''} aria-pressed={h===range} onClick={()=>setRange(h)}>{ranges[h]}</button>)}</div></div>
-  <p className="ca-note">{range==='today'?'De 00h até agora':'Janela móvel até agora'} · {timezone}</p>
+ const keys=Object.keys(ranges) as unknown as (keyof typeof ranges)[];
+ return <section className="panel ca-overview ds-card ds-card--lg" aria-label="Atividade recente dos gestores">
+  <div className="panel-title ca-heading"><div className="ca-heading-copy"><span className="ds-eyebrow">Atividade dos gestores</span><h2 className="ds-headline">Mudanças de orçamento e status</h2><p className="ds-caption">Inclui gestores, regras automáticas e o Bunker. Clique numa caixa para ver quem fez, quando e de quanto para quanto.</p></div>
+   <div className="ca-range ds-segmented ds-segmented--sliding" role="group" aria-label="Período da atividade" style={{'--ds-seg-count':keys.length,'--ds-seg-index':Math.max(0,keys.indexOf(range))} as CSSProperties}>{keys.map(h=><button type="button" key={h} className={h===range?'is-selected':''} aria-pressed={h===range} onClick={()=>setRange(h)}>{ranges[h]}</button>)}</div></div>
+  <p className="ca-note ds-caption">{range==='today'?'De 00h até agora':'Janela móvel até agora'} · {timezone}</p>
   <div className="ca-boxes">{Object.entries(activityActions).map(([action,label])=>{const s=(summary as any)[action],Icon=icons[action],names=Object.entries(s.actors as Record<string,number>).sort((a,b)=>b[1]-a[1]);return <button type="button" key={action} className={'ca-box ca-box-'+action+(open===action?' is-open':'')} aria-expanded={open===action} disabled={!s.count} onClick={()=>setOpen(open===action?null:action)}>
-   <span className="ca-box-head"><Icon size={14} aria-hidden="true"/>{label}</span><strong>{s.count}</strong>
+   <span className="ca-box-head"><Icon size={14} aria-hidden="true"/>{label}</span><strong className="ca-box-value">{s.count}</strong>
    <small>{s.count?[...names.slice(0,3).map(([n,c])=>`${n} (${c})`),...(names.length>3?[`+${names.length-3}`]:[]),...(s.unknown?[`${s.unknown} sem autor informado`]:[])].join(' · '):'Nenhuma no período'}</small>
   </button>;})}</div>
-  {open&&<div className="ca-overview-log"><h3>{(activityActions as any)[open]} · {ranges[range]}</h3><ul>{shown.slice(0,50).map((e:any)=><EventRow key={e.id} e={e} showCampaign timezone={timezone}/>)}</ul>{shown.length>50&&<p className="ca-note">Mostrando as 50 mais recentes de {shown.length}.</p>}</div>}
-  {!events.length&&<p className="ca-empty">Nenhuma mudança de orçamento ou status registrada em {ranges[range]}.</p>}
+  {open&&<div className="ca-overview-log"><h3 className="ds-title">{(activityActions as any)[open]} · {ranges[range]}</h3><ul>{shown.slice(0,50).map((e:any)=><EventRow key={e.id} e={e} showCampaign timezone={timezone}/>)}</ul>{shown.length>50&&<p className="ca-note ds-caption">Mostrando as 50 mais recentes de {shown.length}.</p>}</div>}
+  {!events.length&&<p className="ca-empty ds-empty">Nenhuma mudança de orçamento ou status registrada em {ranges[range]}.</p>}
  </section>;
 }
 
@@ -88,5 +89,5 @@ export function ActivityBadge({card,state,now}:{card:any;state:any;now:number}){
  const activity=useMemo(()=>cardActivity(state,card,{now}),[state,card,now]),e=activity.latest;
  if(!e)return null;
  const pct=(e.action==='increase'||e.action==='reduce')&&finite(e.percent)?' '+signed(e.percent,n=>n.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%'):'';
- return <em className={'ca-badge ca-badge-'+e.action} title={changeSentence(e)+' · '+changeDetail(e)+' · '+stamp(e.at)}>{({increase:'Aumentada',reduce:'Reduzida',pause:'Pausada',activate:'Ativada'} as Record<string,string>)[e.action]||'Alterada'}{pct} após a análise</em>;
+ return <em className={'ca-badge ds-pill ca-badge-'+e.action+' '+(e.action==='increase'||e.action==='activate'?'ds-pill--good':e.action==='reduce'||e.action==='pause'?'ds-pill--bad':'ds-pill--warn')} title={changeSentence(e)+' · '+changeDetail(e)+' · '+stamp(e.at)}>{({increase:'Aumentada',reduce:'Reduzida',pause:'Pausada',activate:'Ativada'} as Record<string,string>)[e.action]||'Alterada'}{pct} após a análise</em>;
 }

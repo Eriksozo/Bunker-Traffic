@@ -1,101 +1,163 @@
-/* A board shows review stages. Decisions still use the sealed card form. */
-body .app .dc-context-flag { display:flex; align-items:center; gap:5px; margin-top:12px; padding:7px 8px; border:1px solid var(--warning-line); border-radius:6px; background:var(--warning-soft); color:var(--warning); font-size:10px; line-height:1.5; }
-body .app .dc-context-review { margin:0 18px 18px; padding:14px; border:1px solid var(--warning-line); border-radius:9px; background:var(--warning-soft); }
-body .app .dc-context-review>strong { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--warning); }
-body .app .dc-context-review p,body .app .dc-context-review li { font-size:11px; line-height:1.8; color:var(--ink-soft); }
-body .app .dc-context-review p { margin:8px 0 0; }
-body .app .dc-context-review summary { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; font-size:11px; color:var(--warning); cursor:pointer; }
-body .app .dc-context-review ul { margin:10px 0 0; padding-left:16px; }
-body .app .dc-context-review li+li { margin-top:6px; }
-body .app .dc-context-red { background:var(--danger-soft); border-color:var(--danger-line); }
-body .app .dc-context-red>strong,body .app .dc-context-red summary { color:var(--danger); }
-body .app .dc-board-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:3px 0 20px; }
-body .app .dc-board-heading h3 { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:var(--ink); }
-body .app .dc-board-heading h3:focus { outline:none; }
-body .app .dc-board-heading h3>svg { color:var(--selection); }
-body .app .dc-board-heading p { margin:5px 0 0; font-size:12px; line-height:1.6; color:var(--ink-muted); }
-body .app .dc-board-heading>span { flex-shrink:0; font-size:11px; color:var(--ink-muted); }
-body .app .dc-board-empty { display:flex; align-items:center; gap:12px; padding:15px 18px; margin-bottom:16px; border:1px solid var(--border); background:var(--surface); border-radius:10px; }
-body .app .dc-board-empty>svg { color:var(--selection); flex-shrink:0; }
-body .app .dc-board-empty strong { font-size:13px; color:var(--ink); }
-body .app .dc-board-empty p { margin:4px 0 0; font-size:12px; line-height:1.6; color:var(--ink-muted); }
-body .app .dc-kanban { display:grid; grid-template-columns:repeat(3,minmax(300px,1fr)); gap:16px; overflow-x:auto; overscroll-behavior-x:contain; scroll-snap-type:x proximity; padding:2px 2px 16px; align-items:start; scrollbar-width:thin; scrollbar-color:var(--line-strong) transparent; }
-body .app .dc-kanban:focus-visible { outline:2px solid var(--selection); outline-offset:2px; border-radius:12px; }
-body .app .dc-kanban-column { position:relative; min-width:0; background:var(--surface-subtle); border:1px solid var(--border); border-radius:13px; padding:13px; scroll-snap-align:start; }
-body .app .dc-column-heading { position:relative; padding:4px 34px 16px 3px; }
-body .app .dc-column-heading>div { display:flex; align-items:center; gap:8px; }
-body .app .dc-column-heading h3 { font-size:13px; color:var(--ink); font-weight:600; margin:0; }
-body .app .dc-column-heading p { font-size:11px; line-height:1.6; margin:7px 0 0; color:var(--ink-muted); }
-body .app .dc-column-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--ink-muted); }
-body .app .dc-column-suggestions .dc-column-dot { background:var(--selection); }
-body .app .dc-column-approval .dc-column-dot { background:var(--success); box-shadow:0 0 0 3px var(--success-soft); }
-body .app .dc-column-count { background:var(--surface-hover); border:1px solid var(--border); padding:1px 6px; border-radius:5px; color:var(--ink-soft); font-size:10px; font-variant-numeric:tabular-nums; }
-body .app .dc-column-step { position:absolute; top:3px; right:1px; font:11px var(--font-mono); color:var(--line-strong); }
-body .app .dc-column-cards { display:grid; gap:11px; }
-body .app .dc-kanban-card[data-slot=card] { padding:16px; display:flex; flex-direction:column; gap:0; min-width:0; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:var(--shadow-surface); transition:border-color .15s; }
-body .app .dc-kanban-card[data-slot=card]:hover { border-color:var(--line-strong); }
-body .app .dc-kanban-card-top { display:flex; justify-content:space-between; align-items:center; gap:7px; }
-body .app .dc-kanban-phase { font:9px var(--font-mono); text-transform:uppercase; color:var(--ink-muted); letter-spacing:.35px; }
-body .app .dc-kanban-status { display:inline-flex; align-items:center; gap:5px; color:var(--ink-muted); font-size:10px; }
-body .app .dc-kanban-status::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--ink-muted); }
-body .app .dc-kanban-status.is-active { color:var(--success); }
-body .app .dc-kanban-status.is-active::before { background:var(--success); }
-body .app .dc-kanban-card h4 { margin:12px 0 5px; min-width:0; }
-body .app .dc-kanban-card h4>button { color:var(--ink); background:none; border:0; padding:0; width:100%; font-size:12px; font-weight:550; line-height:1.65; text-align:left; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-body .app .dc-kanban-card h4>button:hover { color:var(--selection); }
-body .app .dc-kanban-card .dc-kanban-account { margin:0; font-size:11px; color:var(--ink-muted); overflow-wrap:anywhere; }
-body .app .dc-kanban-recommendation { display:flex; align-items:center; gap:6px; margin:17px 0 6px; font-size:11px; color:var(--ink-soft); }
-body .app .dc-kanban-increase .dc-kanban-recommendation { color:var(--success); }
-body .app .dc-kanban-reduce .dc-kanban-recommendation { color:var(--warning); }
-body .app .dc-kanban-pause .dc-kanban-recommendation { color:var(--danger); }
-body .app .dc-kanban-keep .dc-kanban-recommendation { color:var(--selection); }
-body .app .dc-kanban-recommendation strong { font-size:11px; font-weight:550; color:inherit; }
-body .app .dc-kanban-card .dc-kanban-reason { margin:0; font-size:11px; line-height:1.7; color:var(--ink-soft); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
-body .app .dc-kanban-metrics { display:grid; grid-template-columns:1.3fr 1fr .65fr; gap:9px; margin:16px 0 12px; padding:12px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
-body .app .dc-kanban-metrics>div { min-width:0; }
-body .app .dc-kanban-metrics dt { font-size:9px; line-height:1.5; color:var(--ink-muted); margin:0 0 5px; white-space:normal; overflow-wrap:anywhere; }
-body .app .dc-kanban-metrics dd { font-size:12px; font-weight:550; font-variant-numeric:tabular-nums; color:var(--ink); margin:0; overflow-wrap:anywhere; }
-body .app .dc-kanban-context { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; min-height:18px; }
-body .app .dc-kanban-context>span { display:inline-flex; align-items:center; gap:4px; font-size:9px; color:var(--ink-muted); }
-body .app .dc-kanban-card>footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:15px; }
-body .app .dc-kanban-card>footer>small { font-size:9px; color:var(--ink-muted); }
-body .app .dc-kanban-card>footer>button { min-height:30px; height:auto; padding:6px 8px; font-size:10px; gap:6px; border:1px solid var(--line-strong); color:var(--ink-soft); background:var(--surface-subtle); border-radius:7px; }
-body .app .dc-kanban-card>footer>button:hover { color:var(--ink); background:var(--surface-hover); }
-body .app .dc-column-approval .dc-kanban-card>footer>button { border-color:var(--success-line); color:var(--success); background:var(--success-soft); }
-body .app .dc-column-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; min-height:235px; padding:22px 13px; border:1px dashed var(--border); border-radius:9px; }
-body .app .dc-column-empty>span { display:grid; place-items:center; width:38px; height:38px; background:var(--surface-hover); color:var(--ink-muted); border:1px solid var(--border); border-radius:11px; margin-bottom:12px; }
-body .app .dc-column-empty strong { color:var(--ink-soft); font-size:11px; font-weight:500; }
-body .app .dc-column-empty p { max-width:190px; color:var(--ink-muted); font-size:11px; line-height:1.7; margin:6px 0 0; }
-body .app .dc-column-more { width:100%; height:34px; margin-top:10px; gap:7px; color:var(--ink-soft); font-size:11px; background:transparent; }
-.dc-modal.dc-inspector.app[data-slot=dialog-content] { display:block; min-height:0; max-width:660px; padding:0; max-height:calc(100dvh - 40px); border-radius:16px; overflow:auto; font-family:var(--font-ui); }
-body .dc-inspector .dc-inspector-heading { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 20px; position:sticky; top:0; z-index:2; background:var(--surface-subtle); border-bottom:1px solid var(--border); }
-body .dc-inspector .dc-inspector-heading [data-slot=dialog-title] { margin:0; font-size:14px; }
-body .dc-inspector .dc-inspector-heading [data-slot=dialog-description] { margin:4px 0 0; font-size:11px; }
-body .dc-inspector .dc-inspector-heading>button { flex-shrink:0; width:34px; height:34px; border:1px solid var(--line-strong); border-radius:8px; color:var(--ink-soft); background:var(--surface); }
-body .dc-inspector .dc-card[data-slot=card] { border:0; border-radius:0; box-shadow:none; }
-/* Current display data and frozen analysis each keep their own timestamp. */
-body .app .dc-source-stamps { display:flex; flex-direction:column; align-items:flex-start; gap:3px; min-width:0; }
-body .app .dc-source-stamps small { display:block; font-size:9px; line-height:1.6; white-space:normal; overflow-wrap:anywhere; color:var(--ink-muted); }
-body .app .dc-kanban-card>footer>.dc-source-stamps { flex:1 1 100%; }
-body .app .dc-card-foot>.dc-source-stamps { display:flex; flex:1; align-items:flex-start; }
-body .app .dc-card-metrics small { white-space:normal; overflow-wrap:anywhere; line-height:1.5; }
-body .dc-inspector .dc-live-window { margin:14px 0 18px; padding:14px; border:1px solid var(--line-strong); border-radius:9px; background:var(--surface-subtle); }
-body .dc-inspector .dc-live-window h4 { margin:0; font-size:12px; line-height:1.5; font-weight:550; color:var(--ink); }
-body .dc-inspector .dc-live-window p { margin:6px 0 0; font-size:10px; line-height:1.7; color:var(--ink-muted); }
-body .dc-inspector .dc-live-window dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:13px 0 0; }
-body .dc-inspector .dc-live-window dt { font-size:10px; color:var(--ink-muted); }
-body .dc-inspector .dc-live-window dd { margin:4px 0 0; font-size:12px; color:var(--ink); font-weight:550; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
-body .app .dc-windows caption { white-space:normal; line-height:1.6; text-align:left; font-size:10px; padding:0 0 10px; color:var(--ink-muted); }
-@media(max-width:800px) {
- body .app .dc-kanban { grid-template-columns:repeat(3,minmax(280px,84vw)); gap:12px; }
- body .app .dc-board-heading { align-items:flex-start; flex-direction:column; gap:8px; }
- body .app .dc-kanban-card>footer>button { min-height:38px; font-size:11px; }
- .dc-modal.dc-inspector.app[data-slot=dialog-content] { max-height:calc(100dvh - 20px); width:calc(100% - 20px); }
-}
-@media(prefers-reduced-motion:reduce) { body .app .dc-kanban-card[data-slot=card] { transition:none; } }
-@media print { body .app .dc-kanban { display:block; overflow:visible; } body .app .dc-kanban-column { margin-bottom:15px; break-inside:avoid; } body .app .dc-kanban-card>footer>button { display:none; } }
+/* Quadro de decisões · design system do notch. As etapas de revisão viram colunas em superfície rebaixada,
+   cada uma com ponto de tom e contagem em pill; os cards são resumos. A decisão continua no card selado (inspetor).
+   Trava `:not(#_)` em todas as regras: o tema antigo (uix.css, malva-theme.css) carrega depois. */
 
-body .app .dc-review-counts { display:flex; flex-wrap:wrap; gap:6px 12px; margin-top:12px; color:var(--ink-muted); font-size:10px; }
-body .app .dc-review-counts span { display:inline-flex; gap:5px; }
-body .app .dc-review-counts b { color:var(--ink-soft); font-weight:500; font-variant-numeric:tabular-nums; }
-body .app .dc-reviewing .dc-kanban-recommendation { color:var(--selection); }
+/* ───────── Cabeçalho do quadro ───────── */
+.dc-board-heading:not(#_) { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ds-space-s) var(--ds-space-l); margin: 0 0 var(--ds-space-l); }
+.dc-board-heading:not(#_) > div:first-child { flex: 1 1 320px; min-width: 0; }
+.dc-board-heading:not(#_) h3 { display: flex; align-items: center; gap: var(--ds-space-s); margin: 0; font: var(--ds-weight-semibold) var(--ds-font-title)/var(--ds-leading-tight) var(--ds-font-text); color: var(--ds-ink); }
+.dc-board-heading:not(#_) h3:focus { outline: none; }
+.dc-board-heading:not(#_) h3:focus-visible { outline: var(--ds-focus-width) solid var(--ds-focus); outline-offset: var(--ds-focus-offset); border-radius: var(--ds-radius-xs); }
+.dc-board-heading:not(#_) h3 > svg { flex: none; width: var(--ds-size-icon); height: var(--ds-size-icon); color: var(--ds-ink-soft); }
+.dc-board-heading:not(#_) p { max-width: 76ch; margin: var(--ds-space-xs) 0 0; font-size: var(--ds-font-caption); line-height: var(--ds-leading-body); color: var(--ds-ink-muted); }
+.dc-board-heading:not(#_) > span { flex: none; padding: var(--ds-inset-pill); border-radius: var(--ds-radius-pill); background: var(--ds-neutral-fill); color: var(--ds-ink-pill); font: var(--ds-weight-semibold) var(--ds-font-pill)/1.35 var(--ds-font-rounded); font-variant-numeric: tabular-nums; }
+
+/* Vazio do quadro: o glifo diz por quê (✓ fila em dia, relógio aguardando leitura, ⓘ filtro sem resultado). */
+.dc-board-empty.ds-empty:not(#_) { align-items: flex-start; gap: var(--ds-space-m); margin: 0 0 var(--ds-space-l); padding: var(--ds-space-l); border: var(--ds-size-hairline) solid var(--ds-stroke); border-radius: var(--ds-radius-l); background: var(--ds-surface-sunken); }
+.dc-board-empty.ds-empty:not(#_) strong { display: block; font: var(--ds-weight-semibold) var(--ds-font-body)/1.35 var(--ds-font-text); color: var(--ds-ink); }
+.dc-board-empty.ds-empty:not(#_) p { margin: 2px 0 0; font-size: var(--ds-font-caption); line-height: var(--ds-leading-body); color: var(--ds-ink-soft); }
+
+/* ───────── Colunas ───────── */
+.dc-kanban:not(#_) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-space-m); align-items: start; margin: 0 0 var(--ds-space-xxl); padding: 0; overflow: visible; scrollbar-width: thin; scrollbar-color: var(--ds-scrollbar) transparent; }
+.dc-kanban:not(#_):focus-visible { outline: var(--ds-focus-width) solid var(--ds-focus); outline-offset: var(--ds-focus-offset); border-radius: var(--ds-radius-xl); }
+/* Coluna raio xl com recuo s: o card dentro fica com m (concêntrico). */
+.dc-kanban-column:not(#_) { position: relative; min-width: 0; padding: var(--ds-space-s); border: var(--ds-size-hairline) solid var(--ds-stroke); border-radius: var(--ds-radius-xl); background: var(--ds-surface-sunken); scroll-snap-align: start; }
+.dc-column-heading:not(#_) { position: relative; padding: var(--ds-space-s) var(--ds-space-4xl) var(--ds-space-m) var(--ds-space-s); }
+.dc-column-heading:not(#_) > div { display: flex; align-items: center; gap: var(--ds-space-s); min-width: 0; }
+.dc-column-heading:not(#_) h3 { min-width: 0; margin: 0; font: var(--ds-weight-semibold) var(--ds-font-body)/1.3 var(--ds-font-text); color: var(--ds-ink); }
+.dc-column-heading:not(#_) p { margin: var(--ds-space-xs) 0 0; font-size: var(--ds-font-caption); line-height: 1.45; color: var(--ds-ink-muted); }
+.dc-column-count.ds-pill:not(#_) { flex: none; font-family: var(--ds-font-rounded); }
+.dc-column-step:not(#_) { position: absolute; top: var(--ds-space-s); right: var(--ds-space-s); font: var(--ds-weight-semibold) var(--ds-font-micro)/1.3 var(--ds-font-rounded); font-variant-numeric: tabular-nums; color: var(--ds-ink-faint); }
+.dc-review-counts:not(#_) { display: flex; flex-wrap: wrap; gap: var(--ds-space-xs); margin-top: var(--ds-space-s); }
+.dc-review-counts:not(#_) > span { display: inline-flex; align-items: center; gap: var(--ds-space-xs); padding: var(--ds-inset-pill); border-radius: var(--ds-radius-pill); background: var(--ds-neutral-fill); color: var(--ds-ink-pill); font: var(--ds-weight-medium) var(--ds-font-pill)/1.35 var(--ds-font-text); }
+.dc-review-counts:not(#_) b { font: var(--ds-weight-semibold) var(--ds-font-pill)/1.35 var(--ds-font-rounded); font-variant-numeric: tabular-nums; color: var(--ds-ink); }
+.dc-column-cards:not(#_) { display: grid; gap: var(--ds-space-s); }
+
+/* Coluna vazia: diz o que aparece ali. */
+.dc-column-empty:not(#_) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ds-space-xs); min-height: 200px; padding: var(--ds-space-xxl) var(--ds-space-l); border: var(--ds-size-hairline) dashed var(--ds-stroke-strong); border-radius: var(--ds-radius-m); text-align: center; }
+.dc-column-empty:not(#_) > span { display: grid; place-items: center; width: var(--ds-size-badge); height: var(--ds-size-badge); margin: 0 0 var(--ds-space-xs); border: 0; border-radius: var(--ds-radius-s); background: var(--ds-neutral-fill); color: var(--ds-ink-pill); }
+.dc-column-empty:not(#_) > span > svg { width: var(--ds-size-icon-s); height: var(--ds-size-icon-s); }
+.dc-column-empty:not(#_) strong { font: var(--ds-weight-semibold) var(--ds-font-body)/1.35 var(--ds-font-text); color: var(--ds-ink); }
+.dc-column-empty:not(#_) p { max-width: 28ch; margin: 0; font-size: var(--ds-font-caption); line-height: 1.45; color: var(--ds-ink-soft); }
+.dc-column-more.ds-btn:not(#_) { margin-top: var(--ds-space-s); }
+
+/* ───────── Card do quadro (resumo) ───────── */
+.dc-kanban-card[data-slot=card]:not(#_) { display: flex; flex-direction: column; gap: var(--ds-space-s); min-width: 0; margin: 0; padding: var(--ds-space-m); border: var(--ds-size-hairline) solid var(--ds-stroke); border-radius: var(--ds-radius-m); background: var(--ds-surface); box-shadow: var(--ds-elevation-card); color: var(--ds-ink); transition: border-color var(--ds-dur-hover) var(--ds-ease-out), background-color var(--ds-dur-hover) var(--ds-ease-out); }
+.dc-kanban-card[data-slot=card]:not(#_):hover { border-color: var(--ds-stroke-strong); }
+.dc-kanban-card[data-slot=card]:not(#_) > * { margin: 0; }
+.dc-kanban-card-top:not(#_) { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-space-s); min-width: 0; }
+.dc-kanban-phase:not(#_) { min-width: 0; overflow-wrap: anywhere; font: var(--ds-weight-semibold) var(--ds-font-micro)/1.35 var(--ds-font-text); letter-spacing: 0; text-transform: none; color: var(--ds-ink-muted); }
+.dc-kanban-status:not(#_) { display: inline-flex; align-items: center; gap: var(--ds-space-xs); flex: none; padding: var(--ds-inset-pill); border-radius: var(--ds-radius-pill); background: var(--ds-neutral-fill); color: var(--ds-ink-pill); font: var(--ds-weight-semibold) var(--ds-font-pill)/1.35 var(--ds-font-text); }
+.dc-kanban-status:not(#_)::before { content: ""; flex: none; width: var(--ds-size-dot-sm); height: var(--ds-size-dot-sm); border-radius: 50%; background: currentColor; }
+.dc-kanban-status.is-active:not(#_) { background: var(--ds-good-fill); color: var(--ds-good); }
+.dc-kanban-status.is-active:not(#_)::before { background: currentColor; }
+.dc-kanban-card:not(#_) h4 { margin: var(--ds-space-xs) 0 0; min-width: 0; }
+.dc-kanban-card:not(#_) h4 > button { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; width: 100%; margin: 0; padding: 0; border: 0; border-radius: var(--ds-radius-xs); background: none; color: var(--ds-ink); font: var(--ds-weight-semibold) var(--ds-font-body)/1.35 var(--ds-font-text); text-align: left; text-decoration: underline transparent; text-underline-offset: 3px; overflow-wrap: anywhere; cursor: pointer; transition: text-decoration-color var(--ds-dur-hover) var(--ds-ease-out); }
+.dc-kanban-card:not(#_) h4 > button:hover { text-decoration-color: var(--ds-ink-faint); }
+.dc-kanban-card:not(#_) h4 > button:focus-visible { outline: var(--ds-focus-width) solid var(--ds-focus); outline-offset: var(--ds-focus-offset); }
+.dc-kanban-account:not(#_) { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-space-xs); margin: 0; font-size: var(--ds-font-caption); line-height: 1.4; color: var(--ds-ink-muted); overflow-wrap: anywhere; }
+.dc-kanban-account:not(#_) > .ds-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+/* Recomendação: pill de tom com ícone + rótulo (menta aumentar, coral reduzir/pausar, neutro manter/revisão). */
+.dc-kanban-recommendation:not(#_) { --_tone: var(--ds-ink-pill); --_fill: var(--ds-neutral-fill); display: inline-flex; align-items: center; align-self: flex-start; gap: var(--ds-space-xs); margin: var(--ds-space-xs) 0 0; padding: var(--ds-inset-chip); border-radius: var(--ds-radius-pill); background: var(--_fill); color: var(--_tone); }
+.dc-kanban-recommendation:not(#_) > svg { flex: none; width: var(--ds-size-icon-s); height: var(--ds-size-icon-s); }
+.dc-kanban-recommendation:not(#_) strong { font: var(--ds-weight-semibold) var(--ds-font-caption)/1.2 var(--ds-font-rounded); font-variant-numeric: tabular-nums; color: inherit; }
+.dc-kanban-increase:not(#_) .dc-kanban-recommendation { --_tone: var(--ds-good); --_fill: var(--ds-good-fill); }
+:is(.dc-kanban-reduce, .dc-kanban-pause):not(#_) .dc-kanban-recommendation { --_tone: var(--ds-bad); --_fill: var(--ds-bad-fill); }
+.dc-reviewing:not(#_) .dc-kanban-recommendation { --_tone: var(--ds-ink-soft); --_fill: var(--ds-tag-fill); }
+.dc-kanban-reason:not(#_) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0; font-size: var(--ds-font-caption); line-height: var(--ds-leading-body); color: var(--ds-ink-soft); overflow-wrap: anywhere; }
+
+/* Sinais de contexto: pill âmbar com ícone (relógio ou atualizar). */
+.dc-context-flag:not(#_) { display: inline-flex; align-items: center; align-self: flex-start; gap: var(--ds-space-xs); max-width: 100%; margin: 0; padding: var(--ds-inset-pill); border: 0; border-radius: var(--ds-radius-pill); background: var(--ds-warn-fill); color: var(--ds-warn); font: var(--ds-weight-semibold) var(--ds-font-pill)/1.35 var(--ds-font-text); }
+.dc-context-flag:not(#_) > svg { flex: none; width: var(--ds-size-icon-xs); height: var(--ds-size-icon-xs); }
+
+/* Números do resumo: tiles com número arredondado. */
+.dc-kanban-metrics:not(#_) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-space-xs); margin: var(--ds-space-xs) 0 0; padding: 0; border: 0; }
+.dc-kanban-metrics:not(#_) > div { min-width: 0; padding: var(--ds-space-s); border-radius: var(--ds-radius-s); background: var(--ds-fill); }
+.dc-kanban-metrics:not(#_) dt { margin: 0 0 2px; font: var(--ds-weight-semibold) var(--ds-font-micro)/1.35 var(--ds-font-text); color: var(--ds-ink-soft); white-space: normal; overflow-wrap: anywhere; }
+.dc-kanban-metrics:not(#_) dd { margin: 0; font: var(--ds-weight-semibold) var(--ds-font-number)/1.2 var(--ds-font-rounded); font-variant-numeric: tabular-nums; color: var(--ds-ink); overflow-wrap: anywhere; }
+.dc-metrics-live:not(#_) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* Mais contexto */
+.dc-kanban-more:not(#_) { margin: 0; font-size: var(--ds-font-caption); color: var(--ds-ink-soft); }
+.dc-kanban-more:not(#_) > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-space-s); min-height: var(--ds-size-hit-min); padding: 0 var(--ds-space-xs); border-radius: var(--ds-radius-s); list-style: none; cursor: pointer; font: var(--ds-weight-semibold) var(--ds-font-caption)/1.3 var(--ds-font-text); color: var(--ds-ink-soft); transition: background-color var(--ds-dur-hover) var(--ds-ease-out), color var(--ds-dur-hover) var(--ds-ease-out); }
+.dc-kanban-more:not(#_) > summary:hover { background: var(--ds-fill-hover); color: var(--ds-ink); }
+.dc-kanban-more:not(#_) > summary::-webkit-details-marker { display: none; }
+.dc-kanban-more:not(#_) > summary > svg { transition: transform var(--ds-dur-select) var(--ds-ease-firm); }
+.dc-kanban-more[open]:not(#_) > summary > svg { transform: rotate(180deg); }
+.dc-kanban-more[open]:not(#_) { display: flex; flex-direction: column; gap: var(--ds-space-s); }
+.dc-kanban-context:not(#_) { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-space-xs) var(--ds-space-m); min-height: var(--ds-size-hit-min); }
+.dc-kanban-context:not(#_) > span { display: inline-flex; align-items: center; gap: var(--ds-space-xs); font-size: var(--ds-font-micro); color: var(--ds-ink-muted); }
+.dc-kanban-card:not(#_) > footer { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-space-s); margin-top: var(--ds-space-xs); }
+.dc-column-approval:not(#_) .dc-kanban-card > footer > .ds-btn { --_ink: var(--ds-accent); --_ink-hover: var(--ds-accent); --_bd: var(--ds-accent-rim); --_bd-hover: var(--ds-accent); }
+
+/* Cenário atual (dentro de "Mais contexto"): glifo + cor pelo tipo de cenário. */
+.dc-live-scenario:not(#_) { --_tone: var(--ds-ink-soft); --_glyph: var(--ds-glyph-info); margin: 0; padding: var(--ds-space-s) var(--ds-space-m); border: 0; border-radius: var(--ds-radius-s); background: var(--ds-fill); }
+.dc-live-scenario:not(#_) strong { display: flex; align-items: center; gap: var(--ds-space-xs); font: var(--ds-weight-semibold) var(--ds-font-caption)/1.35 var(--ds-font-text); color: var(--_tone); }
+.dc-live-scenario:not(#_) strong::before { content: ""; flex: none; width: 1.1em; height: 1.1em; background: currentColor; -webkit-mask: var(--_glyph) center / contain no-repeat; mask: var(--_glyph) center / contain no-repeat; }
+.dc-live-scenario:not(#_) p { margin: 2px 0 0; font-size: var(--ds-font-caption); line-height: var(--ds-leading-body); color: var(--ds-ink-soft); }
+.dc-live-scenario-positive:not(#_) { --_tone: var(--ds-good); --_glyph: var(--ds-glyph-good); background: var(--ds-good-wash); }
+.dc-live-scenario-attention:not(#_) { --_tone: var(--ds-warn); --_glyph: var(--ds-glyph-warn); background: var(--ds-warn-wash); }
+.dc-live-scenario-stale:not(#_) { --_tone: var(--ds-ink-soft); --_glyph: var(--ds-glyph-waiting); }
+.dc-history-reference:not(#_) { margin: 0; font-size: var(--ds-font-caption); line-height: var(--ds-leading-body); color: var(--ds-ink-soft); }
+.dc-history-reference:not(#_) > summary { min-height: var(--ds-size-hit-min); display: flex; align-items: center; cursor: pointer; font-weight: var(--ds-weight-semibold); }
+.dc-history-reference:not(#_) > summary:hover { color: var(--ds-ink); }
+.dc-history-reference:not(#_) p { margin: 0; font-family: var(--ds-font-text); font-variant-numeric: tabular-nums; }
+.dc-trend-summary:not(#_) { display: flex; flex-direction: column; gap: 2px; }
+.dc-trend-summary:not(#_) strong { font: var(--ds-weight-semibold) var(--ds-font-caption)/1.35 var(--ds-font-text); color: var(--ds-ink); }
+.dc-trend-summary:not(#_) span { font-size: var(--ds-font-micro); line-height: 1.4; color: var(--ds-ink-muted); }
+
+/* ───────── Contexto da decisão (card, lista e edição na visão geral) ───────── */
+.dc-context-review:not(#_) { --_tone: var(--ds-warn); --_wash: var(--ds-warn-wash); --_rim: var(--ds-warn-rim); margin: 0; padding: var(--ds-space-m); border: var(--ds-size-hairline) solid var(--_rim); border-radius: var(--ds-radius-m); background: var(--_wash); }
+.dc-context-red:not(#_) { --_tone: var(--ds-bad); --_wash: var(--ds-bad-wash); --_rim: var(--ds-bad-rim); }
+.dc-context-green:not(#_) { --_tone: var(--ds-good); --_wash: var(--ds-good-wash); --_rim: var(--ds-good-rim); }
+.dc-context-gray:not(#_) { --_tone: var(--ds-ink-soft); --_wash: var(--ds-fill); --_rim: var(--ds-stroke); }
+.dc-context-review:not(#_) > strong { display: flex; align-items: center; gap: var(--ds-space-s); font: var(--ds-weight-semibold) var(--ds-font-body)/1.35 var(--ds-font-text); color: var(--_tone); }
+.dc-context-review:not(#_) > strong > svg { flex: none; width: var(--ds-size-icon-s); height: var(--ds-size-icon-s); }
+.dc-context-review:not(#_) :is(p, li) { font-size: var(--ds-font-caption); line-height: var(--ds-leading-body); color: var(--ds-ink-soft); }
+.dc-context-review:not(#_) p { margin: var(--ds-space-xs) 0 0; }
+.dc-context-review:not(#_) p strong { color: var(--ds-ink); }
+.dc-context-review:not(#_) > small { display: block; margin-top: var(--ds-space-s); font-size: var(--ds-font-micro); line-height: 1.4; color: var(--ds-ink-muted); }
+.dc-context-review:not(#_) summary { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-space-s); min-height: var(--ds-size-hit-min); margin-top: var(--ds-space-xs); list-style: none; cursor: pointer; font: var(--ds-weight-semibold) var(--ds-font-caption)/1.3 var(--ds-font-text); color: var(--_tone); }
+.dc-context-review:not(#_) summary::-webkit-details-marker { display: none; }
+.dc-context-review:not(#_) summary > svg { transition: transform var(--ds-dur-select) var(--ds-ease-firm); }
+.dc-context-review:not(#_) details[open] summary > svg { transform: rotate(180deg); }
+.dc-context-review:not(#_) ul { margin: var(--ds-space-s) 0 0; padding-left: var(--ds-space-l); }
+.dc-context-review:not(#_) li + li { margin-top: var(--ds-space-xs); }
+
+/* ───────── Inspetor (diálogo com o card completo) ───────── */
+.dc-modal.dc-inspector.app[data-slot=dialog-content]:not(#_) { display: block; min-height: 0; padding: 0; max-height: calc(100dvh - 40px); overflow: auto; border-radius: var(--ds-radius-xl); font-family: var(--ds-font-text); overscroll-behavior: contain; }
+.dc-inspector-heading:not(#_) { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: var(--ds-space-l); padding: var(--ds-space-m) var(--ds-space-l) var(--ds-space-m) var(--ds-space-xl); border-bottom: var(--ds-size-hairline) solid var(--ds-stroke); background: var(--ds-surface-overlay); }
+.dc-inspector-heading:not(#_) [data-slot=dialog-title] { margin: 0; font: var(--ds-weight-semibold) var(--ds-font-title)/var(--ds-leading-tight) var(--ds-font-text); color: var(--ds-ink); }
+.dc-inspector-heading:not(#_) [data-slot=dialog-description] { margin: 2px 0 0; font-size: var(--ds-font-caption); line-height: 1.4; color: var(--ds-ink-muted); }
+.dc-inspector:not(#_) .dc-card[data-slot=card] { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+
+/* ───────── Carimbos de origem ───────── */
+.dc-source-stamps:not(#_) { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.dc-source-stamps:not(#_) small { display: block; font-size: var(--ds-font-micro); line-height: 1.4; white-space: normal; overflow-wrap: anywhere; color: var(--ds-ink-muted); }
+.dc-card-foot:not(#_) > .dc-source-stamps { flex: 1 1 220px; }
+
+/* Acompanhamento de hoje, separado da análise */
+.dc-live-window:not(#_) { margin: var(--ds-space-xs) 0 var(--ds-space-l); padding: var(--ds-space-m); border: var(--ds-size-hairline) solid var(--ds-stroke); border-radius: var(--ds-radius-m); background: var(--ds-surface-sunken); }
+.dc-live-window:not(#_) h4 { margin: 0; font: var(--ds-weight-semibold) var(--ds-font-body)/1.35 var(--ds-font-text); color: var(--ds-ink); }
+.dc-live-window:not(#_) p { margin: 2px 0 0; font-size: var(--ds-font-caption); line-height: var(--ds-leading-body); color: var(--ds-ink-muted); }
+.dc-live-window:not(#_) dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-space-xs); margin: var(--ds-space-m) 0 0; }
+.dc-live-window:not(#_) dl > div { min-width: 0; padding: var(--ds-space-s); border-radius: var(--ds-radius-s); background: var(--ds-fill); }
+.dc-live-window:not(#_) dt { font: var(--ds-weight-semibold) var(--ds-font-micro)/1.35 var(--ds-font-text); color: var(--ds-ink-soft); }
+.dc-live-window:not(#_) dd { margin: 2px 0 0; font: var(--ds-weight-semibold) var(--ds-font-number)/1.2 var(--ds-font-rounded); font-variant-numeric: tabular-nums; color: var(--ds-ink); overflow-wrap: anywhere; }
+
+/* ───────── Larguras estreitas ───────── */
+@media (max-width: 1100px) {
+  .dc-kanban:not(#_) { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 800px) {
+  .dc-board-heading:not(#_) { align-items: flex-start; }
+  .dc-modal.dc-inspector.app[data-slot=dialog-content]:not(#_) { max-height: calc(100dvh - 20px); width: calc(100% - 20px); }
+  .dc-inspector-heading:not(#_) { padding: var(--ds-space-s) var(--ds-space-s) var(--ds-space-s) var(--ds-space-l); }
+  .dc-live-window:not(#_) dl, .dc-metrics-live:not(#_) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media print {
+  .dc-kanban { display: block !important; overflow: visible !important; }
+  .dc-kanban-column { margin-bottom: 16px; break-inside: avoid; }
+  .dc-kanban-card > footer > button { display: none !important; }
+}

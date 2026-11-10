@@ -1,4 +1,6 @@
-/* Open-source variable fonts; licenses are served alongside the files. */
+/* Open-source variable fonts; licenses are served alongside the files.
+   Fallbacks only: the notch design system uses the system font first (see --ds-font-text and
+   --ds-font-mono in notch-ds.css), so on Apple devices these files are never downloaded. */
 /* instrument-sans-latin-ext-wght-normal */
 @font-face {
   font-family: 'Instrument Sans Variable';

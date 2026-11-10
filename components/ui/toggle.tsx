@@ -7,17 +7,17 @@ import { Toggle as TogglePrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 
 const toggleVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-[color,box-shadow] outline-none hover:bg-muted hover:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-(--ds-radius-pill) font-(family-name:--ds-font-text) text-(length:--ds-font-caption) font-medium whitespace-nowrap text-(--ds-ink-soft) transition-[background-color,color,border-color,transform] duration-(--ds-dur-hover) ease-(--ds-ease-out) outline-none hover:not-disabled:bg-(--ds-fill-hover) hover:not-disabled:text-(--ds-ink) active:not-disabled:[transform:scale(var(--ds-press-scale))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-(--ds-focus) disabled:cursor-not-allowed disabled:opacity-(--ds-opacity-disabled) aria-invalid:border-(--ds-bad) data-[state=on]:bg-(--ds-fill-selected) data-[state=on]:font-semibold data-[state=on]:text-(--ds-ink) [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default: "bg-transparent",
         outline:
-          "border border-input bg-transparent shadow-xs hover:bg-accent hover:text-accent-foreground",
+          "border border-(--ds-stroke) bg-transparent hover:not-disabled:border-(--ds-stroke-strong) data-[state=on]:border-(--ds-stroke-strong)",
       },
       size: {
-        default: "h-9 min-w-9 px-2",
-        sm: "h-8 min-w-8 px-1.5",
+        default: "h-(--ds-size-control) min-w-(--ds-size-control) px-2.5",
+        sm: "h-(--ds-size-control-sm) min-w-(--ds-size-control-sm) px-2",
         lg: "h-10 min-w-10 px-2.5",
       },
     },

@@ -1,64 +1,99 @@
+/* Campanhas · resultado por dia (tabela e gráfico). Só tokens do notch (app/notch-ds.css). */
 body .dc-modal.dc-inspector.app[data-slot=dialog-content] { max-width:1080px; }
-body .app .campaign-daily-results { min-width:0; margin:20px 0 22px; padding-top:18px; border-top:1px solid var(--border); color:var(--ink); }
-body .app .cdr-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:9px; }
-body .app .cdr-heading h4 { display:flex; align-items:center; gap:7px; margin:0; font-size:14px; font-weight:600; line-height:1.5; color:var(--ink); }
-body .app .cdr-heading p { margin:4px 0 0; font-size:11px; color:var(--ink-muted); line-height:1.6; }
-body .app .cdr-heading p>span { font-size:10px; }
-body .app .cdr-controls { display:flex; align-items:center; gap:6px; }
-body .app .cdr-view-toggle { display:flex; align-items:center; padding:3px; border-radius:10px; background:var(--surface-hover); }
-body .app .cdr-view-toggle>button { display:inline-flex; height:auto; min-height:31px; gap:5px; border:1px solid transparent; border-radius:8px; padding:5px 10px; background:transparent; color:var(--ink-muted); font-size:11px; line-height:1.4; font-weight:500; box-shadow:none; }
-body .app .cdr-view-toggle>button[aria-pressed=true] { border-color:var(--line-strong); background:var(--surface-raised); color:var(--ink); }
-body .app .cdr-refresh { flex-shrink:0; width:32px; height:32px; padding:0; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--ink-muted); }
-body .app .cdr-info { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; padding:0; border:0; border-radius:4px; color:var(--ink-muted); background:transparent; vertical-align:middle; }
-body .app .cdr-info:focus-visible,body .app .cdr-refresh:focus-visible,body .app .cdr-view-toggle>button:focus-visible,body .app .cdr-chart-scroll:focus-visible { outline:2px solid var(--selection); outline-offset:2px; }
-body .app .cdr-reading-status { min-height:18px; margin:0 0 9px; font-size:10px; line-height:1.6; color:var(--ink-muted); overflow-wrap:anywhere; }
-body .app .cdr-reading-status>span { display:inline-flex; align-items:center; gap:5px; }
-body .app .cdr-view { overflow:hidden; min-width:0; border:1px solid var(--border); border-radius:12px; background:var(--surface-subtle); }
-body .app .cdr-table-scroll { overflow-x:auto; scrollbar-width:thin; scrollbar-color:var(--line-strong) transparent; overscroll-behavior-x:contain; }
-body .app .cdr-table-scroll:focus-visible { outline:2px solid var(--selection); outline-offset:-2px; }
+body .app .campaign-daily-results { min-width:0; margin:var(--ds-space-l) 0 var(--ds-space-xl); color:var(--ds-ink); }
+
+/* Cabeçalho: título + período à esquerda; segmentado e atualizar à direita. */
+body .app .cdr-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--ds-space-m); margin-bottom:var(--ds-space-s); }
+body .app .cdr-heading-copy { min-width:0; }
+body .app .cdr-heading h4 { display:flex; align-items:center; gap:var(--ds-space-xs); }
+body .app .cdr-heading p { margin-top:var(--ds-space-xxs); }
+body .app .cdr-controls { display:flex; align-items:center; gap:var(--ds-space-s); }
+body .app .cdr-view-toggle > button > svg { flex-shrink:0; }
+body .app .cdr-refresh.ds-btn:not(#_) { border-color:var(--ds-stroke); }
+
+/* Botão de ajuda (ⓘ): alvo de 24 px, retorno de passar o mouse e foco. */
+body .app .cdr-info { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:var(--ds-size-hit-min); height:var(--ds-size-hit-min); padding:0; margin:0; border:0; border-radius:var(--ds-radius-pill); color:var(--ds-ink-muted); background:transparent; vertical-align:middle; cursor:help; transition:background-color var(--ds-dur-hover) var(--ds-ease-out), color var(--ds-dur-hover) var(--ds-ease-out); }
+body .app .cdr-info:hover { background:var(--ds-fill-hover); color:var(--ds-ink); }
+body .app .cdr-info:focus-visible,body .app .cdr-chart-scroll:focus-visible { outline:var(--ds-focus-width) solid var(--ds-focus); outline-offset:var(--ds-focus-offset); }
+
+/* Situação da leitura: glifo + texto (relógio = espera, ⛔ = erro, ⚠ = desatualizada, ponto menta = em dia). */
+body .app .cdr-reading-status { min-height:20px; margin:0 0 var(--ds-space-s); font:var(--ds-weight-regular) var(--ds-font-caption)/1.5 var(--ds-font-text); color:var(--ds-ink-muted); overflow-wrap:anywhere; }
+body .app .cdr-reading-status>span { display:inline-flex; align-items:center; gap:var(--ds-space-s); }
+body .app .cdr-reading-status .ds-dot { margin:0 2px; }
+body .app .cdr-reading-status .cdr-status-error { align-items:flex-start; color:var(--ds-ink-soft); }
+body .app .cdr-reading-status .cdr-status-error .ds-glyph { margin-top:.15em; }
+
+/* Caixa da vista: superfície afundada dentro do card (raio m = card l − recuo). */
+body .app .cdr-view { overflow:hidden; min-width:0; border:var(--ds-size-hairline) solid var(--ds-stroke); border-radius:var(--ds-radius-m); background:var(--ds-surface-sunken); }
+body .app .cdr-table-scroll { overflow-x:auto; scrollbar-width:thin; scrollbar-color:var(--ds-scrollbar) transparent; overscroll-behavior-x:contain; }
+body .app .cdr-table-scroll:focus-visible { outline:var(--ds-focus-width) solid var(--ds-focus); outline-offset:calc(var(--ds-focus-width) * -1); }
 body .app .cdr-view [data-slot=table-container] { overflow:visible; }
-body .app .cdr-table { width:100%; min-width:825px; border-collapse:collapse; font-size:11px; line-height:1.45; font-variant-numeric:tabular-nums; }
-body .app .cdr-table [data-slot=table-head],body .app .cdr-table [data-slot=table-cell] { padding:11px 12px; height:auto; white-space:nowrap; text-align:right; border:0; color:var(--ink); font-size:11px; font-weight:400; background:transparent; }
-body .app .cdr-table thead [data-slot=table-head] { background:var(--surface-hover); color:var(--ink-muted); font-size:9px; font-weight:600; letter-spacing:.35px; }
-body .app .cdr-table [data-slot=table-row] { border:0; border-bottom:1px solid var(--border); background:transparent; }
-body .app .cdr-table tbody [data-slot=table-row]:last-child { border-bottom:0; }
-body .app .cdr-table tbody [data-slot=table-row]:hover { background:var(--surface-hover); }
-body .app .cdr-table [data-slot=table-head]:first-child { text-align:left; }
-body .app .cdr-table .cdr-day { color:var(--ink-soft); font-weight:500; }
-body .app .cdr-partial { display:inline-block; margin-left:6px; border:1px solid var(--line-strong); border-radius:4px; padding:1px 4px; color:var(--ink-muted); font-size:8px; font-weight:400; }
-body .app .cdr-table .cdr-positive,body .app .cdr-chart-tooltip .cdr-positive { color:var(--success,#39bd8d); }
-body .app .cdr-table .cdr-negative,body .app .cdr-chart-tooltip .cdr-negative { color:var(--danger,#ff8078); }
-body .app .cdr-foot { display:flex; flex-direction:column; align-items:flex-start; gap:3px; margin-top:9px; color:var(--ink-muted); font-size:10px; line-height:1.6; }
-body .app .cdr-foot small { color:var(--ink-muted); font-size:9px; overflow-wrap:anywhere; }
-body .app .cdr-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; min-height:210px; padding:24px; text-align:center; color:var(--ink-muted); }
-body .app .cdr-empty strong { font-size:12px; font-weight:500; color:var(--ink-soft); }
-body .app .cdr-empty p { margin:0; max-width:340px; font-size:11px; line-height:1.7; color:var(--ink-muted); }
-body .app .cdr-skeleton { padding:4px 12px; }
-body .app .cdr-skeleton>div { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:20px; padding:14px 0; border-bottom:1px solid var(--border); }
+
+/* Tabela: números arredondados e tabulares à direita, cabeçalho fixo na superfície, primeira coluna fixa na rolagem lateral. */
+body .app .cdr-table { width:100%; min-width:720px; border-collapse:separate; border-spacing:0; font:var(--ds-weight-regular) var(--ds-font-body)/1.4 var(--ds-font-rounded); font-variant-numeric:tabular-nums; }
+body .app .cdr-table [data-slot=table-head],body .app .cdr-table [data-slot=table-cell] { padding:var(--ds-space-s) var(--ds-space-m); height:var(--ds-size-control); white-space:nowrap; text-align:right; vertical-align:middle; border:0; border-bottom:var(--ds-size-hairline) solid var(--ds-stroke); color:var(--ds-ink); font-family:var(--ds-font-rounded); font-size:var(--ds-font-body); font-weight:var(--ds-weight-medium); text-transform:none; letter-spacing:normal; background:var(--ds-surface-sunken); transition:background-color var(--ds-dur-hover) var(--ds-ease-out); }
+body .app .cdr-table thead [data-slot=table-head] { position:sticky; top:0; z-index:2; height:var(--ds-size-control); background:var(--ds-surface); color:var(--ds-ink-soft); font:var(--ds-weight-semibold) var(--ds-font-caption)/1.3 var(--ds-font-text); letter-spacing:var(--ds-tracking-eyebrow); text-transform:none; }
+body .app .cdr-table thead [data-slot=table-head] .cdr-info { margin-left:var(--ds-space-xxs); }
+body .app .cdr-table [data-slot=table-row] { border:0; background:transparent; }
+body .app .cdr-table tbody [data-slot=table-row]:last-child > * { border-bottom:0; }
+body .app .cdr-table tbody [data-slot=table-row]:hover > * { background:var(--ds-surface-hover); }
+body .app .cdr-table tbody .cdr-today > * { background:var(--ds-surface); }
+body .app .cdr-table tbody .cdr-today:hover > * { background:var(--ds-surface-hover); }
+body .app .cdr-table [data-slot=table-head]:first-child,body .app .cdr-table [data-slot=table-cell]:first-child { position:sticky; left:0; z-index:1; text-align:left; box-shadow:inset calc(var(--ds-size-hairline) * -1) 0 0 var(--ds-stroke); }
+body .app .cdr-table thead [data-slot=table-head]:first-child { z-index:3; }
+body .app .cdr-table .cdr-day { color:var(--ds-ink); font-weight:var(--ds-weight-semibold); }
+body .app .cdr-partial.ds-pill:not(#_) { margin-left:var(--ds-space-s); vertical-align:middle; }
+body .app .cdr-partial .ds-glyph { --ds-glyph-size:11px; }
+
+/* Tons: lucro com glifo e cor; ROI em pill do tom. ROAS segue neutro. N/D esmaecido, nunca zero. */
+body .app .cdr-na { color:var(--ds-ink-muted); font-weight:var(--ds-weight-regular); }
+body .app .cdr-signed { display:inline-flex; align-items:center; justify-content:flex-end; gap:var(--ds-space-xs); font-weight:var(--ds-weight-semibold); }
+body .app .cdr-signed .ds-glyph { --ds-glyph-size:12px; }
+body .app .cdr-signed-good { color:var(--ds-good); }
+body .app .cdr-signed-bad { color:var(--ds-bad); }
+body .app .cdr-roi.ds-pill:not(#_) { gap:var(--ds-space-xs); font-family:var(--ds-font-rounded); font-size:var(--ds-font-caption); }
+body .app .cdr-roi .ds-glyph { --ds-glyph-size:11px; }
+body .app .cdr-table .cdr-positive,body .app .cdr-chart-tooltip .cdr-positive { color:var(--ds-good); }
+body .app .cdr-table .cdr-negative,body .app .cdr-chart-tooltip .cdr-negative { color:var(--ds-bad); }
+
+/* Rodapé. */
+body .app .cdr-foot { display:flex; flex-direction:column; align-items:flex-start; gap:var(--ds-space-xxs); margin-top:var(--ds-space-s); color:var(--ds-ink-muted); font-size:var(--ds-font-caption); line-height:1.5; }
+body .app .cdr-foot small { color:var(--ds-ink-muted); font-size:var(--ds-font-micro); overflow-wrap:anywhere; }
+
+/* Vazio e erro: dizem por quê (relógio = aguardando; ⛔ = leitura indisponível; ⓘ = sem dado). */
+body .app .cdr-empty.ds-empty:not(#_) { min-height:210px; justify-content:center; }
+body .app .cdr-empty.cdr-empty--error:not(#_) { --_ico:var(--ds-glyph-bad); --_ico-ink:var(--ds-bad); }
+
+/* Esqueleto no formato das linhas. */
+body .app .cdr-skeleton { padding:var(--ds-space-xs) var(--ds-space-m); }
+body .app .cdr-skeleton>div { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:var(--ds-space-xl); padding:var(--ds-space-m) 0; border-bottom:var(--ds-size-hairline) solid var(--ds-stroke); }
 body .app .cdr-skeleton>div:last-child { border:0; }
-body .app .cdr-skeleton i { height:11px; background:var(--surface-hover); border-radius:4px; animation:cdr-pulse 1.5s ease-in-out infinite; }
-body .app .cdr-chart-scroll { overflow-x:auto; scrollbar-width:thin; }
-body .app .cdr-chart { min-width:500px; padding:10px 8px 0; }
-body .app .cdr-chart-legend { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:9px 18px; padding:5px 16px 16px; }
-body .app .cdr-chart-legend>span { display:inline-flex; align-items:center; gap:5px; color:var(--ink-soft); font-size:10px; }
-body .app .cdr-chart-legend i { display:inline-block; width:8px; height:8px; border-radius:2px; }
-body .app .cdr-legend-spend { background:#9868f5; }
-body .app .cdr-legend-revenue { background:#39bd8d; }
-body .app .cdr-legend-profit { background:#d5bcff; }
-body .app .cdr-chart-legend small { flex-basis:100%; text-align:center; font-size:9px; color:var(--ink-muted); }
-body .app .cdr-chart-tooltip { padding:11px 13px; min-width:200px; border:1px solid var(--line-strong); border-radius:9px; background:var(--surface-raised); box-shadow:var(--shadow-surface); color:var(--ink); font-size:10px; font-variant-numeric:tabular-nums; }
-body .app .cdr-chart-tooltip>strong { font-size:11px; font-weight:600; }
-body .app .cdr-chart-tooltip dl { display:grid; gap:6px; margin:9px 0 0; }
-body .app .cdr-chart-tooltip dl>div { display:flex; justify-content:space-between; gap:16px; }
-body .app .cdr-chart-tooltip dt { color:var(--ink-muted); }
-body .app .cdr-chart-tooltip dd { margin:0; color:var(--ink); }
-@keyframes cdr-pulse { 50% { opacity:.45; } }
+body .app .cdr-skeleton>div>.ds-skeleton:first-child { --ds-skeleton-w:60%; }
+
+/* Gráfico. */
+body .app .cdr-chart-scroll { overflow-x:auto; scrollbar-width:thin; scrollbar-color:var(--ds-scrollbar) transparent; }
+body .app .cdr-chart { min-width:500px; padding:var(--ds-space-s) var(--ds-space-s) 0; }
+body .app .cdr-chart .recharts-text { font-family:var(--ds-font-rounded); font-variant-numeric:tabular-nums; }
+body .app .cdr-chart-legend { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:var(--ds-space-s) var(--ds-space-l); padding:var(--ds-space-xs) var(--ds-space-l) var(--ds-space-l); }
+body .app .cdr-chart-legend>span { display:inline-flex; align-items:center; gap:var(--ds-space-xs); color:var(--ds-ink-soft); font-size:var(--ds-font-caption); }
+body .app .cdr-chart-legend i { display:inline-block; width:8px; height:8px; border-radius:var(--ds-radius-bar); }
+body .app .cdr-legend-spend { background:var(--ds-ink-muted); }
+body .app .cdr-legend-revenue { background:var(--ds-good); }
+body .app .cdr-chart-legend i.cdr-legend-profit { width:14px; height:2px; background:var(--ds-accent); }
+body .app .cdr-chart-legend small { flex-basis:100%; text-align:center; font-size:var(--ds-font-micro); color:var(--ds-ink-muted); }
+body .app .cdr-chart-tooltip.ds-popover:not(#_) { padding:var(--ds-space-m); min-width:200px; border-radius:var(--ds-radius-m); font-size:var(--ds-font-caption); font-variant-numeric:tabular-nums; }
+body .app .cdr-chart-tooltip>strong { font:var(--ds-weight-semibold) var(--ds-font-caption)/1.3 var(--ds-font-text); color:var(--ds-ink); }
+body .app .cdr-chart-tooltip dl { display:grid; gap:var(--ds-space-xs); margin:var(--ds-space-s) 0 0; }
+body .app .cdr-chart-tooltip dl>div { display:flex; justify-content:space-between; gap:var(--ds-space-l); }
+body .app .cdr-chart-tooltip dt { color:var(--ds-ink-muted); }
+body .app .cdr-chart-tooltip dd { margin:0; color:var(--ds-ink); font-family:var(--ds-font-rounded); font-weight:var(--ds-weight-semibold); text-align:right; }
+
 @media(max-width:600px) {
- body .app .cdr-heading { gap:9px; }
+ body .app .campaign-daily-results { --ds-card-pad:var(--ds-space-m); }
+ body .app .cdr-heading { gap:var(--ds-space-s); }
  body .app .cdr-heading p>span { display:block; }
  body .app .cdr-controls { margin-left:auto; }
- body .app .cdr-view-toggle>button { min-height:36px; padding:6px 9px; }
- body .app .cdr-refresh { width:36px; height:36px; }
- body .app .cdr-skeleton>div { gap:12px; }
+ body .app .cdr-view-toggle.ds-segmented:not(#_) > button { min-height:36px; }
+ body .app .cdr-refresh { --ds-btn-h:36px; }
+ body .app .cdr-skeleton>div { gap:var(--ds-space-m); }
 }
-@media(prefers-reduced-motion:reduce) { body .app .cdr-skeleton i { animation:none; } }

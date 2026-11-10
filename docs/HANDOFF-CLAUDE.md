@@ -1005,3 +1005,24 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - o teste de precedência pausa/aumento (`tests/battery-fix-shadow.test.mjs`) passou a usar um ontem cujo lucro não cobre o gasto de hoje, mantendo o que ele verifica.
 - **Validação:** `tests/partial-day.test.mjs` (4), suíte completa (1432), typecheck e build.
 
+
+## Web no design system do notch, de ponta a ponta (registro escrito às 2026-11-10 23:02:37 UTC por `date -u`, 10/11/2026)
+
+- **Pedido do dono:** a UX da web estava ruim, principalmente a tela "Autonomia do Bunk". Ele pediu para aplicar o design system do notch ("ele é excelente") em todo o projeto web, em todas as seções.
+- **Escopo: só apresentação.** Não mudaram dados, chamadas, payloads, valores salvos e seus padrões, permissões, aprovação, Touch ID, ordens, regras e números exibidos. O diff dos `.tsx` foi conferido por script (handlers, `disabled`, chamadas `write`/`fetch`/`set*`): o que mudou é marcação, classes, `aria-*`, estado visual (linha aberta, qual botão mostra o spinner, indicador da aba) e textos que repetem regras que já existiam.
+- **Camada de tokens:**
+  - `app/notch-ds.css`: tokens `--ds-*`, gêmeos de Aumentar contraste, ponte das variáveis antigas e componentes `.ds-*`;
+  - guia em `docs/web-design-system.md`, com a nova seção 10 "Aplicado em".
+- **Arquivos:**
+  - todas as telas em `app/*.tsx` e `app/*.css` (inclusive `uix.css` e `malva-theme.css`, agora só com tokens);
+  - `components/ui/*` e `components/connector-error.tsx`;
+  - `app/layout.tsx`, que importa o `notch-ds.css`.
+- **Integração:**
+  - sem cor fixa fora do `notch-ds.css`, a não ser no `@media print`;
+  - os tamanhos de fonte e raios fixos da base antiga do `globals.css` passaram para os tokens;
+  - toda classe `.ds-*` usada existe;
+  - a cascata foi conferida no CSS do build.
+- **Validação:** 1432 testes, typecheck e `npm run build` passam no worktree `Bunker-Traffic-notch-ds` (branch `feat/web-notch-ds`).
+- **Pendente:**
+  - nada foi conferido no navegador (sem servidor nem capturas). A conferência visual fica com o dono: menu recolhido, celular (~375 px), Todos os projetos, diálogo da campanha e Autonomia do Bunk;
+  - não houve commit nem deploy.

@@ -1,37 +1,69 @@
-.daily-brief{margin-bottom:16px}
-.brief-compare{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:4px}
-.brief-metric{display:flex;flex-direction:column;gap:4px;padding:14px;border:1px solid var(--border,#34303f);border-radius:10px;background:var(--surface-subtle,transparent);min-width:0}
-.brief-metric strong{font-size:22px;line-height:1.2;color:var(--ink,#eee9f3)}
-.brief-label{font-size:11px;color:var(--ink-muted,#b8afc8)}
-.brief-base{font-size:11px;color:var(--ink-soft,#a49eb0)}
-.brief-deltas{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
-.brief-delta{display:inline-flex;align-items:center;gap:3px;font-size:11px;line-height:1.4;padding:2px 7px;border-radius:999px;border:1px solid var(--border,#34303f)}
-.brief-delta.is-good{color:var(--success,#35c99b);border-color:var(--success-line,#35c99b55)}
-.brief-delta.is-bad{color:var(--danger,#f07178);border-color:var(--danger-line,#f0717855)}
-.brief-delta.is-neutral{color:var(--ink-muted,#b8afc8)}
-.brief-item .brief-why{color:var(--ink-muted,#b8afc8)}
-.brief-item .brief-balance{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:2px;font-size:11px}
-.brief-balance-part.is-good,.brief-balance strong.is-good{color:var(--success,#35c99b)}
-.brief-balance-part.is-bad,.brief-balance strong.is-bad{color:var(--danger,#f07178)}
-.brief-balance-part.is-neutral,.brief-balance strong.is-neutral{color:var(--ink-muted,#b8afc8)}
-.brief-balance strong{font-weight:600}
-.brief-balance-verdict{padding:1px 7px;border-radius:999px;border:1px solid currentColor;font-weight:600}
-.brief-balance-verdict.is-warn{color:var(--warning,#e6b450)}
-.brief-balance-verdict.is-bad{color:var(--danger,#f07178)}
-.brief-stake.is-bad{color:var(--danger,#f07178)}
-.brief-stake.is-good{color:var(--success,#35c99b)}
-.brief-stake small{color:var(--ink-muted,#b8afc8);white-space:normal;max-width:220px;margin-left:auto}
-@media(max-width:760px){.brief-compare{grid-template-columns:minmax(0,1fr)}.brief-stake small{max-width:none;margin-left:0}}
-/* Sortable headers of the campaigns table. */
-.sort-header{all:unset;cursor:pointer;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;white-space:nowrap}
-.sort-header:hover,.sort-header.is-active{color:var(--ink,#eee9f3)}
-.sort-header:focus-visible{outline:2px solid var(--accent,#b79ce8);outline-offset:2px;border-radius:3px}
+/* Resumo do dia ("Hoje em 1 minuto") no design system do notch: tokens --ds-* e componentes .ds-* (app/notch-ds.css).
+   Os componentes usam a trava :not(#_); as regras locais repetem a trava só onde o tema antigo (uix.css, malva-theme.css) escreve por cima. */
+.daily-brief{margin-bottom:var(--ds-space-l)}
+.daily-brief .panel-title:not(#_){align-items:flex-start;margin-bottom:var(--ds-space-m)}
+.daily-brief .panel-title h2:not(#_){margin:0 0 var(--ds-space-xs)}
+.daily-brief .panel-title p:empty{display:none}
 
-.brief-action-item{border-top:1px solid var(--border,#34303f)}
-.brief-action-item.is-open{border:1px solid var(--border,#34303f);border-radius:10px;margin:8px 0;background:var(--surface-subtle,transparent)}
-.brief-inline-decision{padding:4px 20px 18px;min-width:0}
+/* Três índices de hoje: tiles com número arredondado e tabular, base de comparação e variações com seta + tom. */
+.brief-compare{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--ds-space-m);margin-top:var(--ds-space-xs)}
+.brief-metric.ds-kpi--tile:not(#_){--ds-kpi-pad:var(--ds-space-l);gap:var(--ds-space-xs)}
+.brief-base{font-variant-numeric:tabular-nums}
+.brief-deltas{display:flex;flex-wrap:wrap;gap:var(--ds-space-xs);margin-top:var(--ds-space-xs)}
+.brief-delta.ds-pill:not(#_){gap:var(--ds-space-xs);font-family:var(--ds-font-rounded)}
+.brief-delta.ds-pill:not(#_)>svg{width:var(--ds-size-icon-xs);height:var(--ds-size-icon-xs)}
+
+/* Fila "O que fazer agora": linhas como a lista do notch (selo de tom, título, subtítulo, valor à direita, chevron). */
+.daily-brief .section-divider{margin:var(--ds-space-xl) 0}
+.brief-queue{display:flex;flex-direction:column;min-width:0}
+.brief-empty.ds-empty:not(#_){padding:var(--ds-space-xs) 0 0}
+.brief-action-item{border-top:var(--ds-size-hairline) solid var(--ds-stroke);border-radius:var(--ds-radius-m);transition:background-color var(--ds-dur-hover) var(--ds-ease-out),border-color var(--ds-dur-hover) var(--ds-ease-out)}
+.brief-action-item:first-child{border-top-color:transparent}
+.brief-action-item.is-open{border:var(--ds-size-hairline) solid var(--ds-stroke-strong);margin:var(--ds-space-s) 0;background:var(--ds-surface-sunken)}
+.brief-action-item.is-open+.brief-action-item{border-top-color:transparent}
+.daily-brief .priority-row.brief-item:not(#_){min-height:var(--ds-size-control);padding:var(--ds-space-m) var(--ds-space-s);margin:0;border:0;border-radius:var(--ds-radius-m);background:transparent;color:var(--ds-ink);gap:var(--ds-space-m);cursor:pointer;transition:background-color var(--ds-dur-hover) var(--ds-ease-out),transform var(--ds-dur-press) var(--ds-ease-press)}
+.daily-brief .priority-row.brief-item:not(#_):hover{background:var(--ds-fill-hover)}
+.daily-brief .priority-row.brief-item:not(#_):active{transform:scale(var(--ds-row-press-scale))}
+.daily-brief .priority-row.brief-item:not(#_):focus-visible{outline:var(--ds-focus-width) solid var(--ds-focus);outline-offset:var(--ds-focus-offset)}
+.daily-brief .priority-row.brief-item[aria-expanded=true]:not(#_){background:var(--ds-fill-selected)}
+.daily-brief .priority-row .priority-icon.ds-badge:not(#_){width:var(--ds-size-badge);height:var(--ds-size-badge);padding:0;border-radius:var(--ds-radius-s)}
+.daily-brief .priority-row .priority-icon.ds-badge:not(#_)>svg{width:var(--ds-size-icon);height:var(--ds-size-icon)}
+.daily-brief .priority-copy strong:not(#_){font:var(--ds-weight-semibold) var(--ds-font-body)/var(--ds-leading-tight) var(--ds-font-text);color:var(--ds-ink)}
+.daily-brief .priority-copy small:not(#_){margin-top:var(--ds-space-xs);font-size:var(--ds-font-caption);line-height:1.45;color:var(--ds-ink-muted)}
+.brief-item .brief-why{font-variant-numeric:tabular-nums}
+.daily-brief .priority-row>svg:not(#_){color:var(--ds-ink-faint);transition:color var(--ds-dur-hover) var(--ds-ease-out),transform var(--ds-dur-hover) var(--ds-ease-out)}
+.daily-brief .priority-row:hover>svg:not(#_),.daily-brief .priority-row:focus-visible>svg:not(#_){color:var(--ds-ink-soft)}
+.daily-brief .priority-row[aria-expanded=false]:hover>svg:not(#_){transform:translateX(var(--ds-chevron-shift))}
+
+/* Saldo por janela: o sinal (+/−) acompanha a cor; o veredito vem em pill com glifo. */
+.brief-item .brief-balance{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ds-space-xs) var(--ds-space-m);margin-top:var(--ds-space-xs);font-size:var(--ds-font-micro);font-family:var(--ds-font-rounded);font-variant-numeric:tabular-nums}
+.brief-balance-part.is-good,.brief-balance strong.is-good{color:var(--ds-good)}
+.brief-balance-part.is-bad,.brief-balance strong.is-bad{color:var(--ds-bad)}
+.brief-balance-part.is-neutral,.brief-balance strong.is-neutral{color:var(--ds-ink-muted)}
+.brief-balance strong{font-weight:var(--ds-weight-semibold)}
+.brief-balance-verdict.ds-pill:not(#_){font-family:var(--ds-font-text)}
+
+/* Dinheiro em jogo: pill de tom com glifo + valor em número arredondado. */
+.daily-brief .priority-metric.brief-stake:not(#_){display:flex;flex-direction:column;align-items:flex-end;gap:var(--ds-space-xs);font-size:var(--ds-font-caption);color:var(--ds-ink)}
+.brief-stake small:not(#_){margin:0;font-size:var(--ds-font-caption);line-height:1.45;color:var(--ds-ink-soft);white-space:normal;max-width:220px;text-align:right;font-family:var(--ds-font-rounded);font-variant-numeric:tabular-nums}
+
+/* Decisão aberta na própria linha (o conteúdo é do DecisionCards). */
+.brief-inline-decision{padding:var(--ds-space-xs) var(--ds-space-xl) var(--ds-space-l);min-width:0}
 .brief-inline-decision .dc-inline-editor{max-width:900px;min-width:0}
-.brief-inline-decision .dc-action-box{border-top:1px solid var(--border,#34303f);padding-top:16px}
-.brief-inline-decision .dc-source-stamps{display:flex;flex-direction:column;gap:3px;margin-top:12px}
-.brief-analysis-link{margin-top:12px;font-size:11px}
-@media(max-width:760px){.brief-inline-decision{padding:4px 12px 14px}.brief-inline-decision .dc-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brief-inline-decision .dc-preview{flex-wrap:wrap}}
+.brief-inline-decision .dc-action-box{border-top:var(--ds-size-hairline) solid var(--ds-stroke);padding-top:var(--ds-space-l)}
+.brief-inline-decision .dc-source-stamps{display:flex;flex-direction:column;gap:var(--ds-space-xs);margin-top:var(--ds-space-m)}
+.brief-analysis-link.ds-btn:not(#_){margin-top:var(--ds-space-m)}
+
+@media(max-width:760px){
+ .brief-compare{grid-template-columns:minmax(0,1fr)}
+ .daily-brief .priority-metric.brief-stake:not(#_){flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--ds-space-s)}
+ .brief-stake small:not(#_){max-width:none;text-align:left}
+ .brief-inline-decision{padding:var(--ds-space-xs) var(--ds-space-m) var(--ds-space-m)}
+ .brief-inline-decision .dc-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .brief-inline-decision .dc-preview{flex-wrap:wrap}
+}
+
+/* Cabeçalhos ordenáveis da tabela de campanhas (vista Campanhas). */
+.sort-header{all:unset;cursor:pointer;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;white-space:nowrap;border-radius:var(--ds-radius-xs);transition:color var(--ds-dur-hover) var(--ds-ease-out)}
+.sort-header:hover,.sort-header.is-active{color:var(--ds-ink)}
+.sort-header:focus-visible{outline:var(--ds-focus-width) solid var(--ds-focus);outline-offset:var(--ds-focus-offset)}

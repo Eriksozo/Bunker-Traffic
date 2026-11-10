@@ -4,30 +4,35 @@ import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+/* Notch ActionButton/PressableStyle (ver .ds-btn em app/notch-ds.css): cápsula, passar o mouse clareia,
+   pressionar encolhe 3 % e esmaece, foco violeta de 2 px, desabilitado a .45. O botão desabilitado
+   continua recebendo o mouse, para o `title` com o motivo aparecer. Só tokens --ds-*; as classes das
+   seções (CSS sem camada) vencem estes utilitários. */
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-(--ds-radius-pill) border border-transparent font-(family-name:--ds-font-text) text-(length:--ds-font-body) leading-tight font-semibold whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] transition-[background-color,border-color,color,opacity,transform] duration-(--ds-dur-hover) ease-(--ds-ease-out) outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-(--ds-focus) active:not-disabled:not-aria-disabled:opacity-(--ds-opacity-pressed) active:not-disabled:not-aria-disabled:[transform:scale(var(--ds-press-scale))] disabled:cursor-not-allowed disabled:opacity-(--ds-opacity-disabled) aria-disabled:cursor-not-allowed aria-disabled:opacity-(--ds-opacity-disabled) aria-invalid:border-(--ds-bad) [&.ds-btn]:h-auto [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default:
+          "bg-(--ds-accent) bg-[linear-gradient(var(--ds-fill-selected),transparent)] text-(--ds-on-accent) hover:not-disabled:bg-[linear-gradient(var(--ds-fill-selected),transparent),linear-gradient(var(--ds-fill-hover),transparent)]",
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
+          "border-(--ds-bad-rim) bg-(--ds-bad-fill) text-(--ds-bad) hover:not-disabled:border-(--ds-bad) hover:not-disabled:bg-[color-mix(in_srgb,var(--ds-bad)_var(--ds-tint-hover),transparent)]",
         outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-(--ds-stroke) bg-(--ds-fill) text-(--ds-ink) hover:not-disabled:border-(--ds-stroke-strong) hover:not-disabled:bg-(--ds-fill-hover) aria-pressed:border-(--ds-stroke-strong) aria-pressed:bg-(--ds-fill-selected)",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "border-(--ds-stroke) bg-(--ds-fill) text-(--ds-ink) hover:not-disabled:border-(--ds-stroke-strong) hover:not-disabled:bg-(--ds-fill-hover)",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-transparent text-(--ds-ink-soft) hover:not-disabled:bg-(--ds-fill-hover) hover:not-disabled:text-(--ds-ink) aria-pressed:bg-(--ds-fill-selected) aria-pressed:text-(--ds-ink)",
+        link: "rounded-(--ds-radius-xs) text-(--ds-accent) underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8",
+        default: "h-(--ds-size-control) px-3.5 has-[>svg]:px-3",
+        xs: "h-(--ds-size-hit-min) gap-1 px-2 text-(length:--ds-font-micro) has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-(--ds-size-control-sm) gap-1 px-2.5 text-(length:--ds-font-caption) has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-10 px-5 has-[>svg]:px-4",
+        icon: "size-(--ds-size-control)",
+        "icon-xs": "size-(--ds-size-hit-min) [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm": "size-(--ds-size-icon-button)",
         "icon-lg": "size-10",
       },
     },

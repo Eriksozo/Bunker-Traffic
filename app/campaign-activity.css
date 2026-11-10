@@ -1,42 +1,72 @@
-.ca-chip{display:flex;gap:6px;align-items:flex-start;margin:6px 0;padding:7px 9px;border-radius:8px;font-size:11px;line-height:1.45;border:1px solid var(--warning-line,#f3ba6255);background:var(--warning-soft,transparent);color:var(--ink,#eee9f3)}
-.ca-chip svg{flex-shrink:0;margin-top:2px;color:var(--warning,#f3ba62)}
-.ca-chip strong{font-weight:600}
-.ca-chip-increase svg,.ca-chip-activate svg{color:var(--success,#35c99b)}
-.ca-chip-reduce svg,.ca-chip-pause svg{color:var(--danger,#f07178)}
-.ca-evolution{margin:4px 0;font-size:11px;line-height:1.45;color:var(--ink-soft,#cfc8da)}
-.ca-evolution span{color:var(--ink-muted,#b8afc8)}
-.ca-log{margin-top:10px;border-top:1px solid var(--border,#34303f);padding-top:8px}
-.ca-log>summary{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--ink,#eee9f3)}
-.ca-log>summary>span{margin-left:auto;font-size:11px;color:var(--ink-muted,#b8afc8)}
-.ca-log ul,.ca-overview-log ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
-.ca-event{display:flex;gap:8px;align-items:flex-start}
-.ca-event-icon{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;border:1px solid var(--border,#34303f);flex-shrink:0;color:var(--ink-muted,#b8afc8)}
-.ca-event-increase .ca-event-icon,.ca-event-activate .ca-event-icon{color:var(--success,#35c99b)}
-.ca-event-reduce .ca-event-icon,.ca-event-pause .ca-event-icon{color:var(--danger,#f07178)}
-.ca-event-body{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:12px;line-height:1.45;color:var(--ink,#eee9f3)}
-.ca-event-body small{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:10.5px;color:var(--ink-muted,#b8afc8);overflow-wrap:anywhere}
-.ca-empty,.ca-note{font-size:11px;color:var(--ink-muted,#b8afc8);margin:8px 0 0}
-.ca-overview{margin-bottom:16px}
-.ca-range{display:inline-flex;border:1px solid var(--border,#34303f);border-radius:8px;overflow:hidden;flex-shrink:0}
-.ca-range button{all:unset;cursor:pointer;padding:6px 10px;font-size:11px;color:var(--ink-muted,#b8afc8)}
-.ca-range button.is-selected{background:var(--surface-hover,#2a2633);color:var(--ink,#eee9f3)}
-.ca-range button:focus-visible,.ca-box:focus-visible{outline:2px solid var(--accent,#b79ce8);outline-offset:2px}
-.ca-boxes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:6px}
-.ca-box{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--border,#34303f);border-radius:10px;min-width:0}
-.ca-box:disabled{cursor:default;opacity:.65}
-.ca-box.is-open{border-color:var(--accent,#b79ce8)}
-.ca-box-head{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-muted,#b8afc8)}
-.ca-box strong{font-size:22px;line-height:1.2;color:var(--ink,#eee9f3)}
-.ca-box small{font-size:11px;line-height:1.4;color:var(--ink-soft,#cfc8da);overflow-wrap:anywhere}
-.ca-box-increase .ca-box-head svg,.ca-box-activate .ca-box-head svg{color:var(--success,#35c99b)}
-.ca-box-reduce .ca-box-head svg,.ca-box-pause .ca-box-head svg{color:var(--danger,#f07178)}
-.ca-overview-log{margin-top:14px;border-top:1px solid var(--border,#34303f);padding-top:12px}
-.ca-overview-log h3{margin:0;font-size:13px}
-@media(max-width:760px){.ca-boxes{grid-template-columns:repeat(2,minmax(0,1fr))}.ca-overview .panel-title{flex-wrap:wrap}}
-.ca-badge{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-style:normal;font-size:10px;line-height:1.5;border:1px solid var(--warning-line,#f3ba6255);color:var(--warning,#f3ba62)}
-.ca-badge-increase,.ca-badge-activate{border-color:var(--success-line,#35c99b55);color:var(--success,#35c99b)}
-.ca-badge-reduce,.ca-badge-pause{border-color:var(--danger-line,#f0717855);color:var(--danger,#f07178)}
+/* Campanhas · atividade (orçamento e status). Só tokens do notch (app/notch-ds.css).
+   Tom por ação: aumento e ativação = menta; redução e pausa = coral; status e moeda = âmbar. O ícone de seta/pausa/play acompanha a cor. */
 
-.malva-link{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--accent,#b79ce8);text-decoration:none;padding:6px 10px;border:1px solid var(--border,#34303f);border-radius:8px}
-.malva-link:hover{border-color:var(--accent,#b79ce8)}
-.malva-link:focus-visible{outline:2px solid var(--accent,#b79ce8);outline-offset:2px}
+/* Aviso no card: mudou depois da análise (âmbar = conferir), ícone no tom da ação. */
+.ca-chip{display:flex;gap:var(--ds-space-s);align-items:flex-start;margin:var(--ds-space-s) 0;padding:var(--ds-space-s) var(--ds-space-m);border-radius:var(--ds-radius-m);font:var(--ds-weight-regular) var(--ds-font-caption)/1.45 var(--ds-font-text);border:var(--ds-size-hairline) solid var(--ds-warn-rim);background:var(--ds-warn-wash);color:var(--ds-ink);overflow-wrap:anywhere}
+.ca-chip svg{flex-shrink:0;margin-top:2px;color:var(--ds-warn)}
+.ca-chip strong{font-weight:var(--ds-weight-semibold);color:var(--ds-ink)}
+.ca-chip-increase svg,.ca-chip-activate svg{color:var(--ds-good)}
+.ca-chip-reduce svg,.ca-chip-pause svg{color:var(--ds-bad)}
+.ca-evolution{margin:var(--ds-space-xs) 0;font:var(--ds-weight-regular) var(--ds-font-caption)/1.45 var(--ds-font-rounded);font-variant-numeric:tabular-nums;color:var(--ds-ink-soft)}
+.ca-evolution span{font-family:var(--ds-font-text);color:var(--ds-ink-muted)}
+
+/* Registro da campanha: bloco recolhível com contagem e chevron que gira. */
+.ca-log{margin-top:var(--ds-space-m);border-top:var(--ds-size-hairline) solid var(--ds-stroke);padding-top:var(--ds-space-xs)}
+.ca-log>summary{display:flex;align-items:center;gap:var(--ds-space-s);min-height:var(--ds-size-control-sm);padding:var(--ds-space-xs) var(--ds-space-s);margin:0 calc(var(--ds-space-s) * -1);border-radius:var(--ds-radius-s);cursor:pointer;list-style:none;font:var(--ds-weight-semibold) var(--ds-font-caption)/1.3 var(--ds-font-text);color:var(--ds-ink-soft);transition:background-color var(--ds-dur-hover) var(--ds-ease-out),color var(--ds-dur-hover) var(--ds-ease-out)}
+.ca-log>summary::-webkit-details-marker{display:none}
+.ca-log>summary:hover{background:var(--ds-fill-hover);color:var(--ds-ink)}
+.ca-log>summary:focus-visible{outline:var(--ds-focus-width) solid var(--ds-focus);outline-offset:var(--ds-focus-offset)}
+.ca-log>summary>svg{flex-shrink:0;color:var(--ds-ink-muted)}
+.ca-log>summary>span{margin-left:auto}
+.ca-log .ca-chevron{transition:transform var(--ds-dur-select) var(--ds-ease-firm)}
+.ca-log[open]>summary{color:var(--ds-ink)}
+.ca-log[open] .ca-chevron{transform:rotate(180deg)}
+.ca-log ul,.ca-overview-log ul{list-style:none;margin:var(--ds-space-s) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--ds-space-xxs)}
+
+/* Evento: badge do tom + frase, detalhe tabular e autoria. */
+.ca-event{display:flex;gap:var(--ds-space-m);align-items:flex-start;padding:var(--ds-space-s);margin:0 calc(var(--ds-space-s) * -1);border-radius:var(--ds-radius-m);transition:background-color var(--ds-dur-hover) var(--ds-ease-out)}
+.ca-event:hover{background:var(--ds-fill)}
+.ca-event-icon{display:grid;place-items:center;width:var(--ds-size-badge);height:var(--ds-size-badge);border-radius:var(--ds-radius-s);flex-shrink:0;color:var(--ds-warn);background:var(--ds-warn-fill)}
+.ca-event-increase .ca-event-icon,.ca-event-activate .ca-event-icon{color:var(--ds-good);background:var(--ds-good-fill)}
+.ca-event-reduce .ca-event-icon,.ca-event-pause .ca-event-icon{color:var(--ds-bad);background:var(--ds-bad-fill)}
+.ca-event-body{display:flex;flex-direction:column;gap:var(--ds-space-xxs);min-width:0;font:var(--ds-weight-regular) var(--ds-font-body)/1.45 var(--ds-font-text);color:var(--ds-ink)}
+.ca-event-body>strong{font-weight:var(--ds-weight-semibold)}
+.ca-event-body>span{font:var(--ds-weight-semibold) var(--ds-font-caption)/1.45 var(--ds-font-rounded);font-variant-numeric:tabular-nums;color:var(--ds-ink-soft)}
+.ca-event-body small{display:flex;flex-wrap:wrap;align-items:center;gap:var(--ds-space-xs);font-size:var(--ds-font-micro);line-height:1.45;color:var(--ds-ink-muted);overflow-wrap:anywhere}
+.ca-empty.ds-empty:not(#_){font-size:var(--ds-font-caption);margin:var(--ds-space-s) 0 0}
+.ca-note.ds-caption:not(#_){margin:var(--ds-space-s) 0 0}
+
+/* Visão geral: cabeçalho com segmentado deslizante, quatro caixas KPI clicáveis. */
+body .app .ca-overview{margin-bottom:var(--ds-space-l)}
+body .app .ca-overview .ca-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--ds-space-l);margin-bottom:var(--ds-space-xs)}
+body .app .ca-overview .ca-heading-copy{min-width:0}
+body .app .ca-overview .ca-heading-copy>p{margin-top:var(--ds-space-xs);max-width:72ch}
+.ca-range{flex-shrink:0}
+.ca-boxes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--ds-space-m);margin-top:var(--ds-space-m)}
+.ca-box{all:unset;box-sizing:border-box;position:relative;cursor:pointer;display:flex;flex-direction:column;gap:var(--ds-space-xs);padding:var(--ds-space-m) var(--ds-space-l);border:var(--ds-size-hairline) solid transparent;border-radius:var(--ds-radius-m);background:var(--ds-fill);min-width:0;transition:background-color var(--ds-dur-hover) var(--ds-ease-out),border-color var(--ds-dur-hover) var(--ds-ease-out),transform var(--ds-dur-press) var(--ds-ease-press)}
+.ca-box:hover:not(:disabled){background:var(--ds-fill-hover);border-color:var(--ds-stroke-strong)}
+.ca-box:active:not(:disabled){transform:scale(var(--ds-row-press-scale))}
+.ca-box:focus-visible{outline:var(--ds-focus-width) solid var(--ds-focus);outline-offset:var(--ds-focus-offset)}
+.ca-box:disabled{cursor:not-allowed;opacity:var(--ds-opacity-disabled)}
+.ca-box.is-open{background:var(--ds-fill-selected);border-color:color-mix(in srgb,var(--ds-accent) 70%,transparent)}
+.ca-box-head{display:flex;align-items:center;gap:var(--ds-space-s);font:var(--ds-weight-semibold) var(--ds-font-eyebrow)/1.3 var(--ds-font-text);color:var(--ds-ink-soft)}
+.ca-box-head svg{flex-shrink:0;color:var(--ds-ink-muted)}
+.ca-box .ca-box-value{display:block;margin:var(--ds-space-xxs) 0;font:var(--ds-weight-semibold) var(--ds-font-stat)/1.15 var(--ds-font-rounded);font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--ds-ink)}
+.ca-box small{font-size:var(--ds-font-caption);line-height:1.4;color:var(--ds-ink-muted);overflow-wrap:anywhere}
+.ca-box-increase .ca-box-head svg,.ca-box-activate .ca-box-head svg{color:var(--ds-good)}
+.ca-box-reduce .ca-box-head svg,.ca-box-pause .ca-box-head svg{color:var(--ds-bad)}
+.ca-overview-log{margin-top:var(--ds-space-l);border-top:var(--ds-size-hairline) solid var(--ds-stroke);padding-top:var(--ds-space-m)}
+.ca-overview-log h3{margin:0 0 var(--ds-space-xs)}
+.ca-overview-log ul{max-height:520px;overflow:auto;scrollbar-width:thin;padding:0 var(--ds-space-s)}
+@media(max-width:760px){.ca-boxes{grid-template-columns:repeat(2,minmax(0,1fr))}body .app .ca-overview .ca-heading{flex-wrap:wrap}.ca-range{width:100%}}
+@media(max-width:420px){.ca-box{padding:var(--ds-space-m)}}
+
+/* Marcador na linha recolhida (pill do tom; o texto diz a ação). */
+.ca-badge.ds-pill:not(#_){margin-left:var(--ds-space-s);font-style:normal;vertical-align:middle}
+
+/* Link para a Malva (componente MalvaLinkButton): botão secundário quieto do notch. */
+.malva-link{display:inline-flex;align-items:center;gap:var(--ds-space-xs);min-height:var(--ds-size-control-sm);padding:0 var(--ds-space-m);font:var(--ds-weight-semibold) var(--ds-font-caption)/1.2 var(--ds-font-text);color:var(--ds-ink);text-decoration:none;background:var(--ds-fill);border:var(--ds-size-hairline) solid var(--ds-stroke);border-radius:var(--ds-radius-pill);transition:background-color var(--ds-dur-hover) var(--ds-ease-out),border-color var(--ds-dur-hover) var(--ds-ease-out),transform var(--ds-dur-press) var(--ds-ease-press)}
+.malva-link svg{flex-shrink:0;color:var(--ds-ink-soft)}
+.malva-link:hover{background:var(--ds-fill-hover);border-color:var(--ds-stroke-strong)}
+.malva-link:active{transform:scale(var(--ds-press-scale));opacity:var(--ds-opacity-pressed)}
+.malva-link:focus-visible{outline:var(--ds-focus-width) solid var(--ds-focus);outline-offset:var(--ds-focus-offset)}

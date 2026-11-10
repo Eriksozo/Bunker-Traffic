@@ -17,10 +17,10 @@ const metrics=[
 ] as const;
 
 function Delta({value,higherIsBetter,label}:{value:number|null;higherIsBetter:boolean;label:string}){
- if(value===null)return <span className="brief-delta is-neutral">{label} N/D</span>;
+ if(value===null)return <span className="brief-delta is-neutral ds-pill ds-pill--neutral">{label} N/D</span>;
  const flat=Math.abs(value)<0.05,good=flat?null:(value>0)===higherIsBetter;
  const Icon=flat?Minus:value>0?ArrowUpRight:ArrowDownRight;
- return <span className={'brief-delta '+(good===null?'is-neutral':good?'is-good':'is-bad')}><Icon size={13} aria-hidden="true"/>{percent(value)} {label}</span>;
+ return <span className={'brief-delta '+(good===null?'is-neutral ds-pill ds-pill--neutral':good?'is-good ds-pill ds-pill--good':'is-bad ds-pill ds-pill--bad')}><Icon size={13} aria-hidden="true"/>{percent(value)} {label}</span>;
 }
 
 const signed=(w:any)=>w?(w.value>0?'+':w.value<0?'−':'')+money(Math.abs(w.value)):'N/D';
@@ -28,7 +28,7 @@ const signed=(w:any)=>w?(w.value>0?'+':w.value<0?'−':'')+money(Math.abs(w.valu
 function BalanceLine({b}:{b:any}){
  if(!b||!['yesterday','3d','7d'].some(k=>b[k]))return null; // a brand-new test (today only) has no history to show
  const part=(label:string,w:any)=><span className={'brief-balance-part '+(!w?'is-neutral':w.value<0?'is-bad':'is-good')}>{label} {signed(w)}</span>;
- const verdict=b.verdict==='recovers'?<span className="brief-balance-verdict is-warn">Hoje negativo · histórico positivo</span>:b.verdict==='negative'?<span className="brief-balance-verdict is-bad">Negativo também com 7 dias</span>:null;
+ const verdict=b.verdict==='recovers'?<span className="brief-balance-verdict is-warn ds-pill ds-pill--warn"><span className="ds-glyph ds-glyph--warn" aria-hidden="true"/>Hoje negativo · histórico positivo</span>:b.verdict==='negative'?<span className="brief-balance-verdict is-bad ds-pill ds-pill--bad"><span className="ds-glyph ds-glyph--bad" aria-hidden="true"/>Negativo também com 7 dias</span>:null;
  return <small className="brief-balance">{verdict}{part('hoje',b.today)}{part('ontem',b.yesterday)}{part('3d',b['3d'])}{part('7d',b['7d'])}<strong className={!b.with7d?'is-neutral':b.with7d.value<0?'is-bad':'is-good'}>7d + hoje {signed(b.with7d)}</strong></small>;
 }
 
@@ -51,23 +51,24 @@ export default function DailyBrief({state,project,candidates,showProject,onOpen,
   const status=statusAfterAnalysis(current,{events,liveRows:liveStatusRows(liveItems,now)});
   return actionQueue(current,{now,pausedKeys:status.paused,reactivatedKeys:status.reactivated});
  },[candidates,state,project,liveItems]);
- return <section className="panel daily-brief" aria-label="Resumo do dia">
-  <div className="panel-title"><div><span className="eyebrow">RESUMO DO DIA</span><h2>Hoje em 1 minuto</h2><p className="hint">Hoje parcial comparado com ontem e com 7 dias. Só índices: gasto e faturamento de um dia parcial não se comparam com um dia fechado.</p></div></div>
-  <div className="brief-compare">{metrics.map(m=>{const today=comparison.today?.[m.key],d=comparison.deltas[m.key];return <div className="brief-metric" key={m.key}>
-   <span className="brief-label">{m.label} hoje</span><strong>{m.format(today)}</strong>
-   <span className="brief-base">Ontem {m.format(comparison.yesterday?.[m.key])} · 7 dias {m.format(comparison.week?.[m.key])}</span>
+ return <section className="panel daily-brief ds-card ds-card--lg" aria-label="Resumo do dia">
+  <div className="panel-title"><div><span className="eyebrow ds-eyebrow">Resumo do dia</span><h2 className="ds-headline">Hoje em 1 minuto</h2><p className="hint ds-caption">Hoje parcial comparado com ontem e com 7 dias. Só índices: gasto e faturamento de um dia parcial não se comparam com um dia fechado.</p></div></div>
+  <div className="brief-compare">{metrics.map(m=>{const today=comparison.today?.[m.key],d=comparison.deltas[m.key];return <div className="brief-metric ds-kpi ds-kpi--tile" key={m.key}>
+   <span className="brief-label ds-kpi__label">{m.label} hoje</span><strong className="ds-kpi__value">{m.format(today)}</strong>
+   <span className="brief-base ds-kpi__foot">Ontem {m.format(comparison.yesterday?.[m.key])} · 7 dias {m.format(comparison.week?.[m.key])}</span>
    <span className="brief-deltas"><Delta value={d.yesterday} higherIsBetter={m.higherIsBetter} label="vs ontem"/><Delta value={d.week} higherIsBetter={m.higherIsBetter} label="vs 7 dias"/></span>
   </div>;})}</div>
   <div className="section-divider"/>
-  <div className="panel-title"><div><h3>O que fazer agora</h3><p className="hint">{queue.items.length?`Até ${queue.items.length} de ${queue.considered} campanhas ativas, ordenadas pelo dinheiro em jogo. Expanda para manter, aumentar, reduzir ou pausar aqui mesmo.`:'Nenhuma campanha ativa com perda lida ou oportunidade clara agora.'}{queue.priorityTests>0&&` ${queue.priorityTests} testes novos sem vendas têm revisão prioritária, sem esperar 24h.`}{queue.pausedSinceAnalysis>0&&` ${queue.pausedSinceAnalysis} pausadas depois da análise saíram da lista.`}{queue.protectedTests>0&&` ${queue.protectedTests} testes jovens seguem em observação; maturação não suspende o acompanhamento.`}</p></div></div>
-  {queue.items.map((item:any)=>{const c=item.candidate,loss=item.kind==='loss',target={project:c.row.projectId,adAccountId:c.row.adAccountId,objectId:c.row.externalId},key=JSON.stringify(target),open=expanded===key;return <div className={'brief-action-item'+(open?' is-open':'')} key={key}><Button type="button" className="priority-row brief-item" onClick={()=>setExpanded(open?null:key)} aria-expanded={open} aria-controls={open?`brief-decision-${encodeURIComponent(key)}`:undefined} aria-label={`${open?'Recolher':'Expandir'} decisão de ${c.row.name}`}>
-   <span className={'priority-icon '+(loss?'red':'green')}>{loss?<ArrowDownRight size={17}/>:<ArrowUpRight size={17}/>}</span>
+  <div className="panel-title"><div><h3 className="ds-title">O que fazer agora</h3><p className="hint ds-caption">{queue.items.length?`Até ${queue.items.length} de ${queue.considered} campanhas ativas, ordenadas pelo dinheiro em jogo. Expanda para manter, aumentar, reduzir ou pausar aqui mesmo.`:''}{queue.priorityTests>0&&` ${queue.priorityTests} testes novos sem vendas têm revisão prioritária, sem esperar 24h.`}{queue.pausedSinceAnalysis>0&&` ${queue.pausedSinceAnalysis} pausadas depois da análise saíram da lista.`}{queue.protectedTests>0&&` ${queue.protectedTests} testes jovens seguem em observação; maturação não suspende o acompanhamento.`}</p></div></div>
+  {!queue.items.length&&<p className="brief-empty ds-empty ds-empty--clear">Nenhuma campanha ativa com perda lida ou oportunidade clara agora.</p>}
+  <div className="brief-queue">{queue.items.map((item:any)=>{const c=item.candidate,loss=item.kind==='loss',target={project:c.row.projectId,adAccountId:c.row.adAccountId,objectId:c.row.externalId},key=JSON.stringify(target),open=expanded===key;return <div className={'brief-action-item'+(open?' is-open':'')} key={key}><Button type="button" className="priority-row brief-item" onClick={()=>setExpanded(open?null:key)} aria-expanded={open} aria-controls={open?`brief-decision-${encodeURIComponent(key)}`:undefined} aria-label={`${open?'Recolher':'Expandir'} decisão de ${c.row.name}`}>
+   <span className={'priority-icon ds-badge '+(loss?'red ds-badge--bad':'green ds-badge--good')} aria-hidden="true">{loss?<ArrowDownRight size={17}/>:<ArrowUpRight size={17}/>}</span>
    <span className="priority-copy"><strong>{c.row.name}</strong><small>{showProject&&`${c.row.projectName} · `}{c.row.accountName} · {item.testLaunch?.priority?'Teste novo sem vendas · prioridade':c.decision}</small><small className="brief-why">{loss?(item.period==='today'?'Hoje':'Últimos 3 dias'):'Últimos 3 dias'}: gasto {money(item.spend)} · ROAS {ratio(item.roas)} · 7 dias {ratio(item.comparison)}</small><BalanceLine b={item.balance}/></span>
-   <span className={'priority-metric brief-stake '+(loss?'is-bad':'is-good')}>{loss?'Revisar':'Oportunidade'}<small>{stakeText(item)}</small></span>
-   {open?<ChevronDown size={16}/>:<ChevronRight size={16}/>}
+   <span className={'priority-metric brief-stake '+(loss?'is-bad':'is-good')}><span className={'ds-pill '+(loss?'ds-pill--bad':'ds-pill--good')}><span className={'ds-glyph '+(loss?'ds-glyph--bad':'ds-glyph--good')} aria-hidden="true"/>{loss?'Revisar':'Oportunidade'}</span><small>{stakeText(item)}</small></span>
+   {open?<ChevronDown size={16} aria-hidden="true"/>:<ChevronRight size={16} aria-hidden="true"/>}
   </Button>{open&&<div className="brief-inline-decision" id={`brief-decision-${encodeURIComponent(key)}`}>
    <DecisionCards state={state} project={target.project} write={write} saving={saving} liveItems={liveItems} inlineTarget={target}/>
-   <Button type="button" variant="ghost" className="brief-analysis-link" onClick={()=>onOpen(c)}>Ver análise completa <ChevronRight size={14}/></Button>
-  </div>}</div>;})}
+   <Button type="button" variant="ghost" className="brief-analysis-link ds-btn ds-btn--ghost ds-btn--sm" onClick={()=>onOpen(c)}>Ver análise completa <ChevronRight size={14} aria-hidden="true"/></Button>
+  </div>}</div>;})}</div>
  </section>;
 }

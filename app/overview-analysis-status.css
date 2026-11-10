@@ -1,8 +1,37 @@
-body .app .analysis-status-banner { margin-bottom:20px; border-color:var(--border); background:var(--card); }
-body .app .analysis-status-banner.pending { border-color:#80652d80; background:#30291c55; }
-body .app .analysis-status-banner [data-slot=alert-title] { white-space:normal; display:block; overflow:visible; -webkit-line-clamp:unset; font-size:14px; }
-body .app .analysis-status-banner p { margin:3px 0; line-height:1.6; }
-body .app .analysis-status-banner button { padding-left:0; margin-top:8px; height:auto; white-space:normal; text-align:left; }
-body .app .analysis-status .signal-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-body .app .analysis-status .signal { height:auto; min-height:132px; white-space:normal; }
-@media(max-width:600px) { body .app .analysis-status .signal-grid { grid-template-columns:1fr; } }
+/* Estado da análise na Visão geral: aviso com tom + glifo (ds-banner) e quatro grupos de sinais como cards clicáveis.
+   Tokens e componentes em app/notch-ds.css; a trava :not(#_) vence o tema antigo (uix.css, malva-theme.css). */
+.analysis-status{display:flex;flex-direction:column;gap:var(--ds-space-l);min-width:0}
+.analysis-status-banner.ds-banner:not(#_){align-items:flex-start}
+.analysis-status-banner [data-slot=alert-title]:not(#_){display:block;overflow:visible;-webkit-line-clamp:unset;white-space:normal;margin:0;font:var(--ds-weight-semibold) var(--ds-font-title)/var(--ds-leading-tight) var(--ds-font-text);color:var(--ds-ink)}
+.analysis-status-banner [data-slot=alert-description]:not(#_){display:block;margin:var(--ds-space-xs) 0 0;color:var(--ds-ink-soft);font-size:var(--ds-font-body)}
+.analysis-status-banner [data-slot=alert-description] p:not(#_){margin:var(--ds-space-xxs) 0;line-height:var(--ds-leading-body);color:var(--ds-ink-soft)}
+.analysis-status-banner .ds-btn:not(#_){margin:var(--ds-space-s) 0 0 calc(-1 * var(--ds-space-s));height:auto;white-space:normal;text-align:left}
+
+/* Grupos de sinais: rótulo com glifo do tom · número grande arredondado · legenda. Abrem a lista filtrada. */
+.analysis-status .signal-grid:not(#_){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ds-space-m)}
+.analysis-status .signal:not(#_){
+ --_tone:var(--ds-ink-muted);
+ display:flex;flex-direction:column;align-items:stretch;gap:var(--ds-space-xs);
+ width:100%;min-width:0;height:auto;min-height:120px;margin:0;padding:var(--ds-space-l);
+ border:var(--ds-size-hairline) solid var(--ds-stroke);border-radius:var(--ds-radius-m);
+ background:var(--ds-fill);color:var(--ds-ink);box-shadow:none;
+ text-align:left;white-space:normal;cursor:pointer;
+ transition:background-color var(--ds-dur-hover) var(--ds-ease-out),border-color var(--ds-dur-hover) var(--ds-ease-out),transform var(--ds-dur-press) var(--ds-ease-press)
+}
+.analysis-status .signal--good:not(#_){--_tone:var(--ds-good)}
+.analysis-status .signal--bad:not(#_){--_tone:var(--ds-bad)}
+.analysis-status .signal--warn:not(#_){--_tone:var(--ds-warn)}
+.analysis-status .signal:not(#_):hover{background:var(--ds-fill-hover);border-color:color-mix(in srgb,var(--_tone) 45%,transparent)}
+.analysis-status .signal:not(#_):active{transform:scale(var(--ds-press-scale))}
+.analysis-status .signal:not(#_):focus-visible{outline:var(--ds-focus-width) solid var(--ds-focus);outline-offset:var(--ds-focus-offset)}
+.analysis-status .signal .signal-label:not(#_){display:flex;align-items:center;gap:var(--ds-space-s);min-width:0;font:var(--ds-weight-semibold) var(--ds-font-eyebrow)/1.3 var(--ds-font-text);color:var(--ds-ink-soft)}
+.analysis-status .signal .signal-label .ds-glyph:not(#_){--ds-glyph-size:var(--ds-size-icon-s)}
+.analysis-status .signal .signal-name:not(#_){display:block;flex:1;min-width:0}
+.analysis-status .signal .signal-arrow:not(#_){flex:none;width:var(--ds-size-icon-s);height:var(--ds-size-icon-s);color:var(--ds-ink-faint);transition:color var(--ds-dur-hover) var(--ds-ease-out),transform var(--ds-dur-hover) var(--ds-ease-out)}
+.analysis-status .signal:not(#_):hover .signal-arrow,.analysis-status .signal:not(#_):focus-visible .signal-arrow{color:var(--ds-ink-soft);transform:translate(calc(var(--ds-chevron-shift) / 2),calc(var(--ds-chevron-shift) / -2))}
+.analysis-status .signal strong:not(#_){display:block;margin:var(--ds-space-s) 0 var(--ds-space-xs);font:var(--ds-weight-semibold) var(--ds-font-display)/1.1 var(--ds-font-rounded);font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--_tone)}
+.analysis-status .signal small:not(#_){display:block;margin:0;font-size:var(--ds-font-caption);line-height:1.45;color:var(--ds-ink-muted);overflow-wrap:anywhere}
+@media(max-width:600px){
+ .analysis-status .signal-grid:not(#_){grid-template-columns:1fr}
+ .analysis-status .signal:not(#_){min-height:0}
+}

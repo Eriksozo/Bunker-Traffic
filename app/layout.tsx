@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+// Notch design system: tokens, legacy bridge and .ds-* components (docs/web-design-system.md).
+import "./notch-ds.css";
 
 export const metadata: Metadata = {
   title: "Bunker · Central de tráfego",
