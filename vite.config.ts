@@ -17,7 +17,10 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const managedLinux = readExecutionProfile() === "managed-linux";
 
 const localBindingConfig = {
-  ...(externalHost?{name:'bunker-traffic',vars:{BUNKER_HOST:'cloudflare'},workers_dev:true,ai:{binding:'AI'},triggers:{crons:['* * * * *']},durable_objects:{bindings:[{name:'BUNKER_EXECUTOR',class_name:'BunkerCloudExecutor'}]},exports:{BunkerCloudExecutor:{type:'durable-object' as const,storage:'sqlite' as const}}}:{}),
+  ...(externalHost?{name:'bunker-traffic',vars:{BUNKER_HOST:'cloudflare'},workers_dev:true,ai:{binding:'AI'},triggers:{crons:['* * * * *']},durable_objects:{bindings:[{name:'BUNKER_EXECUTOR',class_name:'BunkerCloudExecutor'}]},exports:{BunkerCloudExecutor:{type:'durable-object' as const,storage:'sqlite' as const}},
+   // The executor's heavy pulse is one long invocation (model stages plus the fast lane inside it); the 30 s default
+   // CPU limit reset the object several times an hour (owner report of 10/11/2026). Standard plan maximum.
+   limits:{cpu_ms:300000}}:{}),
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
   d1_databases: d1 && !externalHost

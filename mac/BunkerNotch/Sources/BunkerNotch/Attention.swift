@@ -85,9 +85,17 @@ struct AttentionLedger: Equatable, Codable {
 /// Idea from codex-pacer's refresh policy (MIT); values are the Bunker's.
 enum RefreshPolicy {
     static let open: TimeInterval = 60, closed: TimeInterval = 120, ceiling: TimeInterval = 900
+    /// The first failed read after a good one is retried after `retry` seconds before anything is shown.
+    static let retry: TimeInterval = 15
     static func interval(open isOpen: Bool, failures: Int) -> TimeInterval {
         guard failures > 0 else { return isOpen ? open : closed }
-        return min(ceiling, closed * pow(2, Double(min(failures, 4))))
+        if failures == 1 { return retry }
+        return min(ceiling, closed * pow(2, Double(min(failures - 1, 4))))
+    }
+    /// A single failure right after a reading less than `ceiling` old stays silent (the last reading is kept).
+    static func quiet(failures: Int, lastFetch: Date?, now: Date = Date()) -> Bool {
+        guard failures == 0, let lastFetch else { return false }
+        return now.timeIntervalSince(lastFetch) < ceiling
     }
 }
 

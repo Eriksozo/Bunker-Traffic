@@ -175,6 +175,8 @@ final class Store: ObservableObject {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
                 if status == 503, summary == nil || preparing { preparing = true; error = nil; ok = true; return }
+                // One passing 5xx while the last reading is recent (the executor object restarting): retry soon, no error yet.
+                if status >= 500, RefreshPolicy.quiet(failures: failures, lastFetch: lastFetch) { return }
                 if status == 401 { Credential.forget() }
                 error = status == 401 ? "Credencial recusada pelo Bunker." : status == 404 ? "Projeto não encontrado." : "Bunker indisponível (\(status)). A última leitura foi mantida."
                 if status == 404 { project = "all" }
@@ -195,6 +197,7 @@ final class Store: ObservableObject {
             self.error = "O Bunker mandou um resumo que esta versão do app não lê. A última leitura foi mantida; atualize o app."
         } catch {
             guard generation == refreshGeneration else { return }
+            if RefreshPolicy.quiet(failures: failures, lastFetch: lastFetch) { return }
             self.error = (error as? URLError)?.code == .timedOut ? "O Bunker demorou a responder. A última leitura foi mantida." : "Sem conexão com o Bunker. A última leitura foi mantida."
         }
     }

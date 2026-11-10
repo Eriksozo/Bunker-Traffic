@@ -118,11 +118,19 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   * never overlapping (the fast-lane timer also runs during the heavy pulse). Observation only, as before.
   */
  private shadowChain:Promise<unknown>=Promise.resolve();
- private queueShadow(state:any):Promise<any[]>{const run=this.shadowChain.then(()=>this.storeShadow(state));this.shadowChain=run.catch(()=>{});return run;}
+ private queueShadow(state:any,opts:{learn?:boolean}={}):Promise<any[]>{const run=this.shadowChain.then(()=>this.storeShadow(state,opts));this.shadowChain=run.catch(()=>{});return run;}
+ /**
+  * The long memory (storeLearning) is the heavy part of a shadow pass. Between pulses it runs at most every
+  * `betweenPulseLearnMs`; the heavy pulse always runs it. Owner report of 10/11/2026 ("bunk não conseguiu ler nada"):
+  * rebuilding it on every Meta read (~80 s) inside the long heavy-pulse invocation exceeded the object's CPU limit,
+  * the object was reset and the notch got 503s.
+  */
+ static readonly betweenPulseLearnMs=5*60000;
+ private lastLearnAt=0;
  /** A between-pulse run: a failure keeps the stored entries (the heavy pulse records shadow failures). */
  private async freshShadow(state:any){
   const started=Date.now();
-  const out=await this.queueShadow(state).catch(async(e:any)=>{
+  const out=await this.queueShadow(state,{learn:false}).catch(async(e:any)=>{
    // Kept apart from shadowStatus (the heavy pulse's record): the last between-pulse failure, code and short text only.
    await this.ctx.storage.put('shadowLive',{at:new Date().toISOString(),ok:false,ms:Date.now()-started,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});
    return null;});
@@ -169,7 +177,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   if(woke.size){const prev=await this.ctx.storage.get<any>('wake');await this.ctx.storage.put('wake',{order:true,projects:[...new Set([...(prev?.projects||[]),...woke])].slice(0,6),at:new Date().toISOString()});if(!this.running)await this.ctx.storage.setAlarm(Date.now()+300);}
   await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config.enabled,acting:true,created,logged:log.length});
  }
- private async storeShadow(state:any){
+ private async storeShadow(state:any,opts:{learn?:boolean}={}){
   if(!state||state.paused)return [];
   const policy=this.shadowPolicyFor(state);
   const now=Date.now(),list=await this.ctx.storage.list<any>({prefix:'attr:'}),withAuthors={...state,changeAttributions:usableAttributions([...list.values()])};
@@ -205,6 +213,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.autonomyAct(state,batches,now).catch(async(e:any)=>{await this.ctx.storage.put('autonomyStatus',{at:new Date().toISOString(),ok:false,error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   // The memory never blocks the shadow: a failure is recorded apart (code and short text only).
   const evaluated=Object.keys(policy?.projects||{}).filter(p=>state.config?.[p]&&policy.projects[p]?.enabled!==false&&!skipped[p]);
+  if(opts.learn===false&&now-this.lastLearnAt<BunkerCloudExecutor.betweenPulseLearnMs)return merged;
+  this.lastLearnAt=now;
   await this.storeLearning(withAuthors,merged,events,policy,now,evaluated).catch(async(e:any)=>{await this.ctx.storage.put('learningStatus',{at:new Date().toISOString(),ok:false,code:'LEARNING_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   return merged;
  }

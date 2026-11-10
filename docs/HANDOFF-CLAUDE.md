@@ -910,3 +910,14 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - altura dinâmica;
   - prévias de alto contraste e Reduzir movimento no renderizador;
   - janela de sons com os componentes da ilha.
+
+## Executor reiniciado por estouro de CPU (registro escrito às 2026-11-10 09:40:00 UTC por `date -u`)
+
+- **Pedido do dono:** "bunk não conseguiu ler nada". O Bunk do notch mostrava "Não consegui ler o Bunker agora": `/api/companion` respondia 503 quando o objeto do executor era reiniciado.
+- **Causa:** desde 09/11 ~16h UTC o objeto passou a estourar o teto de CPU (`exceededResources`) e às vezes a memória (`exceededMemory`), várias vezes por hora (analytics do Cloudflare). A Sombra entre pulsos (09/11) passou a refazer também a memória longa de 90 dias a cada leitura da Meta. Isso rodava dentro da invocação longa do pulso pesado, que tinha o teto padrão de 30 s de CPU.
+- **Feito:**
+  - Entre pulsos, a Sombra continua a cada leitura: decisões, status e autonomia. A memória longa só é refeita no pulso pesado ou se tiver mais de 5 min (`betweenPulseLearnMs`).
+  - `limits.cpu_ms:300000` no build Cloudflare (plano Standard).
+  - Notch: uma falha isolada (5xx ou rede) logo depois de uma leitura boa tenta de novo em 15 s, sem mostrar erro; a segunda seguida aparece.
+- **Testes:** `tests/executor-cpu-budget.test.mjs` e o autoteste do app.
+- **Acompanhar:** contagem de `exceededResources`/`exceededMemory` nas próximas horas. Se `exceededMemory` persistir, o próximo passo é reduzir as cópias do estado mantidas ao mesmo tempo.

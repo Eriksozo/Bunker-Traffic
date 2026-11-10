@@ -82,7 +82,12 @@ extension SelfTest {
 
         // Cadence: 1 min open, 2 min at rest, doubling after failures up to 15 min.
         expectA(RefreshPolicy.interval(open: true, failures: 0) == 60 && RefreshPolicy.interval(open: false, failures: 0) == 120, #line)
-        expectA(RefreshPolicy.interval(open: true, failures: 1) == 240 && RefreshPolicy.interval(open: false, failures: 9) == 900, #line)
+        expectA(RefreshPolicy.interval(open: true, failures: 1) == 15 && RefreshPolicy.interval(open: true, failures: 2) == 240 && RefreshPolicy.interval(open: false, failures: 9) == 900, #line)
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        expectA(RefreshPolicy.quiet(failures: 0, lastFetch: t0, now: t0.addingTimeInterval(120)), #line)
+        expectA(!RefreshPolicy.quiet(failures: 1, lastFetch: t0, now: t0.addingTimeInterval(120)), #line)   // second in a row: shown
+        expectA(!RefreshPolicy.quiet(failures: 0, lastFetch: nil), #line)
+        expectA(!RefreshPolicy.quiet(failures: 0, lastFetch: t0, now: t0.addingTimeInterval(901)), #line)
 
         // Screens by UUID: the same rules as before, and the old numeric ids migrate once.
         expectA(BunkScreens.allowed(all: ["A", "B"], saved: ["B"]) == ["B"] && BunkScreens.allowed(all: ["A"], saved: ["Z"]) == ["A"], #line)
