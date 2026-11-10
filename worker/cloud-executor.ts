@@ -46,6 +46,24 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private liveItems:any[]=[];
  private async setting():Promise<Runtime>{return await this.ctx.storage.get<Runtime>('runtime')||{enabled:false,history:[]};}
  private db(){return new SupabaseStorage({url:this.env.SUPABASE_URL,key:this.env.SUPABASE_SERVICE_ROLE_KEY});}
+ /**
+  * One hydrated copy of the central per revision for callers that only read (live reads, Meta tick, notch summaries).
+  * Each hydrated copy is tens of MB; the object has 128 MB and kept several at once (owner report of 10/11/2026: the
+  * object was reset for exceeding its memory). A cheap revision probe decides; writes and the engine keep their own
+  * fresh copy, so nothing that is committed ever comes from here. Never mutate what this returns.
+  */
+ private viewCache:{revision:number,value:any}|null=null;
+ private viewRead:Promise<any>|null=null;
+ private async view(){
+  // A failed probe falls back to a full read (which reports the storage failure the same way as before).
+  let revision:number;
+  try{const row:any=await this.db().prepare('SELECT revision,updated_at FROM bunker_records WHERE key = ?').bind('central').first();revision=Number(row?.revision);}catch{return this.read();}
+  if(!Number.isFinite(revision))return this.read();
+  if(this.viewCache&&this.viewCache.revision===revision)return this.viewCache.value;
+  this.viewCache=null;
+  if(!this.viewRead)this.viewRead=this.read().then(v=>{this.viewCache={revision:Number(v.revision),value:v};return v;}).finally(()=>{this.viewRead=null;});
+  return this.viewRead;
+ }
  private async read(){const current=await readPersistedState(this.db(),empty);this.centralView={paused:current.state.paused,cadence:current.state.cadence,at:new Date().toISOString()};this.storagePressure=(current as any).storage?.pressure??null;return current;}
  // Storage alarm for the notch (lib/history-storage.mjs storagePressure): warns at 85% of the central or ledger limit.
  private storagePressure:any=null;
@@ -53,7 +71,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   * model, and each write still rereads the central first, so neither loses the other's change (the CAS stays). */
  private writeChain:Promise<unknown>=Promise.resolve();
  private write(fn:(s:any,revision:number)=>any):Promise<any>{
-  const run=this.writeChain.then(async()=>{const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);return result;});
+  const run=this.writeChain.then(async()=>{const current=await this.read();const result=await fn(current.state,current.revision);await commitPersistedState(this.db(),current.state,current.revision);this.viewCache=null;return result;});
   this.writeChain=run.catch(()=>{});return run;
  }
  /** Last successful live read per project, kept in memory for the fast lane's rotation (never a source of data). */
@@ -63,7 +81,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  /** `only`: read just the `first` projects (fast lane), never the usual oldest-first rotation. */
  private async syncLive(first:string[]=[],only=false):Promise<any>{
   if(only&&!first.length)return null;
-  const current=await this.read();if(current.state.paused)return null;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
+  const current=await this.view();if(current.state.paused)return null;const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});const live=await readLiveData(this.db(),current.state);
   // The shadow reuses this pulse's live reads: no extra central or Supabase read.
   const fresh:Record<string,any>={};
   // Owner "Já fiz" reports jump the queue: their project is read first, then the oldest reads as before.
@@ -71,7 +89,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const urgent=pendingLiveRefresh(current.state,lastSuccess);
   for(const [id,at] of Object.entries(lastSuccess)){const t=Date.parse(String(at||''));if(Number.isFinite(t))this.liveReadAt[id]=Math.max(this.liveReadAt[id]||0,t);}
   const projects=only?live.projects.filter((p:any)=>first.includes(p.projectId)).slice(0,changeWatchPolicy.maxLiveReads+1):liveOrder(live.projects,{first,urgent,lastSuccess});
-  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project||this.liveReading.has(p.projectId))continue;this.liveReading.add(p.projectId);try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.read();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId){fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};this.liveReadAt[p.projectId]=Date.now();}}catch(e:any){const latest=await this.read();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}finally{this.liveReading.delete(p.projectId);}}
+  for(const p of projects){const project=listed.items?.find((x:any)=>x.id===p.projectId&&x.name===p.projectName);if(!project||this.liveReading.has(p.projectId))continue;this.liveReading.add(p.projectId);try{const cut=await collectCloudProject(source,project,{purpose:'live',levels:['campaign'],periodsWanted:['today'],tracked:trackedCloudCampaigns(current.state,p.projectId)});const latest=await this.view();if(latest.state.paused)break;const before=await readLiveData(this.db(),latest.state,p.projectId);await liveDataAction(this.db(),latest.state,{action:'import',projectId:p.projectId,snapshot:cut.snapshots[0],expectedRevision:before.items[0].revision},Date.now(),'cloudflare');if(p.projectId){fresh[p.projectId]={projectId:p.projectId,snapshot:cut.snapshots[0]};this.liveReadAt[p.projectId]=Date.now();}}catch(e:any){const latest=await this.view();if(latest.state.paused||!(await this.setting()).enabled)break;const before=await readLiveData(this.db(),latest.state,p.projectId);const code=/^[A-Z][A-Z0-9_]{0,59}$/.test(e.code||'')?e.code:'CLOUD_LIVE_FAILED';await liveDataAction(this.db(),latest.state,{action:'failure',projectId:p.projectId,expectedRevision:before.items[0].revision,error:{code,message:'A consulta na nuvem não confirmou uma nova leitura. Última fonte válida preservada.'}},Date.now(),'cloudflare');}finally{this.liveReading.delete(p.projectId);}}
   // The fast lane and the heavy pulse may read live at the same time: per project, the newest reading wins, so a pulse
   // that started earlier never puts back the pre-pause row a fast-lane reread just replaced (owner report of 08/11:
   // a campaign paused from the notch stayed in the list).
@@ -336,9 +354,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Cheap check first: the central is read only when a Meta read is due.
   const prior=await this.ctx.storage.get<any>('metaLive'),now=Date.now(),last=Math.max(Date.parse(prior?.at||'')||0,Date.parse(prior?.failedAt||'')||0);
   if(now<(Date.parse(prior?.backoffUntil||'')||0)||now-last<(force?10000:metaLivePolicy.refreshMs))return;
-  const central=await this.read();if(central.state.paused)return;
+  const central=await this.view();if(central.state.paused)return;
   if(!(await this.syncMetaLive(central.state,{force}).catch(()=>false)))return;
-  const latest=await this.read();if(latest.state.paused)return;
+  const latest=await this.view();if(latest.state.paused)return;
   await this.storeFirst24h(latest.state).catch(()=>{});
   await this.storeCompanion(latest.state,await this.freshShadow(latest.state)).catch(()=>{});
   await this.bumpLive([]);
@@ -496,7 +514,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const reads=[...[...touched].slice(0,changeWatchPolicy.maxLiveReads),...(extra?[extra]:[])];
   if(!reads.length)return;
   if(touched.size){
-   const central=await this.read();if(central.state.paused)return;
+   const central=await this.view();if(central.state.paused)return;
    if(this.freshChanges.length||ran){await this.storeCompanion(central.state,await this.storedShadow()).catch(()=>{});await this.bumpPulse();this.freshChanges=[];await this.publishOrders(central.state);}
   }
   const liveState=await this.syncLive(reads,true).catch(()=>null);
@@ -626,7 +644,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // The first-24h board is a reading aid: a failure keeps the last board and never affects the executor.
    if(liveState)await this.storeFirst24h(liveState).catch(()=>{});
    // An order the fast lane sent after this pulse's read must not be shown at its older stage.
-   const view=liveState&&this.laneExecuted?(await this.read()).state:liveState;
+   const view=liveState&&this.laneExecuted?(await this.view()).state:liveState;
    if(view)await this.storeCompanion(view,shadow).catch(()=>{});
    await this.bumpPulse();this.freshChanges=[];
    // This pulse's own live reads may have changed a status or budget the notch shows.
