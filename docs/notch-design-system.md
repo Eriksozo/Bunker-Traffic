@@ -289,3 +289,15 @@ Rodada fechada, não um ciclo sem fim. Cada item foi conferido nas capturas do `
 100. ⏳ Prévias de alto contraste e Reduzir movimento no renderizador.
 
 Totais da rodada de UX: 45 passavam, 49 foram corrigidas e 6 ficaram registradas para depois.
+
+## Web do Bunker no mesmo sistema (10/11/2026)
+
+Pedido do dono: a web deve seguir o design system e a experiência do notch. Só apresentação; nenhuma regra, número ou fluxo de ordem mudou.
+
+- **Tokens:** o contrato semântico de `app/malva-theme.css` passou a usar os valores do notch: fundo preto, superfícies em branco translúcido, traço fino, um violeta de destaque (`#b89ce8`) e menta/coral/âmbar para estado. Como as telas já liam esses tokens, todas mudaram juntas. Fonte do sistema (SF no Mac) e dígitos de largura fixa.
+- **Formas e componentes:** `app/notch-system.css`. Botões e etiquetas em cápsula, um botão de destaque por tela, cartões com traço fino e luz na borda de cima, avisos com tom e glifo, retorno de hover e de clique. Componentes `ns-*`: ilha, ponto de estado, chip, selo, linha de lista, controle segmentado, chip de liga/desliga, campo com unidade, aviso, barra flutuante de alterações.
+- **Cores soltas:** os neutros arroxeados que restavam em CSS de componentes foram trocados por tokens. A cena em pixel do Escritório mantém a paleta própria.
+- **Autonomia do Bunk (refeita):** uma ilha com o estado e a única ação de destaque (ligar pede confirmação na própria ilha, sem diálogo do navegador); projetos em linhas compactas com o nível num controle segmentado, que abrem para ações, limites e exceções; aviso "Falta limite" quando há ação marcada sem o limite que ela exige; barra flutuante para salvar ou descartar; registro e ordens na lateral. Nessa tela a barra de projeto e período fica oculta.
+- **Conferido** no preview local com dados fictícios, em tela larga e em 375 px. O Site `chatgpt.site` só recebe isso quando for republicado.
+
+> **Substituído no mesmo dia (10/11/2026):** a versão acima (`app/notch-system.css`, componentes `ns-*`) foi trocada pela aplicação completa em todas as telas, com a camada `app/notch-ds.css` (tokens `--ds-*`, componentes `.ds-*`), descrita em `docs/web-design-system.md`. Escolha do dono. O commit da versão anterior (`03ea3f1`) continua no histórico.

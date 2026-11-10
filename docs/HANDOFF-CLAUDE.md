@@ -1005,7 +1005,11 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - o teste de precedência pausa/aumento (`tests/battery-fix-shadow.test.mjs`) passou a usar um ontem cujo lucro não cobre o gasto de hoje, mantendo o que ele verifica.
 - **Validação:** `tests/partial-day.test.mjs` (4), suíte completa (1432), typecheck e build.
 
+## Web no design system do notch (registro escrito às 2026-11-10 22:50:21 UTC por `date -u`)
 
+- **Pedido do dono (10/11/2026):** a experiência da Autonomia estava ruim; seguir em toda a web o design system e a UX do notch. Detalhes em `docs/notch-design-system.md` (seção "Web do Bunker no mesmo sistema").
+- **Feito:** tokens de `app/malva-theme.css` com os valores do notch, `app/notch-system.css` (formas e componentes `ns-*`), tela `app/autonomy-panel.tsx` refeita, neutros arroxeados soltos trocados por tokens. Só apresentação.
+- **Acesso do dono:** o Site `chatgpt.site` está em versão anterior à Autonomia; a versão atual fica no Worker, com login por e-mail em `/auth/login?email=1`. Republicar o Site continua pendente (última publicação feita pelo Codex).
 ## Web no design system do notch, de ponta a ponta (registro escrito às 2026-11-10 23:02:37 UTC por `date -u`, 10/11/2026)
 
 - **Pedido do dono:** a UX da web estava ruim, principalmente a tela "Autonomia do Bunk". Ele pediu para aplicar o design system do notch ("ele é excelente") em todo o projeto web, em todas as seções.
@@ -1025,4 +1029,5 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Validação:** 1432 testes, typecheck e `npm run build` passam no worktree `Bunker-Traffic-notch-ds` (branch `feat/web-notch-ds`).
 - **Pendente:**
   - nada foi conferido no navegador (sem servidor nem capturas). A conferência visual fica com o dono: menu recolhido, celular (~375 px), Todos os projetos, diálogo da campanha e Autonomia do Bunk;
-  - não houve commit nem deploy.
+  - a junção com a main e a publicação estão registradas abaixo.
+- **Junção com o trabalho paralelo (`03ea3f1`, outra sessão, 22:51 UTC):** os dois redesenhos brigavam em 13 arquivos. O dono escolheu manter este (todas as telas). Nos arquivos em conflito valeu esta versão; `app/notch-system.css` (componentes `ns-*`) deixou de ser importado e foi removido, para não haver dois design systems. O commit `03ea3f1` segue no histórico.
