@@ -943,6 +943,17 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - As etapas dos analistas seguem concluindo.
   - **Pendente:** o objeto ainda é reiniciado por memória a cada ~7 min. Medido localmente com a central real: uma cópia hidratada precisa de ~45–60 MB de heap e duas de ~100 MB, num isolate de 128 MB. Desde que o histórico (ledger, outcomes, diários) saiu da central, o limite de 1,75 MB da central não segura mais o tamanho em memória. Os maiores itens são `snapshots` 9,0 MB de JSON, `historyLearning` 7,7 MB, `decisionHistoryOutcomes` 4,0 MB, `decisionHistory` 3,4 MB e `decisionHistoryImports` 1,7 MB.
   - **Próximo passo:** limitar o histórico mantido em memória ou carregar só o necessário por leitor, com auditoria do que cada construtor usa. Não foi feito sem essa auditoria.
+- **Memória: leitura enxuta e menos cópias (registro escrito às 2026-11-10 13:58:29 UTC por `date -u`, commit efd41a0):**
+  - Pedido do dono: resolver os reinícios por memória ("Sim, resolver memória").
+  - Medido na central real: 31 MB de JSON, ~43 MB de heap por cópia. O registro de mudanças (`historyLearning.changes`) tem ~18 mil itens, 15,5 mil dos últimos 7 dias, e cresce ~2 mil por dia até o teto de 30 mil.
+  - **Leitura enxuta** (`leanHistory` em `lib/history-storage.mjs`, `readPersistedState(...,{lean:true})`): a cópia compartilhada `view()` carrega `decisionHistory` e `campaignChanges` e deixa nos seus registros o registro de mudanças, as provas dos desfechos medidos, os recibos de importação e as medições externas. Passou de 43 para 24 MB, com a mesma pressão de armazenamento no notch.
+  - Auditoria: nenhum leitor de exibição (notch, resumo web, Sombra, painel de contas, primeiras 24h) alcança esses campos (`tests/lean-view.test.mjs`).
+  - **Trava:** estado enxuto nunca é gravado. Ele mantém os índices e a marca `historyStorage.lean`, e `packHistoryState` recusa qualquer índice do registro de mudanças sem as mudanças carregadas.
+  - **Cópias rasas:** `persistHistoryLearning` e `persistExternalLearning` não copiam mais a central inteira; só trocam listas de topo.
+  - **Motor:** a coleta solta a leitura e o rascunho antes do commit; a etapa de análise solta a cópia completa logo após a resposta do modelo, antes das gravações.
+  - Pico medido localmente, heap limitado, dados reais: gravação da via rápida de 100 para 85 MB; coleta de mais de 115 para 85 MB.
+  - **Ainda não coberto:** durante a espera do modelo, o motor segura uma cópia completa, porque o contexto da análise usa o histórico inteiro. Se uma gravação da via rápida (ordem do dono, conferência ou autonomia) ocorrer nesse intervalo, o pico ainda passa de 115 MB.
+  - **Próximo passo se os reinícios persistirem:** reler a central só depois do modelo, o que muda a semântica da evidência e precisa de decisão; ou ajustar `hotDays` do registro de mudanças, o que muda o aprendizado e é decisão do dono.
 
 ## Notch: aba Dias, resultado por dia (registro escrito às 2026-11-10 13:54:56 UTC por `date -u`)
 
