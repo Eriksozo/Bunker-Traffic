@@ -56,6 +56,10 @@ test('forged owner-device headers never reach other routes and the read credenti
  assert.ok(cards instanceof Request);assert.equal(cards.headers.get('x-bunker-companion'),'read');assert.equal(cards.headers.has('authorization'),false);
  assert.equal((await cloudflareAuth(new Request('https://bunker.example/api/companion/cards',{headers:{Authorization:'Bearer wrong'}}),configured)).status,401);
  const pulse=await cloudflareAuth(new Request('https://bunker.example/api/companion/pulse',{headers:{Authorization:'Bearer '+token}}),configured);
+ const daily=await cloudflareAuth(new Request('https://bunker.example/api/companion/daily?projectId=p1&adAccountId=a&objectId=1',{headers:{Authorization:'Bearer '+token}}),configured);
+ assert.equal(daily.headers.get('x-bunker-companion'),'read');assert.equal(daily.headers.get('authorization'),null);
+ const posted=await cloudflareAuth(new Request('https://bunker.example/api/companion/daily',{method:'POST',headers:{Authorization:'Bearer '+token}}),configured);
+ assert.notEqual(posted instanceof Request?posted.headers.get('x-bunker-companion'):null,'read'); // GET only
  assert.ok(pulse instanceof Request);assert.equal(pulse.headers.get('x-bunker-companion'),'read');
 });
 test('cards view lists only proposals waiting for the owner, scoped to the requested campaign',()=>{

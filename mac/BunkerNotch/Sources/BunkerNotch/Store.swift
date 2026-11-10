@@ -227,6 +227,28 @@ final class Store: ObservableObject {
         } catch { return .failed("Sem conexão com o Bunker ou resposta inesperada.") }
     }
 
+    /// One campaign's day-by-day series (GET /api/companion/daily, read credential). Display only.
+    struct CampaignDaily: Decodable, Equatable {
+        struct Snapshot: Decodable, Equatable { let currency: String?; let timezone: String?; let fetchedAt: String?; let rows: [Summary.DayRow] }
+        let status: String?; let stale: Bool?; let error: String?; let snapshot: Snapshot?
+    }
+    enum DailyResult: Equatable { case ok(CampaignDaily), failed(String) }
+    func fetchDaily(projectId: String?, adAccountId: String?, objectId: String?) async -> DailyResult {
+        guard let projectId, let adAccountId, let objectId else { return .failed("Campanha sem identificação completa para o resultado por dia.") }
+        guard let token = Credential.current() else { return .failed("Credencial do app não encontrada nas Chaves.") }
+        var components = URLComponents(url: Store.base.appendingPathComponent("api/companion/daily"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "projectId", value: projectId), URLQueryItem(name: "adAccountId", value: adAccountId), URLQueryItem(name: "objectId", value: objectId)]
+        var request = URLRequest(url: components.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 40)
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else { return .failed(status == 401 ? "Credencial recusada pelo Bunker." : "Resultado por dia indisponível agora (\(status)).") }
+            return .ok(try JSONDecoder().decode(CampaignDaily.self, from: data))
+        } catch { return .failed("Sem conexão com o Bunker ou resposta inesperada.") }
+    }
+
     /// Touch ID first (the prompt names the exact change), then one signed POST. A lost answer is not retried blindly.
     func sendOwner(_ input: [String: Any], reason: String) async -> OwnerResult {
         let body: Data

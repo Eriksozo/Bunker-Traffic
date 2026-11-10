@@ -63,6 +63,14 @@ enum Format {
     static func dayLabel(_ day: String) -> String {
         let p = day.split(separator: "-"); return p.count == 3 ? "\(p[2])/\(p[1])" : "N/D"
     }
+    /// "2026-11-10" in the source's timezone (the partial day of a daily table).
+    static func civilDay(_ date: Date, timeZone: String?) -> String? {
+        guard let id = timeZone, let tz = TimeZone(identifier: id) else { return nil }
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
+        let c = cal.dateComponents([.year, .month, .day], from: date)
+        guard let y = c.year, let m = c.month, let d = c.day else { return nil }
+        return String(format: "%04d-%02d-%02d", y, m, d)
+    }
     static func orders(_ value: Double?) -> String { guard let value, value.isFinite else { return "N/D" }; return String(Int(value.rounded())) }
     static func signTone(_ value: Double?) -> Tone? { guard let value, value.isFinite, value != 0 else { return nil }; return value > 0 ? .good : .bad }
     static func roiTone(_ value: Double?) -> Tone? { guard let value, value.isFinite else { return nil }; return value >= 1 ? .good : .bad }

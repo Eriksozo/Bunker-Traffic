@@ -877,24 +877,12 @@ struct AccountsTab: View {
 /// Vendas count every order (upsells included); CPA = investimento ÷ vendas. Missing numbers stay N/D.
 struct DaysTab: View {
     let s: Summary
-    private static let widths: [CGFloat] = [62, 82, 50, 70, 86, 82, 50, 50]
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             SectionHeader(title: "Resultado por dia", detail: detail)
             if let d = s.days, d.error == nil, !d.rows.isEmpty {
                 if d.stale == true { EmptyLine(text: Format.daysStale(d), kind: .info) }
-                VStack(spacing: 0) {
-                    row(["DIA", "INVEST.", "VENDAS", "CPA", "FAT. LÍQ.", "LUCRO", "ROAS", "ROI"], header: true)
-                    ForEach(d.rows) { r in
-                        Divider().overlay(DS.Color.stroke)
-                        let c = d.currency
-                        row([Format.dayLabel(r.day), Format.money(r.spend, currency: c), Format.orders(r.orders), Format.money(r.cpa, currency: c),
-                             Format.money(r.revenueNet, currency: c), Format.money(r.profit, currency: c), Format.ratio(r.roas), Format.ratio(r.roi)],
-                            tones: [nil, nil, nil, nil, nil, Format.signTone(r.profit), nil, Format.roiTone(r.roi)], partial: r.day == d.today)
-                    }
-                }
-                .padding(.vertical, DS.Space.xs)
-                .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                DayTable(rows: d.rows, currency: d.currency, today: d.today)
                 Text("Vendas incluem upsells · CPA = investimento ÷ vendas · Meta, vendas de tráfego · hoje parcial").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
             } else if let e = s.days?.error {
                 EmptyLine(text: e + ". Aparece na próxima leitura (a cada 10 min).", kind: .waiting)
@@ -906,6 +894,29 @@ struct DaysTab: View {
     var detail: String {
         guard let at = s.days?.at else { return "últimos 7 dias · \(s.projectName)" }
         return "últimos 7 dias · \(s.projectName) · lido " + Format.relative(at)
+    }
+}
+
+/// The web daily table (DIA · INVESTIMENTO · VENDAS · CPA · FAT. LÍQUIDO · LUCRO · ROAS · ROI), newest first.
+/// Vendas count every order (upsells included); CPA = investimento ÷ vendas. Missing numbers stay N/D.
+struct DayTable: View {
+    let rows: [Summary.DayRow]
+    let currency: String?
+    let today: String?
+    private static let widths: [CGFloat] = [62, 82, 50, 70, 86, 82, 50, 50]
+    var body: some View {
+        VStack(spacing: 0) {
+            row(["DIA", "INVEST.", "VENDAS", "CPA", "FAT. LÍQ.", "LUCRO", "ROAS", "ROI"], header: true)
+            ForEach(rows) { r in
+                Divider().overlay(DS.Color.stroke)
+                let c = currency
+                row([Format.dayLabel(r.day), Format.money(r.spend, currency: c), Format.orders(r.orders), Format.money(r.cpa, currency: c),
+                     Format.money(r.revenueNet, currency: c), Format.money(r.profit, currency: c), Format.ratio(r.roas), Format.ratio(r.roi)],
+                    tones: [nil, nil, nil, nil, nil, Format.signTone(r.profit), nil, Format.roiTone(r.roi)], partial: r.day == today)
+            }
+        }
+        .padding(.vertical, DS.Space.xs)
+        .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
     }
     @ViewBuilder func row(_ cells: [String], header: Bool = false, tones: [Tone?] = [], partial: Bool = false) -> some View {
         HStack(spacing: 4) {
@@ -923,6 +934,51 @@ struct DaysTab: View {
         }
         .padding(.horizontal, DS.Space.s).padding(.vertical, header ? 5 : 7)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// View state of CampaignDaysView (this toolchain has no SwiftUI @State macro).
+@MainActor final class DailyLoader: ObservableObject { @Published var result: Store.DailyResult? }
+
+/// One campaign's last 7 days inside its detail: read when the detail opens (same series as the web detail).
+struct CampaignDaysView: View {
+    @EnvironmentObject var store: Store
+    let item: Summary.QueueItem
+    @StateObject private var loader = DailyLoader()
+    private var result: Store.DailyResult? { loader.result }
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            SectionHeader(title: "Resultado por dia", detail: detail)
+            switch result {
+            case .none:
+                EmptyLine(text: "Consultando a Malva…", kind: .waiting)
+            case .some(.failed(let message)):
+                EmptyLine(text: message, kind: .info)
+            case .some(.ok(let d)):
+                if let snap = d.snapshot, !snap.rows.isEmpty {
+                    DayTable(rows: Array(snap.rows.sorted { $0.day > $1.day }.prefix(7)), currency: snap.currency, today: Format.civilDay(Date(), timeZone: snap.timezone))
+                    Text("Vendas incluem upsells · CPA = investimento ÷ vendas · hoje parcial").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                } else {
+                    EmptyLine(text: d.error.map { $0 + "." } ?? "Aguardando o resultado por dia da Malva.", kind: .waiting)
+                }
+            }
+        }
+        .task(id: item.id) { await load() }
+    }
+    var detail: String {
+        if case .some(.ok(let d)) = result, let at = d.snapshot?.fetchedAt { return "últimos 7 dias · lido " + Format.relative(at) + (d.stale == true ? " · atualizando" : "") }
+        return "últimos 7 dias"
+    }
+    func load() async {
+        loader.result = nil
+        // The first answer may still be "pending" while the Malva read runs: ask again a few times, briefly.
+        for attempt in 0..<4 {
+            let r = await store.fetchDaily(projectId: item.detail?.projectId, adAccountId: item.adAccountId, objectId: item.campaignId)
+            loader.result = r
+            guard case .ok(let d) = r, d.snapshot == nil, d.error == nil, attempt < 3 else { return }
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if Task.isCancelled { return }
+        }
     }
 }
 
@@ -1111,6 +1167,7 @@ struct CampaignDetailView: View {
                         .padding(DS.Space.m).card()
                         .help("Hoje continua em destaque; a soma mostra se o histórico cobre o dia. A decisão é do gestor.")
                     }
+                    CampaignDaysView(item: item)
                     if let reason = item.detail?.reason {
                         SectionHeader(title: "Sinal", detail: item.decision)
                         Text(reason).font(DS.Font.body).foregroundStyle(DS.Color.inkSoft).fixedSize(horizontal: false, vertical: true)
