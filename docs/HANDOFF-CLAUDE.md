@@ -966,3 +966,13 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Notch: aba "Dias" (tecla 7), depois de Sistema, para não mudar as teclas das abas existentes.
 - Validação: `tests/daily-series.test.mjs`, suíte completa (1423), typecheck e build num worktree limpo do HEAD com só estas mudanças; self-test nativo.
 - Havia, ao mesmo tempo, alterações de outra sessão no checkout (leitura `lean` em `worker/cloud-executor.ts`, `lib/persistence.mjs`, `lib/history-storage.mjs`, `lib/cloud-history-learning.mjs`). Ficaram fora deste commit, intactas; com elas, `tests/shared-view-readonly.test.mjs` falha (conta 3 `this.read()` e espera 6).
+
+## Notch: resultado por dia dentro do detalhe da campanha (registro escrito às 2026-11-10 15:03:29 UTC por `date -u`)
+
+- **Envio da aba Dias:** os commits `fed4c83` e `776f738` chegaram a `origin/main` junto com o push da sessão de memória do executor (fast-forward), antes da autorização do dono para o meu push, que as permissões tinham bloqueado. O dono decidiu depois, nesta sessão, "Manter e conferir". Versão Cloudflare `596c742c` (14:00:40 UTC), `/health` 200, chamadas à `malva-mcp` todas 200.
+- **Aba Dias vazia (corrigido, `611161c`):** o decodificador tolerante do resumo (`SummaryLossy.swift`) tem lista fixa de seções e não incluía `days`; o app descartava o bloco. O self-test agora decodifica o resumo completo com `days`.
+- **Pedido real do dono:** a tabela por dia dentro do detalhe de cada campanha, igual à do web. Commit `7206742`:
+  - Rota `GET /api/companion/daily?projectId&adAccountId&objectId`, aceita a sessão do dono ou a credencial de leitura do app do Mac (fronteira em `lib/cloudflare-auth.mjs`, só GET). Usa o mesmo caminho do web (`updateDailyState` com `request`): pode renovar apenas o cache visual `daily:` daquela campanha, no máximo uma vez por minuto; não toca a central, análise, proposta nem ordem.
+  - Notch: seção "Resultado por dia" no detalhe da campanha (`CampaignDaysView`), com a mesma tabela da aba Dias (`DayTable`). Consulta ao abrir o detalhe e repete até 3 vezes enquanto a leitura está pendente.
+- **Validação:** suíte completa (1427), typecheck, build, self-test nativo. Em produção, depois das publicações de 14:54:49 e 14:57:06 UTC: `/health` 200; a rota responde 401 "Credencial do app não autorizada" com credencial errada, 401 sem credencial e 401 em POST.
+- **Pendente:** ver a tabela com dados reais no notch. Daqui não há acesso à credencial do app (Chaves) nem à tela; a conferência fica com o dono.
