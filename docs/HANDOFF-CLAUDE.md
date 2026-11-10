@@ -956,6 +956,13 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - **Próximo passo se os reinícios persistirem:** reler a central só depois do modelo, o que muda a semântica da evidência e precisa de decisão; ou ajustar `hotDays` do registro de mudanças, o que muda o aprendizado e é decisão do dono.
   - **Resultado em produção (registro escrito às 2026-11-10 14:48:54 UTC por `date -u`):** publicado às 14:00:28 UTC. Entre 14:05 e 14:48 houve 2 reinícios por memória (14:14 e 14:27), contra ~1 a cada 7 min antes. O notch recebeu só 200 em `/api/companion` e no pulse. As etapas dos analistas e uma ordem confirmada pela via rápida seguiram normalmente.
   - **Ainda pesa:** o executor roda no mesmo script que o site inteiro (`dist/server` tem 18 MB), e esse código ocupa memória do mesmo isolate de 128 MB. Separar o executor num Worker próprio é a maior folga possível, mas é mudança de arquitetura e de deploy, para combinar com o dono.
+- **Memória: espera do modelo (registro escrito às 2026-11-10 15:40:40 UTC por `date -u`, commit 38b48da):**
+  - O dono respondeu "Faz o que é melhor e mais preciso para o projeto sem perder a qualidade". A aba Dias ficou publicada, e o próximo passo foi o que não muda nenhum resultado.
+  - Antes de `runCloudAnalyst`, a etapa de análise guarda da mesma leitura só `snapshots`, `collaborationRounds` e `collaborationMessages`: é tudo o que `normalizeCampaignReadings`, `normalizeAgentReflection`, `cloudEvidence` e `findRound` leem depois. A cópia completa é solta durante a espera.
+  - Não há releitura: a resposta é conferida contra os mesmos dados que o modelo viu. Os testes travam que a cópia completa não é lida depois da chamada e que essas funções não leem outro campo.
+  - Medido localmente (espera do modelo + cópia de exibição + gravação): de 125 para 100 MB.
+  - **Produção:** publicado às 14:54:49 UTC. Entre 15:00 e 15:40 houve 1 reinício por memória (15:19), contra ~1 a cada 7 min no início do dia e ~1 a cada 20 min depois da leitura enxuta. O reinício de 15:07 foi troca de código (deploy de outra sessão). O notch só recebeu 200.
+  - **Restante:** ainda há picos raros. A maior folga seria tirar o executor do script do site (18 MB de código no mesmo isolate), mas isso exige outro Worker, com bindings e segredos próprios, e cabe ao dono decidir.
 
 ## Notch: aba Dias, resultado por dia (registro escrito às 2026-11-10 13:54:56 UTC por `date -u`)
 
