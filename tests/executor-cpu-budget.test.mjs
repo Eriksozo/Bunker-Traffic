@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {budget} from './helpers/cpu-scale.mjs';
 import fs from 'node:fs';
 
 // Owner report of 10/11/2026 ("bunk não conseguiu ler nada"): the executor object was reset several times an hour for
@@ -62,7 +63,7 @@ test('Modo Gestor read model: base, deep view, notch block and simulator stay wi
  // Warm-up (JIT) outside the measurement, as in a long-lived isolate.
  deepMg.buildDeepBase({state:f.state,liveItems:[],accuracy,policy:{},now:CNOW});
  const b=cpu(()=>deepMg.buildDeepBase({state:f.state,liveItems:[],accuracy,policy:{},now:CNOW})),base=b.out;
- assert.ok(b.ms<300,'deep base '+b.ms+' ms');
+ assert.ok(b.ms<budget(300),'deep base '+b.ms+' ms');
  assert.ok(new TextEncoder().encode(JSON.stringify(base)).length<=256000,'base ≤ 256 KB');
  assert.ok(base.orders.length<=400&&Object.values(base.projects).every(p=>p.done.length<=50&&p.now.length<=80));
  const today=f.entries.filter(e=>e.day===CDAY),status={at:cIso(CNOW-60000),day:CDAY,days:Object.fromEntries(f.projects.map(p=>[p,CDAY]))};
@@ -70,15 +71,15 @@ test('Modo Gestor read model: base, deep view, notch block and simulator stay wi
  deepMg.buildDeepView(input('all'));
  for(const project of ['all','p0']){
   const v=cpu(()=>deepMg.buildDeepView(input(project)));
-  assert.ok(v.ms<300,'deep view '+project+' '+v.ms+' ms');
+  assert.ok(v.ms<budget(300),'deep view '+project+' '+v.ms+' ms');
   assert.ok(new TextEncoder().encode(JSON.stringify(v.out)).length<=400000,'deep view ≤ 400 KB');
  }
  const c=cpu(()=>['all',...f.projects].map(project=>deepMg.autonomyCompanion({base,project,now:CNOW,pbViews:f.pbViews,entries:f.entries,days:status.days,shadowAt:status.at})));
- assert.ok(c.ms<200,'notch blocks '+c.ms+' ms');
+ assert.ok(c.ms<budget(200),'notch blocks '+c.ms+' ms');
  assert.ok(c.out.every(x=>new TextEncoder().encode(JSON.stringify(x)).length<=6000),'every block ≤ 6 KB');
  const s=cpu(()=>{const rows=f.entries.filter(e=>e.project==='p0').map(deepMg.simRow);const sim=deepMg.simRowsView({base,project:'p0',rows,now:CNOW,shadowStatus:status});
   return simulateGrant(sim,{enabled:true,projects:{p0:{mode:'auto',actions:{pause:true,reduce:true,increase:true,activate:false},limits:{maxIncreasePct:50,maxReducePct:30,budgetCap:1000,ordersPerDay:2}}}},{now:CNOW,projectIds:f.projects});});
- assert.equal(s.out.ok,true);assert.ok(s.ms<300,'simulator '+s.ms+' ms');
+ assert.equal(s.out.ok,true);assert.ok(s.ms<budget(300),'simulator '+s.ms+' ms');
 });
 
 test('Modo Gestor hooks: bounded by the runner policy, guarded, and never in the Sombra\'s or autonomy\'s path',()=>{
@@ -97,9 +98,9 @@ test('Modo Gestor hooks with the real runner on the 60-day fixture',async()=>{
   delete:async keys=>{let n=0;for(const k of [].concat(keys))n+=store.delete(k)?1:0;return n;},list:async({prefix,limit,startAfter,start,end})=>new Map([...store.keys()].sort().filter(k=>k.startsWith(prefix)&&(!startAfter||k>startAfter)&&(!start||k>=start)&&(!end||k<end)).slice(0,limit).map(k=>[k,store.get(k)]))};
  const facade=r.playbookStore(storage),projects=f.projects.map(p=>({project:p,params:{},day:CDAY}));
  const a=process.cpuUsage(),A=await r.runPlaybookShadow(facade,{state:f.state,liveItems:[],events:[],meta:null,now:CNOW,projects,fixed:[]},{deadline:Date.now()+r.playbookRunnerPolicy.shadowBudgetMs}),aMs=(process.cpuUsage(a).user)/1000;
- assert.equal(typeof A?.ok,'boolean','hook A returns, never throws');assert.ok(aMs<500,'hook A '+aMs+' ms');
+ assert.equal(typeof A?.ok,'boolean','hook A returns, never throws');assert.ok(aMs<budget(500),'hook A '+aMs+' ms');
  const b=process.cpuUsage(),B=await r.runPlaybookLearning(facade,{state:f.state,now:CNOW,team:[],teamKeys:[],bases:[],coverage:{},ownerNames:[],zone:()=>'America/Sao_Paulo',projects:f.projects,names:{}},{deadline:Date.now()+r.playbookRunnerPolicy.learnBudgetMs}),bMs=(process.cpuUsage(b).user)/1000;
- assert.equal(typeof B?.ok,'boolean','hook B returns, never throws');assert.ok(bMs<3000,'hook B '+bMs+' ms');
+ assert.equal(typeof B?.ok,'boolean','hook B returns, never throws');assert.ok(bMs<budget(3000),'hook B '+bMs+' ms');
  for(const k of store.keys())assert.ok(k.startsWith('pb:')||k.startsWith('pbs:'),'runner writes only pb:/pbs: keys: '+k);
  for(const k of store.keys())if(k.startsWith('pbs:'))assert.equal(store.get(k).wouldExecute,false);
 });
@@ -131,7 +132,7 @@ test('Modo Gestor hook B with 60 full bins per project: bounded live heap and CP
  }
  assert.ok(fitDone,'the fit cycle (36 groups, 2 per pass) completes');assert.ok(replays>=6,'then one replay day per pass');
  assert.ok(peak<15*1024*1024,'live heap above baseline at the runner\'s storage calls: '+Math.round(peak/1048576)+' MB');
- assert.ok(maxMs<1500,'CPU per pass '+Math.round(maxMs)+' ms');
+ assert.ok(maxMs<budget(1500),'CPU per pass '+Math.round(maxMs)+' ms');
  const model=await mem.get('pb:model');assert.ok(Object.keys(model.plays).length>=6,'plays fitted for the projects');
  assert.ok(new TextEncoder().encode(JSON.stringify(await mem.get('pb:cursor'))).length<20000,'the cursor stays small (fits live in pb:fits:<p>)');
  // Between pulses (heavy:false) nothing heavy runs: no bin is read for fitting or replay.

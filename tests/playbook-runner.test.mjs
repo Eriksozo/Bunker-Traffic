@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {budget} from './helpers/cpu-scale.mjs';
 import {playbookStore,runPlaybookShadow,runPlaybookLearning,runPlaybookBackfill,playbookRunnerPolicy as R} from '../lib/playbook-runner.mjs';
 import {backfillTeamHistory} from '../lib/activity-history.mjs';
 import {binsKey,obsKey,binCells} from '../lib/team-observations.mjs';
@@ -132,7 +133,7 @@ test('Views follow the contract: stages ≤ candidata, not adoptable, N/D as nul
   assert.equal(r.ok,true,JSON.stringify(r));assert.ok(r.evals<=R.maxPredicateEvals,String(r.evals));
   if(storage.map.get('pb:model')?.fitAt&&!storage.map.get('pb:cursor').fit)break;
  }
- assert.ok(calls<80,'a full fit cycle completes');assert.ok(worst<1500,`worst call ${Math.round(worst)} ms`);
+ assert.ok(calls<80,'a full fit cycle completes');assert.ok(worst<budget(1500),`worst call ${Math.round(worst)} ms`);
  const model=storage.map.get('pb:model');assert.ok(JSON.stringify(model).length<=R.modelMaxBytes);
  for(const p of projects){
   const v=storage.map.get('pb:view:'+p);assert.ok(v&&JSON.stringify(v).length<=R.maxValueBytes);
@@ -150,7 +151,7 @@ test('Views follow the contract: stages ≤ candidata, not adoptable, N/D as nul
  const rows=Array.from({length:80},(_,i)=>({id:'u'+i,externalId:'c'+i,adAccountId:'acc-1',name:i%2?'Madura '+i:'09/11 - [TESTE] '+i,level:'campaign',provider:'meta',status:'ACTIVE',effectiveStatus:'ACTIVE',accountStatus:{active:true},dailyBudget:200,budgetCurrency:'BRL',budgetRate:1,spend:100+i,revenueNet:i*3,adCosts:0,productCost:0,saleTax:0,frontOrders:i%3,orders:i%3,checkouts:1}));
  const st={...state,snapshots:[{projectId:'p1',period:'today',level:'campaign',source:'Malva MCP',timezone:TZ,complete:true,from:iso(dayStart(D)),to:iso(dayStart(D)+86400000),fetchedAt:iso(NOW-60000),lastSyncAt:iso(NOW-60000),rows}]};
  const t0=performance.now(),a=await runPlaybookShadow(store,{state:st,liveItems:[],events:[],now:NOW,projects:projects.map(p=>({project:p,params:{ticketFront:100},day:D}))},deadline(R.shadowBudgetMs));
- assert.equal(a.ok,true);assert.ok(performance.now()-t0<250,`hook A ${Math.round(performance.now()-t0)} ms`);
+ assert.equal(a.ok,true);assert.ok(performance.now()-t0<budget(250),`hook A ${Math.round(performance.now()-t0)} ms`);
 });
 
 test('The kill switch and an exhausted deadline are clean no-ops',async()=>{

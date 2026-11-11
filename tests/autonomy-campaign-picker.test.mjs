@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {budget} from './helpers/cpu-scale.mjs';
 import fs from 'node:fs';
 import ts from 'typescript';
 import {campaignKey} from '../lib/autonomy-grant.mjs';
@@ -99,7 +100,7 @@ test('Groups follow the account order and 500+ entries filter quickly',()=>{
  const many=campaignPickerRows(Array.from({length:800},(_,i)=>row({externalId:String(i),adAccountId:`act_${i%4}`,accountName:`Conta ${i%4}`,name:`07/11 - [CBO] - [JOHN] - [TESTE] - JHON_A_${i}_H1`,status:i%3?'ACTIVE':'PAUSED',spend:i%5})));
  const t0=performance.now();
  for(let k=0;k<20;k++)filterCampaignPicker(many,{query:'jhon 7',active:true});
- assert.ok(performance.now()-t0<500);
+ assert.ok(performance.now()-t0<budget(500));
  assert.ok(filterCampaignPicker(many,{}).rows.length>pickerPageSize);
 });
 

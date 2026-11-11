@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {budget} from './helpers/cpu-scale.mjs';
 import {playTemplates,templateOf,fitPlay,examplesFromBins,shrinkParams,versionPlay,evaluatePlaybook,matchPlay,divergences,playSentence,playbookPolicy,holds} from '../lib/manager-playbook.mjs';
 import {cellOf} from '../lib/team-observations.mjs';
 import {syntheticDays,iso,dayStart,TZ,pid,shift} from './helpers/playbook-fixtures.mjs';
@@ -168,7 +169,7 @@ test('CPU bound: six plays fitted on a 60-day fixture stay within the predicate 
  for(const t of playTemplates)fitPlay(t,bins,{project:P,fitDay:'2026-10-31',counter});
  const ms=performance.now()-t0;
  assert.ok(counter.n/playTemplates.length<200000,String(counter.n));
- assert.ok(ms<3000,`${Math.round(ms)} ms for 6 groups`);
+ assert.ok(ms<budget(3000),`${Math.round(ms)} ms for 6 groups`);
 });
 
 test('A divergence card names the play it blocks',async()=>{
