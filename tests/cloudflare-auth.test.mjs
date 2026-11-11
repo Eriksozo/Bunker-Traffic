@@ -41,9 +41,13 @@ test('agent credential cannot enter the private storage gateway',async()=>{
  const r=await cloudflareAuth(new Request('https://bunker.example/internal/storage',{method:'POST',headers:{Authorization:'Bearer agent-test'},body:'{}'}),{...env,BUNKER_STORAGE_TOKEN:'storage-test'});
  assert.equal(r.status,401);
 });
-test('direct entry uses the configured private Site, ignores request destinations and retains email fallback',async()=>{
+test('login shows the owner email form; the private Site is one explicit link away and ignores request destinations',async()=>{
  const configured={...env,BUNKER_DIRECT_ACCESS_URL:'https://private-bunker.example.chatgpt.site/'};
- const r=await cloudflareAuth(new Request('https://bunker.example/auth/login?return_to=https://attacker.example'),configured);
+ for(const path of ['/auth/login','/auth/login?return_to=https://attacker.example','/signin-with-chatgpt?return_to=%2F']){
+  const page=await cloudflareAuth(new Request('https://bunker.example'+path),configured),text=await page.text();
+  assert.equal(page.status,200);assert.equal(page.headers.has('location'),false);assert.match(text,/Receber link de acesso/);assert.match(text,/href="\/auth\/login\?site=1"/);assert.doesNotMatch(text,/attacker/);
+ }
+ const r=await cloudflareAuth(new Request('https://bunker.example/auth/login?site=1&return_to=https://attacker.example'),configured);
  assert.equal(r.status,303);assert.equal(r.headers.get('location'),configured.BUNKER_DIRECT_ACCESS_URL);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.has('set-cookie'),false);
  const alternate=await cloudflareAuth(new Request('https://bunker.example/auth/login?email=1'),configured);
  assert.equal(alternate.status,200);assert.equal(alternate.headers.get('Referrer-Policy'),'same-origin');assert.match(await alternate.text(),/Receber link de acesso/);
@@ -51,10 +55,10 @@ test('direct entry uses the configured private Site, ignores request destination
 });
 test('invalid optional direct destinations cannot redirect a visitor or weaken authentication',async()=>{
  for(const url of ['http://private.chatgpt.site/','https://attacker.example/','https://private.chatgpt.site.evil.example/','https://user:secret@private.chatgpt.site/','https://private.chatgpt.site/?token=test','https://private.chatgpt.site/other']){
-  const r=await cloudflareAuth(new Request('https://bunker.example/auth/login'),{...env,BUNKER_DIRECT_ACCESS_URL:url});assert.equal(r.status,200);assert.equal(r.headers.has('location'),false);
+  for(const path of ['/auth/login','/auth/login?site=1']){const r=await cloudflareAuth(new Request('https://bunker.example'+path),{...env,BUNKER_DIRECT_ACCESS_URL:url});assert.equal(r.status,200);assert.equal(r.headers.has('location'),false);assert.doesNotMatch(await r.text(),/site=1/);}
  }
 });
-test('signing out clears native cookies and stops before automatic direct entry',async()=>{
+test('signing out clears native cookies and lands on the email form',async()=>{
  const configured={...env,BUNKER_DIRECT_ACCESS_URL:'https://private.chatgpt.site/'};
  const r=await cloudflareAuth(new Request('https://bunker.example/auth/logout',{method:'POST',headers:{Origin:'https://bunker.example'}}),configured);
  assert.equal(r.status,303);assert.equal(r.headers.get('location'),'/auth/login?signedout=1');assert.match(r.headers.get('set-cookie'),/Max-Age=0/);

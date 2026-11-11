@@ -1099,3 +1099,7 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - **Q15:** reativação adiada.
   - **Q16:** primeiro Automático só no John, só pausa e redução, por 7 dias.
   - A Fase 2 começa quando Q2, Q6 e Q9 estiverem respondidas e a Fase 1 estável por 7 dias.
+
+## Login do Worker pelo formulário de e-mail
+
+- **Registro (2026-11-11 02:10:17 UTC, dono respondeu "Sim, ajustar login"):** `/auth/login` e `/signin-with-chatgpt` mostram sempre o formulário de e-mail do dono; o Site privado fica num link explícito (`/auth/login?site=1`), sem redirecionamento automático. `BUNKER_DIRECT_ACCESS_URL` e segredos não mudaram. Página de login com as cores do notch.
