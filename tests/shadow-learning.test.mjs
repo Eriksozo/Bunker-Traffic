@@ -180,7 +180,7 @@ test('The executor wires the memory, the team moves and the notch',async()=>{
  const fs=await import('node:fs');
  const src=fs.readFileSync(new URL('../worker/cloud-executor.ts',import.meta.url),'utf8');
  assert.match(src,/gateAccuracy\(learned,rule,ruleAccuracy\(prior,rule\),\{now\}\)/,'gate: 7-day count first, memory as a veto');
- assert.match(src,/await this\.storeLearning\(withAuthors,merged,events,policy,now,evaluated\)\.catch\(/,'a memory failure never breaks the shadow');
+ assert.match(src,/await this\.storeLearning\(withAuthors,merged,events,policy,now,evaluated,opts\.learn!==false\)\.catch\(/,'a memory failure never breaks the shadow');
  assert.match(src,/prefix:'learn:'/);
  assert.match(src,/learning:await this\.ctx\.storage\.get<any>\('learningSummary'\)/,'shadow read');
  assert.match(src,/learning:learningBrief\(learned,\{project\}\)/,'notch summary per scope');

@@ -162,3 +162,23 @@ test('After midnight, before the new analysis: only the first-24h rule runs on t
  const b=first24hWatch(s,{project:'p',liveItem,params:{},now});assert.equal(b.aligned,false);assert.deepEqual(b.items.map(i=>[i.objectId,i.level]),[['m1','pause']]);
  assert.equal(run(s).decisions.length,0,'without a fresh live cut nothing is evaluated');
 });
+
+// Modo Gestor (W3): the reading context moved to lib/campaign-context.mjs with no behaviour change. The golden hashes in
+// tests/fixtures/autonomy-shadow-golden.json were frozen with the code before the extraction.
+test('Golden: evaluateShadow and first24hWatch are byte-identical after the campaign-context extraction',async()=>{
+ const {createHash}=await import('node:crypto'),fs=await import('node:fs');
+ const {goldenScenarios}=await import('./fixtures/autonomy-shadow-golden.mjs');
+ const {first24hWatch,shadowPolicy}=await import('../lib/autonomy-shadow.mjs');
+ const {contextPolicy}=await import('../lib/campaign-context.mjs');
+ const golden=JSON.parse(fs.readFileSync(new URL('./fixtures/autonomy-shadow-golden.json',import.meta.url),'utf8'));
+ const list=goldenScenarios();
+ assert.equal(list.length,Object.keys(golden).length);assert.ok(list.length>=200);
+ for(const [name,{state,options}] of list){
+  const e=evaluateShadow(state,options),w=first24hWatch(state,options);
+  assert.equal(createHash('sha256').update(JSON.stringify({e,w})).digest('hex'),golden[name],name);
+ }
+ assert.equal(contextPolicy.sourceAgeMs,shadowPolicy.sourceAgeMs);assert.equal(contextPolicy.managerEditGuardMs,shadowPolicy.managerEditGuardMs);
+ const src=fs.readFileSync(new URL('../lib/autonomy-shadow.mjs',import.meta.url),'utf8');
+ assert.match(src,/import \{closedSnapshot as snapshot,todayRows,previousCut,rowWindows\} from '\.\/campaign-context\.mjs';/);
+ for(const fn of ['function todayRows(','function previousCut(','function rowWindows('])assert.ok(!src.includes(fn),fn+' is only defined in campaign-context');
+});

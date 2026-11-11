@@ -5,10 +5,11 @@ import ts from 'typescript';
 import {campaignKey} from '../lib/autonomy-grant.mjs';
 import {isWarmupCampaign} from '../lib/campaign-scope.mjs';
 
-// The picker helpers live inline in the panel (presentation only); load that block and run it with the same imports.
-const src=fs.readFileSync(new URL('../app/autonomy-panel.tsx',import.meta.url),'utf8');
+// The picker helpers live inline in the Permissões tab (presentation only; moved unchanged from app/autonomy-panel.tsx
+// with the Modo Gestor cockpit, 10/11/2026); load that block and run it with the same imports.
+const src=fs.readFileSync(new URL('../app/autonomy/permissions.tsx',import.meta.url),'utf8');
 const block=src.slice(src.indexOf('// picker-helpers:start'),src.indexOf('// picker-helpers:end'));
-assert.ok(block.length>200,'picker helper block not found in app/autonomy-panel.tsx');
+assert.ok(block.length>200,'picker helper block not found in app/autonomy/permissions.tsx');
 const names=['campaignPickerRows','filterCampaignPicker','groupPickerRows','splitCampaignName','foldText','pickerPageSize','pickerMoney'];
 const js=ts.transpileModule(`${block}\nreturn {${names.join(',')}};`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
 const {campaignPickerRows,filterCampaignPicker,groupPickerRows,splitCampaignName,foldText,pickerPageSize,pickerMoney}=new Function('campaignKey','isWarmupCampaign',js)(campaignKey,isWarmupCampaign);

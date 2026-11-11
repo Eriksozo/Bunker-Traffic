@@ -37,6 +37,11 @@ import {liveOrderRow} from '../lib/owner-order-live.mjs';
 import {decisionContingency} from '../lib/decision-contingency.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
 import {deliverPhoneAlerts} from '../lib/phone-alerts.mjs';
+import {buildDeepBase,deepBaseSignature,buildDeepView,simRow,simRowsView,autonomyCompanion,deepViewPolicy} from '../lib/autonomy-deep-view.mjs';
+// Modo Gestor, Phase 1 (docs/AUTONOMIA-V2-CONTRATO-2026-11-10.md, c): the learned plays only observe. Every call into the
+// runner is guarded (exports checked, try/catch): a missing or failing runner never affects the Sombra, the autonomy or
+// the alarm, and nothing it decides reaches `batches`, autonomyAct, a proposal or an order.
+import * as playbookRunner from '../lib/playbook-runner.mjs';
 
 /** Local day of the shadow's default timezone: the "hoje" of a pulse that evaluated no project keeps being today. */
 const shadowLocalDay=(now:number)=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -201,6 +206,108 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   if(woke.size){const prev=await this.ctx.storage.get<any>('wake');await this.ctx.storage.put('wake',{order:true,projects:[...new Set([...(prev?.projects||[]),...woke])].slice(0,6),at:new Date().toISOString()});if(!this.running)await this.ctx.storage.setAlarm(Date.now()+300);}
   await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config.enabled,acting:true,created,logged:log.length});
  }
+ /**
+  * Modo Gestor runner (lib/playbook-runner.mjs), only when it is present and switched on. The runner only ever gets the
+  * `pb:`/`pbs:` storage facade, never the raw storage. A call that throws anyway records PLAYBOOK_HOOK_FAILED in `pb:status`
+  * and nothing else: no rethrow, no other key, no retry.
+  */
+ private playbook(fn:'runPlaybookShadow'|'runPlaybookLearning'|'runPlaybookBackfill'):any{
+  const r:any=playbookRunner;
+  return r&&r.playbookRunnerPolicy?.enabled===true&&typeof r.playbookStore==='function'&&typeof r[fn]==='function'?r:null;
+ }
+ private async playbookFailed(stage:'shadow'|'learning'|'backfill'){await this.ctx.storage.put('pb:status',{at:new Date().toISOString(),ok:false,stage,code:'PLAYBOOK_HOOK_FAILED'}).catch(()=>{});}
+ /** Hook A (every Sombra pass): observations and the plays' Sombra in `pbs:*`, after autonomyAct. */
+ private async playbookShadow({state,events,meta,now,policy,days,fallbackDay,batches}:any){
+  try{
+   const r=this.playbook('runPlaybookShadow');if(!r)return;
+   await r.runPlaybookShadow(r.playbookStore(this.ctx.storage),{state,liveItems:this.liveItems||[],events,meta,now,
+    projects:Object.keys(state.config||{}).map(p=>({project:p,params:policy?.projects?.[p]||{},day:days[p]||fallbackDay})),
+    // Read-only copy of this pass's fixed-rule decisions (for "regra fixa tem prioridade" only); autonomyAct already ran.
+    fixed:batches.map(([list,day]:[any[],string])=>[list.slice(),day])},{deadline:Date.now()+r.playbookRunnerPolicy.shadowBudgetMs});
+  }catch{await this.playbookFailed('shadow');}
+ }
+ /** Hook B (each storeLearning run): labels, bins, grades, retention, fits and replay of the plays. */
+ private async playbookLearning({state,now,team,teamKeys,bases,coverage,ownerNames,zone,projects,heavy}:any){
+  try{
+   const r=this.playbook('runPlaybookLearning');if(!r)return;
+   await r.runPlaybookLearning(r.playbookStore(this.ctx.storage),{state,now,team,teamKeys,bases,coverage,ownerNames,zone,projects,heavy:heavy!==false,
+    names:Object.fromEntries(Object.entries(state.config||{}).map(([id,c]:[string,any])=>[id,c?.projectName||id]))},{deadline:Date.now()+r.playbookRunnerPolicy.learnBudgetMs});
+  }catch{await this.playbookFailed('learning');}
+ }
+ /** The project listing syncAttribution read in this heavy pulse: hook C reuses it and never lists on its own. */
+ private attrListed:any=null;
+ /**
+  * Hook C (heavy pulse, owner default Q11 = yes): the one-time 30-day read-only backfill of people's moves from Malva,
+  * at most 2 `tracking_ad_changes` pages per pulse. Any other tool, or a third call, is refused before reaching Malva.
+  */
+ private async playbookBackfill(state:any){
+  const listed=this.attrListed;this.attrListed=null;
+  try{
+   const r=this.playbook('runPlaybookBackfill');if(!r||!listed||!state||state.paused||!(await this.setting()).enabled)return;
+   const malva=cloudMalvaClient(this.db());let calls=0;
+   const source={read:(tool:string,args:any)=>tool==='tracking_ad_changes'&&++calls<=2?malva.read(tool,args):Promise.reject(Object.assign(Error('PLAYBOOK_SOURCE_DENIED'),{code:'PLAYBOOK_SOURCE_DENIED'}))};
+   const projects=Object.entries(state.config||{}).map(([id,c]:[string,any])=>{const x=(listed.items||[]).find((i:any)=>i?.id===id&&i.name===c?.projectName);return x?{id,name:x.name,timezone:x.timezone||null}:null;}).filter(Boolean);
+   await r.runPlaybookBackfill(r.playbookStore(this.ctx.storage),source,{projects,now:Date.now(),stillEnabled:async()=>(await this.setting()).enabled===true},{deadline:Date.now()+r.playbookRunnerPolicy.backfillBudgetMs});
+  }catch{await this.playbookFailed('backfill');}
+ }
+ /** `autonomyDeepBase` (contract a.3): at most once a minute, rewritten only when it changed. Never fails the Sombra. */
+ private deepBaseAt=0;
+ private deepBaseSig:string|null=null;
+ private deepBaseWrittenAt=0;
+ private async storeDeepBase(state:any,accuracy:any,policy:any,now:number){
+  try{
+   if(this.deepBaseSig&&now-this.deepBaseAt<deepViewPolicy.baseEveryMs)return;
+   const base=buildDeepBase({state,liveItems:this.liveItems||[],accuracy,policy,now});this.deepBaseAt=now;
+   // Slow parts changed: at once. Only the live numbers changed: at most every baseLiveEveryMs (~216 KB per write).
+   const sig=deepBaseSignature(base);if(sig===this.deepBaseSig&&now-this.deepBaseWrittenAt<deepViewPolicy.baseLiveEveryMs)return;
+   await this.ctx.storage.put('autonomyDeepBase',base);this.deepBaseSig=sig;this.deepBaseWrittenAt=now;
+  }catch{/* the deep view keeps the previous base */}
+ }
+ /** One prefix, page by page (never the whole prefix in one listing); also safe on a storage that ignores `limit`. */
+ private async listPaged(prefix:string,each:(v:any)=>void,limit=128){
+  let after:string|undefined;
+  for(let n=0;n<200;n++){
+   const page=await this.ctx.storage.list<any>({prefix,limit,...(after?{startAfter:after}:{})});let last:string|undefined,fresh=0;
+   for(const [k,v] of page){if(after!==undefined&&k<=after)continue;last=k;fresh++;each(v);}
+   if(!last||!fresh||page.size<limit||page.size>limit)break;after=last;
+  }
+ }
+ /** Owner deep read and simulator rows (contract a.1): Durable Object keys only, never the central. */
+ private async autonomyRead(view:'deep'|'sim',project:string){
+  const now=Date.now(),base=await this.ctx.storage.get<any>('autonomyDeepBase');
+  if(!base?.projects)return {[view]:null};
+  if(project!=='all'&&!Object.prototype.hasOwnProperty.call(base.projects,project))return {invalid:'Projeto não configurado no Bunker.'};
+  const shadowStatus=await this.ctx.storage.get<any>('shadowStatus');
+  if(view==='sim'){
+   if(project==='all')return {invalid:'Escolha um projeto.'};
+   const rows:any[]=[];await this.listPaged('shadow:',(e:any)=>{if(e?.project===project)rows.push(simRow(e));});
+   return {sim:simRowsView({base,project,rows,now,shadowStatus})};
+  }
+  const scope=project==='all'?Object.keys(base.projects):[project];
+  const keys=['autonomyStatus','autonomyLog','learningSummary','learningStatus','pb:status','pb:view',...scope.map(p=>'pb:view:'+p)];
+  const got:any=await this.ctx.storage.get<any>(keys),val=(k:string)=>got&&typeof got.get==='function'?got.get(k):undefined;
+  const days=[...new Set(scope.map(p=>shadowStatus?.days?.[p]||shadowStatus?.day||shadowLocalDay(now)))].filter((d:any)=>/^\d{4}-\d{2}-\d{2}$/.test(d));
+  const shadowEntries:any[]=[],pbsEntries:any[]=[],inScope=(e:any)=>scope.includes(e?.project);
+  for(const d of days){
+   await this.listPaged('shadow:["'+d+'"',(e:any)=>{if(inScope(e))shadowEntries.push(e);});
+   await this.listPaged('pbs:["'+d+'"',(e:any)=>{if(inScope(e))pbsEntries.push(e);});
+  }
+  return {deep:buildDeepView({base,project,now,shadowStatus,autonomyStatus:val('autonomyStatus'),autonomyLog:val('autonomyLog'),learningSummary:val('learningSummary'),learningStatus:val('learningStatus'),
+   pbStatus:val('pb:status'),pbView:val('pb:view'),pbViews:Object.fromEntries(scope.map(p=>[p,val('pb:view:'+p)]).filter(([,v])=>v)),shadowEntries,pbsEntries})};
+ }
+ /** Notch `autonomy` block (contract b) on every summary; a failure omits the key and leaves the summary as it was. */
+ private async companionAutonomy(state:any,shadow:any[],out:Record<string,any>,shadowStatus:any,shadowDay:string,now:number){
+  try{
+   const projects=Object.keys(state.config||{});
+   const got:any=await this.ctx.storage.get<any>(['autonomyDeepBase','autonomyLog','pb:view',...projects.map(p=>'pb:view:'+p)]),val=(k:string)=>got&&typeof got.get==='function'?got.get(k):undefined;
+   const base=val('autonomyDeepBase');if(!base?.projects)return;
+   const pbViews=Object.fromEntries(projects.map(p=>[p,val('pb:view:'+p)]).filter(([,v])=>v)),days=Object.fromEntries(projects.map(p=>[p,shadowStatus?.days?.[p]||shadowDay]));
+   for(const project of ['all',...projects]){
+    const summary=out['companion:'+project];if(!summary)continue;
+    try{const block=autonomyCompanion({base,shadowRecent:summary.shadow?.recent||[],log:val('autonomyLog')||[],pbView:val('pb:view')||null,pbViews,project,now,entries:shadow,days,shadowAt:shadowStatus?.failed?null:shadowStatus?.at||null});if(block)summary.autonomy=block;}catch{/* key omitted */}
+   }
+  }catch{/* every summary keeps its other keys */}
+ }
  private async storeShadow(state:any,opts:{learn?:boolean}={}){
   if(!state||state.paused)return [];
   const policy=this.shadowPolicyFor(state);
@@ -235,11 +342,15 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped,ms:Date.now()-now});
   // Autonomy (owner permissions): only decisions of this very pass; a failure never blocks the shadow.
   await this.autonomyAct(state,batches,now).catch(async(e:any)=>{await this.ctx.storage.put('autonomyStatus',{at:new Date().toISOString(),ok:false,error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
+  // Modo Gestor (observation only): hook A after the autonomy acted on this pass, so a play can never feed it; then the
+  // owner's deep read model. Both are fully guarded and never change the Sombra, its status or the autonomy.
+  await this.playbookShadow({state,events,meta,now,policy,days,fallbackDay,batches});
+  await this.storeDeepBase(state,accuracy,policy,now);
   // The memory never blocks the shadow: a failure is recorded apart (code and short text only).
   const evaluated=Object.keys(policy?.projects||{}).filter(p=>state.config?.[p]&&policy.projects[p]?.enabled!==false&&!skipped[p]);
   if(opts.learn===false&&now-this.lastLearnAt<BunkerCloudExecutor.betweenPulseLearnMs)return merged;
   this.lastLearnAt=now;
-  await this.storeLearning(withAuthors,merged,events,policy,now,evaluated).catch(async(e:any)=>{await this.ctx.storage.put('learningStatus',{at:new Date().toISOString(),ok:false,code:'LEARNING_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
+  await this.storeLearning(withAuthors,merged,events,policy,now,evaluated,opts.learn!==false).catch(async(e:any)=>{await this.ctx.storage.put('learningStatus',{at:new Date().toISOString(),ok:false,code:'LEARNING_FAILED',error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   return merged;
  }
  /** The names the owner acts under in Malva: the Malva connection's person (lib/team-learning.mjs). Read at most daily. */
@@ -274,7 +385,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   * patterns, proposals, lessons) is rebuilt at most every 10 min while there is news, at once after a rule or memory
   * version change, and hourly otherwise. Read-only for everything outside this object: never a proposal or a command.
   */
- private async storeLearning(state:any,entries:any[],_events:any[],policy:any,now:number,evaluated:string[]=[]){
+ private async storeLearning(state:any,entries:any[],_events:any[],policy:any,now:number,evaluated:string[]=[],heavy=true){
   const started=Date.now();
   const projects=Object.keys(policy?.projects||{}).filter(p=>state?.config?.[p]&&policy.projects[p]?.enabled!==false),configured=Object.keys(state?.config||{});
   const records=learningRecords(entries),bases=dailyBases(state.snapshots).filter((b:any)=>projects.includes(b.project));
@@ -291,6 +402,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const changed=Object.entries(put);
   // The news marker rides in the same write as the shards, so a skipped rebuild is never forgotten.
   for(let i=0;i<changed.length;i+=100)await this.ctx.storage.put({...Object.fromEntries(changed.slice(i,i+100)),learningDirty:new Date(now).toISOString()});
+  // Modo Gestor hook B (observation only, guarded): labels, bins and grades on every learning pass; fitting and replay
+  // (the memory-heavy part) only on the heavy pulse's own pass, after its engine steps, never during a model wait.
+  await this.playbookLearning({state,now,team:team.actions,teamKeys,bases,coverage,ownerNames,zone,projects:configured,heavy});
   const prev=await this.ctx.storage.get<any>('learningSummary'),age=now-Date.parse(prev?.at||''),dirty=changed.length>0||!!(await this.ctx.storage.get('learningDirty'));
   // A new grade of a score-gated rule reaches the gate at once (no 10-min wait): the veto must never lag behind it.
   const gatedNews=changed.some(([k,v]:[string,any])=>!k.endsWith(':team')&&Object.values(v?.records||{}).some((r:any)=>scoreGatedRules.includes(r.rule)&&(r.verdict==='acertou'||r.verdict==='errou')&&existing.get(k)?.records?.[r.id]?.verdict!==r.verdict));
@@ -421,7 +535,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   for(let i=0;i<expired.length;i+=128)await this.ctx.storage.delete(expired.slice(i,i+128));
   const statuses=await this.ctx.storage.list<any>({prefix:'activity-project:'});
   const selected=activityHistoryProjects(state,[...statuses.values()],now);if(!selected.length)return;
-  const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});
+  const source=cloudMalvaClient(this.db()),listed=await source.read('tracking_list_projects',{});this.attrListed=listed;
   let checked=0,matched=0,failed=0,itemsSeen=0;const codes:Record<string,number>={};
   for(const selectedProject of selected){
    if(!(await this.setting()).enabled)break;
@@ -459,6 +573,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // of the notch follow them, the queue and every decision keep the analysis.
   const live:any=overlayMetaItems(this.liveItems||[],await this.ctx.storage.get<any>('metaLive'),{now}),todayState=liveTodayState(withAuthors,live,{now}),liveRows=liveRowIndex(live,{now}),board=projectBoard(withAuthors,now,{live:live as never[],todayState});
   for(const project of ['all',...Object.keys(state.config||{})])out['companion:'+project]={...companionSummary(withAuthors,{project,now,executor:executor as any,board:board as any,live:live as never[],todayState,liveRows}),storage:this.storagePressure,shadow:{...shadowSummary(shadow,{project,day:project==='all'?shadowDay:shadowStatus?.days?.[project]||shadowDay,days:project==='all'?shadowStatus?.days||null:null,pulseAt:shadowStatus?.failed?null:shadowStatus?.at||null}),learning:learningBrief(learned,{project})},first24h:first24hSummary(first24h,{project}),days:daysSummary(dailySeries,{project,config:state.config,now}),accounts:project==='all'?accounts:accounts&&{...accounts,rows:accounts.rows.filter((r:any)=>r.projects.includes(state.config[project]?.projectName))}};
+  await this.companionAutonomy(state,shadow,out,shadowStatus,shadowDay,now);
   await this.ctx.storage.put(out);
   await this.phoneAlerts(out['companion:all']).catch(()=>{});
  }
@@ -580,9 +695,14 @@ export class BunkerCloudExecutor extends DurableObject<any>{
     // Long memory (lib/shadow-learning.mjs): scores with ranges, edge over doing nothing, blind spots and lessons.
     learning:await this.ctx.storage.get<any>('learningSummary')||null,learningStatus:await this.ctx.storage.get<any>('learningStatus')||null,entries,first24h:first24h?{at:first24h.at,boards:first24h.boards}:null,metaLive:meta?{at:meta.at||null,requested:meta.requested??null,read:meta.read??null,requests:meta.requests??null,accounts:meta.accounts??null,unlinked:meta.unlinked??null,fields:meta.fields||null,diagnostic:meta.diagnostic||null,skipped:Object.keys(meta.skip||{}).length,errors:meta.errors||[],error:meta.error||null,failedAt:meta.failedAt||null}:null});
   }
+  // Read-only (Modo Gestor): the owner's deep read model and the draft simulator rows, from this object's keys only.
+  if(input.action==='autonomy'&&(input.view==='deep'||input.view==='sim')){
+   try{return Response.json(await this.autonomyRead(input.view,typeof input.project==='string'?input.project.slice(0,80):''));}
+   catch{return Response.json({error:'Leitura da autonomia indisponível.'},{status:503});}
+  }
   // Read-only: what the autonomy module did or held back (lib/autonomy-grant.mjs). The permissions live in the central.
   if(input.action==='autonomy'){const shadow=await this.ctx.storage.get<any>('shadowStatus');return Response.json({shadowProjects:Array.isArray(shadow?.projects)?shadow.projects:null,shadowAt:shadow?.at||null,status:await this.ctx.storage.get<any>('autonomyStatus')||null,log:(await this.ctx.storage.get<any[]>('autonomyLog')||[]).slice(0,100)});}
-  if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
+  if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]).map(({actorInfo:_actorInfo,...item}:any)=>item),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse'),phone=await this.ctx.storage.get<any>('phoneAlerts');return Response.json({...runtime,phone:{configured:!!(this.env.PUSHOVER_TOKEN&&this.env.PUSHOVER_USER),primed:!!phone?.primed,sent:phone?.sent||0,lastSentAt:phone?.lastSentAt||null,lastError:phone?.lastError||null,lastErrorAt:phone?.lastErrorAt||null},attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true,
    // Which central format this running code reads and writes (two-step rollout of the journal segments, lib/history-storage.mjs).
    storageFormat:{journalReader:journalStorage.version,journalWriter:journalStorage.write}});}
@@ -654,6 +774,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    if(liveState)await this.ctx.storage.put('watchConfig',Object.keys(liveState.config||{}));
    // Optional attribution never turns into an executor failure.
    if(liveState&&(await this.setting()).enabled)await this.syncAttribution(liveState).catch(async()=>{await this.ctx.storage.put('attributionStatus',{at:new Date().toISOString(),failed:true});});
+   // Modo Gestor hook C: read-only backfill on this pulse's project listing (≤2 Malva pages); never affects the pulse.
+   if(liveState&&(await this.setting()).enabled)await this.playbookBackfill(liveState).catch(()=>{});else this.attrListed=null;
    // The account panel is optional: a failure keeps the last panel and never affects the executor.
    await lane();
    if(liveState&&(await this.setting()).enabled)await this.syncAccounts(liveState).catch(()=>{});

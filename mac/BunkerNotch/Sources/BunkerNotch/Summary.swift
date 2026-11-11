@@ -123,6 +123,55 @@ struct Summary: Decodable, Equatable {
         /// Threshold proposals for the owner (nothing changes without him), pre-rendered lines.
         var proposals: [String]? = nil
     }
+    /// Autonomia v2 · Modo Gestor (docs/AUTONOMIA-V2-CONTRATO-2026-11-10.md (b)): the owner's level per project and per
+    /// campaign, today's Sombra counts and the plays learned from the team. Reading only: nothing here sends an order,
+    /// and in Phase 1 a learned play never executes. Older servers omit it (nil keeps today's behaviour).
+    var autonomy: Autonomy? = nil
+    /// Today's fixed-rule decisions of a project by status (playbook entries are not counted in Phase 1). nil = N/D.
+    struct AutonomyToday: Equatable {
+        var decisions: Int? = nil; var enviaria: Int? = nil; var pediria: Int? = nil; var soSugestao: Int? = nil; var segurada: Int? = nil
+        var ordersCreated: Int? = nil; var ordersConfirmed: Int? = nil
+    }
+    /// A play learned from the team. `stage`: observando · candidata · sombra · pode-pedir · pode-enviar.
+    /// `agreement` is a 0–1 fraction over `n` cases; nil when there are none (shown as N/D, never 0%).
+    struct AutonomyPlay: Equatable, Identifiable {
+        let id: String; var label: String? = nil; var stage: String? = nil; var agreement: Double? = nil; var n: Int? = nil
+    }
+    /// How often the Bunk agrees with one person. `person` is "owner", "outside" or a hashed id (never a Malva key).
+    struct AutonomyPerson: Equatable, Identifiable {
+        var id: String { person }
+        let person: String; var name: String? = nil; var agreement: Double? = nil; var n: Int? = nil
+        var isOwner: Bool { person == "owner" }
+    }
+    struct AutonomyProject: Equatable, Identifiable {
+        let id: String; var name: String? = nil
+        /// The owner's ceiling for the project: off · shadow · confirm · auto (other values are unknown).
+        var mode: String? = nil
+        var exceptions: Int? = nil
+        /// Modo Gestor switch (Phase 2); always nil in Phase 1.
+        var pilotEnabled: Bool? = nil
+        var today: AutonomyToday? = nil
+        var plays: [AutonomyPlay] = []; var people: [AutonomyPerson] = []
+    }
+    /// Effective mode of one campaign of `shadow.recent` (exceptions already applied by the server).
+    struct AutonomyCampaign: Equatable { let projectId: String; let adAccountId: String; let objectId: String; let mode: String }
+    struct AutonomyIsland: Equatable { var observing: [String] = []; var agreement: Double? = nil; var n: Int? = nil }
+    struct Autonomy: Equatable {
+        var v: Int? = nil; var at: String? = nil
+        /// General switch. Off: the Bunk sends nothing by itself, whatever the levels.
+        var enabled = false
+        var projects: [AutonomyProject] = []; var campaigns: [AutonomyCampaign] = []
+        var island: AutonomyIsland? = nil
+
+        /// Contract b.3, first match wins: the campaign entry, then the project's level, else unknown (nil).
+        func mode(projectId: String?, adAccountId: String?, objectId: String?) -> String? {
+            if let p = projectId, let a = adAccountId, let o = objectId,
+               let c = campaigns.first(where: { $0.projectId == p && $0.adAccountId == a && $0.objectId == o }) { return c.mode }
+            guard let p = projectId else { return nil }
+            return projects.first { $0.id == p }?.mode
+        }
+        func mode(for item: ShadowItem) -> String? { mode(projectId: item.projectId, adAccountId: item.adAccountId, objectId: item.objectId) }
+    }
     /// New campaigns in their first 24h (lib/first-24h.mjs): scheduled, first day and 2nd day against the owner's ceiling.
     let first24h: First24h?
     struct First24hCounts: Decodable, Equatable { let scheduled: Int; let firstDay: Int; let secondDay: Int; let attention: Int }

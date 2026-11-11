@@ -1031,3 +1031,71 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - nada foi conferido no navegador (sem servidor nem capturas). A conferência visual fica com o dono: menu recolhido, celular (~375 px), Todos os projetos, diálogo da campanha e Autonomia do Bunk;
   - a junção com a main e a publicação estão registradas abaixo.
 - **Junção com o trabalho paralelo (`03ea3f1`, outra sessão, 22:51 UTC):** os dois redesenhos brigavam em 13 arquivos. O dono escolheu manter este (todas as telas). Nos arquivos em conflito valeu esta versão; `app/notch-system.css` (componentes `ns-*`) deixou de ser importado e foi removido, para não haver dois design systems. O commit `03ea3f1` segue no histórico.
+
+## Modo Gestor, Fase 1: ver o Bunk pensar e aprender com a equipe (registro escrito às 2026-11-11 01:11:35 UTC por `date -u`, 10/11/2026 no horário do dono)
+
+- **Pedido do dono:** "a sessão de autonomia do bunk ainda está muito superficial, melhore a experiência", mais um modo em que o Bunk aprende com Erik, Leonardo Paz e Jorge e continua aprendendo. Padrões do dono para a Fase 1: consenso dos três (Q2), histórico de 30 dias da Malva só leitura (Q11 = sim), nome "Modo Gestor" (Q14).
+- **Onde:** worktree `Bunker-Traffic-modo-gestor`, branch `feat/modo-gestor` (de `origin/main` `4eecd7b`). Spec: `docs/AUTONOMIA-V2-MODO-GESTOR-SPEC-2026-11-10.md` (§1–6). Contrato: `docs/AUTONOMIA-V2-CONTRATO-2026-11-10.md`. **Nada foi commitado, enviado ou publicado.**
+- **O que entrou:**
+  - leitura profunda `GET /api/autonomy?view=deep|sim` (só dono, recusa a credencial do notch, `private, no-store`), montada só de chaves do Durable Object (`lib/autonomy-deep-view.mjs`) e o simulador de rascunho "só permissões" (`lib/autonomy-simulate.mjs`);
+  - cockpit da Autonomia em 5 abas (`app/autonomy/*`): Agora, Aprendizado, Placar, Permissões e Registro, mais a gaveta da campanha;
+  - captura por chave de ator da Malva, exclusões (eco do Bunk, possível eco em quarentena, Meta, automações, ferramenta de subida, criar/excluir), D+3 e "vs campanha qualquer" das ações da equipe, horários e reversões (`lib/team-learning.mjs`);
+  - leituras horárias, rótulos, bins diários, histórico de 30 dias, ajuste das jogadas, replay só para frente e Sombra das jogadas em `pbs:*` (`lib/team-observations.mjs`, `lib/manager-playbook.mjs`, `lib/playbook-eval.mjs`, `lib/playbook-runner.mjs`);
+  - bloco `autonomy` do notch e o botão "Fazer eu mesmo" condicionado ao nível (`mac/BunkerNotch`).
+- **Correções da revisão (10/11, antes de qualquer deploy):**
+  - **Memória do executor (bloqueador):** o ajuste e o replay carregavam 60 bins de um projeto e decodificavam tudo, com ~65–69 MB vivos no isolate de 128 MB. Agora os bins são lidos em blocos de 6 e percorridos sem decodificar (`scanCells`, acumuladores com amostra determinística). O resultado é o mesmo bit a bit. Pico medido em 6,9 MB acima da base, com 6 projetos × 60 bins × 80 campanhas. Ajuste e replay só rodam na passada do pulso pesado (`heavy`), nunca entre pulsos nem durante a espera do modelo.
+  - **Escritas que nunca falham por tamanho:** `safePut` reduz cada valor até caber, em bytes UTF-8 com margem (`pb:model`, `pb:people`, `pb:cursor`, `pb:view:<p>`, bins) ou o pula. Uma recusa por tamanho nunca repete o mesmo trabalho caro em loop. Os ajustes de um ciclo ficam em `pb:fits:<p>`, fora do cursor.
+  - **Leituras horárias:** são cortadas por bytes, e cada projeto é gravado separado. O índice `pb:obs-index` evita reler leituras: o hook A não lê valores, e o hook B só busca as horas ainda sem rótulo.
+  - **`autonomyDeepBase`:** é reescrito na hora quando mudam permissões, ordens, travas ou campanhas, e no máximo a cada 5 min quando mudam só os números ao vivo. A espera de 1h é guardada como horário final (`cooldownUntil`) e vira minutos na leitura.
+  - **Versão desafiante:** não substitui mais a versão em uso depois de 7 dias (Q5). Ela roda na Sombra com o próprio rev e id (`versionRole:'next'`), ganha placar próprio e não aparece em "O que o Bunk faria agora".
+  - **Uma pessoa só antes e depois do deploy:** uma ação antiga sem `person` herda o id da chave do mesmo nome (`personResolver`). Nome ambíguo nunca é adivinhado.
+  - **Concordância com a amostra certa:** a precisão vem com `fired` ("X de Y vezes em que o Bunk agiria"; "amostra pequena" abaixo de 15). Por pessoa, mostra só a cobertura ("pegou X de Y movimentos"), porque as células `manter` não têm pessoa.
+  - **Replay:** só ajusta com o suporte mínimo (8 ações, 4 campanhas, 3 dias). Dia sem suporte não conta, e a concordância fica N/D.
+  - **Histórico de 30 dias:** entra no tamanho dos passos das jogadas (os passos da virada só de 00:00–00:30), nunca nas condições. A tela diz isso, e o título passou a separar "memória de ações" de "observando campanhas há N dias" (`memory.observedDays`).
+  - **`/api/attribution`:** voltou ao formato anterior, sem `actorInfo` (a chave crua da Malva fica no executor).
+  - **`docs/modo-gestor-mapas/map-2.md`:** as chaves completas de membros da Malva e as contagens por pessoa, app e projeto foram trocadas por marcadores e descrições qualitativas.
+  - **Telas:** o cartão da pessoa ganhou D+3, "vs campanha qualquer" e o ponto da Sombra. "cut" virou "corta", e "Imitação sem ganho" passou a incluir cortes em vencedoras. O possível eco do Bunk aparece uma vez só, como quarentena. A gaveta mostra os passos da ordem em português. O resultado das jogadas diz "nos casos aprendidos".
+- **Garantias de execução zero (Fase 1):**
+  - nenhuma mudança em grant, contingência, montagem de ordem, claim/prepare/submit ou dispatch;
+  - toda decisão de jogada vai para `pbs:*` com `wouldExecute:false`, nunca chega a `autonomyAct`/`autonomyGrant` e não cria proposta nem ordem (`tests/playbook-isolation.test.mjs`);
+  - Adotar e Liberar aparecem desabilitados, com "chega na próxima fase";
+  - nenhuma escrita nova na central: o dono continua salvando só `autonomyConfig`/`autonomyKill`;
+  - o histórico faz só leituras da Malva, no máximo 2 páginas por pulso pesado;
+  - cada hook roda em try/catch e nunca afeta `storeShadow`, `autonomyAct` nem o alarme.
+- **Validação:**
+  - `npm test`: 1542 testes passam;
+  - `npm run -s typecheck` e `npm run build` passam;
+  - `swift build` em `mac/BunkerNotch` passa e `.build/debug/BunkerNotch --self-test` devolve "self-test ok".
+  - Testes novos:
+    - hook B com 60 bins completos por projeto (heap < 15 MB, CPU por passada < 1,5 s, ciclo de ajuste completo, passada leve sem bins);
+    - índice de leituras e corte por bytes;
+    - escrita que encolhe para caber;
+    - desafiante pontuado à parte;
+    - identidade antes e depois do deploy;
+    - passos do histórico;
+    - bins em UTF-8;
+    - formato do `/api/attribution`.
+- **Pendente:**
+  - nada foi visto no navegador nem no notch rodando (sem servidor, sem capturas);
+  - deploy pelo runbook e conferência em produção dentro de um pulso: decisões reais da Sombra no cockpit, jogadas "Observando" com N/D honesto e nenhuma proposta nem execução com `source:'playbook'`;
+  - não feito da revisão:
+    - pausa de teste com um `k` por estágio e faixa de IC;
+    - aumento em lote com passo por faixa de orçamento;
+    - D+1/D+3 dos casos do replay comparados com a base (hoje o cartão mostra o resultado dentro da amostra, rotulado como "nos casos aprendidos");
+  - exemplos de jogadas no nível do dia a partir do histórico (a virada só com ROI/front de ontem) ainda não existem, porque o histórico não traz números do dia.
+- **Decisões do dono para as Fases 2 e 3 (spec §8, com o padrão recomendado):**
+  - **Q1:** aprovar o texto de registro do Modo Gestor no CLAUDE.md, só quando a Fase 3 estiver pronta.
+  - **Q2:** confirmar o consenso dos três com o seu peso ×1.
+  - **Q3:** "Liberar" sempre com um toque por versão.
+  - **Q4:** números das travas: pode pedir com ≥15 a ≥50%; pode enviar com ≥20 a ≥60%, concordância ao vivo ≥60%, contrários ≤15%, ≥10 respostas suas a ≥80% e 7 dias calmos.
+  - **Q5:** cada versão nova espera o "Atualizar" (já é o comportamento).
+  - **Q6:** confirmar se o perfil Meta "Erik Silva" é você e quais são os perfis de Jorge e Leonardo.
+  - **Q7:** criar um membro ou chave da Malva só para o Bunk antes da Fase 3.
+  - **Q8:** disjuntor ligado.
+  - **Q9:** teto por moeda (BRL e USD).
+  - **Q10:** tetos do projeto: orçamento adicionado por dia = 1× o maior orçamento atual, 5 pausas e 8 ordens do Bunk por dia.
+  - **Q12:** projetos sem política privada da Sombra.
+  - **Q13:** horário da equipe e alertas "Bunk pede Touch ID", com silêncio de 00:30 a 07:00.
+  - **Q15:** reativação adiada.
+  - **Q16:** primeiro Automático só no John, só pausa e redução, por 7 dias.
+  - A Fase 2 começa quando Q2, Q6 e Q9 estiverem respondidas e a Fase 1 estável por 7 dias.

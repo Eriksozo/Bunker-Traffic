@@ -81,3 +81,14 @@ test('The answer checks read only the part of the read kept during the model wai
   assert.doesNotMatch(b,/[A-Za-z_]\((?:[^()]*,)?\s*state\s*[,)]/,name+' passes the state to no other function');
  }
 });
+
+// Modo Gestor (docs/AUTONOMIA-V2-CONTRATO-2026-11-10.md): the read model reads only the state the Sombra pass holds and
+// DO keys; it never names a field a lean read leaves out, and its builders never mutate a shared (frozen) view.
+test('The Modo Gestor read model stays within the lean display copy',async()=>{
+ const lib=new URL('../lib/',import.meta.url).pathname,omitted=/\b(historyLearning|decisionHistoryOutcomes|decisionHistoryImports|externalHistoryMeasurements)\b/;
+ for(const f of ['autonomy-deep-view.mjs','autonomy-simulate.mjs'])assert.doesNotMatch(fs.readFileSync(path.join(lib,f),'utf8'),omitted,f);
+ const {buildDeepBase,buildDeepView,autonomyCompanion}=await import('../lib/autonomy-deep-view.mjs');
+ const freeze=o=>{if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o);for(const v of Object.values(o))freeze(v);}return o;};
+ const s=freeze({config:{p1:{projectName:'P'}},paused:false,autonomy:{version:1,enabled:true,projects:{p1:{mode:'shadow',actions:{},limits:{},campaigns:{}}}},snapshots:[{projectId:'p1',period:'today',level:'campaign',complete:true,timezone:'America/Sao_Paulo',from:'2026-11-10T03:00:00.000Z',fetchedAt:'2026-11-10T11:55:00.000Z',rows:[{externalId:'c1',adAccountId:'a1',name:'Escala',level:'campaign',provider:'meta',status:'ACTIVE',spend:10,dailyBudget:100,budgetCurrency:'BRL'}]}],proposals:[],executions:[]});
+ assert.doesNotThrow(()=>{const base=buildDeepBase({state:s,liveItems:[],accuracy:{},policy:{},now});buildDeepView({base:freeze(base),project:'all',now});autonomyCompanion({base,project:'all',now});});
+});

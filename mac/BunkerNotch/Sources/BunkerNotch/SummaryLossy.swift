@@ -22,7 +22,7 @@ extension KeyedDecodingContainer {
 }
 
 extension Summary {
-    private enum Keys: String, CodingKey { case generatedAt, project, projectName, projects, paused, analysisAt, liveAt, metaLiveAt, today, pace, orders, sales, queue, queueSize, board, approvals, activity, agents, executor, notice, shadow, first24h, accounts, storage, days }
+    private enum Keys: String, CodingKey { case generatedAt, project, projectName, projects, paused, analysisAt, liveAt, metaLiveAt, today, pace, orders, sales, queue, queueSize, board, approvals, activity, agents, executor, notice, shadow, first24h, accounts, storage, days, autonomy }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         // Core: without these there is no reading to show.
@@ -52,6 +52,8 @@ extension Summary {
         accounts = c.optional(Accounts.self, forKey: .accounts)
         storage = c.optional(Storage.self, forKey: .storage)
         days = c.optional(Days.self, forKey: .days)
+        // Autonomia v2 (contract (b)): not an object → nil; a bad field inside → its default, never a failed summary.
+        autonomy = c.optional(Autonomy.self, forKey: .autonomy)
     }
 }
 
@@ -104,5 +106,84 @@ extension Summary.Today {
         let deltas = (c.optional([String: Summary.Delta?].self, forKey: .deltas) ?? [:]).compactMapValues { $0 }
         self.init(today: c.optional(Summary.Ratios.self, forKey: .today), yesterday: c.optional(Summary.Ratios.self, forKey: .yesterday),
                   week: c.optional(Summary.Ratios.self, forKey: .week), recent: c.optional(Summary.Ratios.self, forKey: .recent), deltas: deltas)
+    }
+}
+
+// MARK: - Autonomia v2 · Modo Gestor (docs/AUTONOMIA-V2-CONTRATO-2026-11-10.md (b))
+// Every field is optional with a default (lists empty, switch off, numbers nil). An item without its id is skipped.
+
+extension Summary.Autonomy: Decodable {
+    private enum Keys: String, CodingKey { case v, at, enabled, projects, campaigns, island }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(v: c.optional(Int.self, forKey: .v), at: c.optional(String.self, forKey: .at),
+                  enabled: c.optional(Bool.self, forKey: .enabled) ?? false,
+                  projects: c.lossyList(Summary.AutonomyProject.self, forKey: .projects) ?? [],
+                  campaigns: c.lossyList(Summary.AutonomyCampaign.self, forKey: .campaigns) ?? [],
+                  island: c.optional(Summary.AutonomyIsland.self, forKey: .island))
+    }
+}
+
+extension Summary.AutonomyProject: Decodable {
+    private enum Keys: String, CodingKey { case id, name, mode, exceptions, pilot, today, plays, people }
+    private struct Pilot: Decodable { let enabled: Bool? }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(id: try c.decode(String.self, forKey: .id), name: c.optional(String.self, forKey: .name),
+                  mode: c.optional(String.self, forKey: .mode), exceptions: c.optional(Int.self, forKey: .exceptions),
+                  pilotEnabled: c.optional(Pilot.self, forKey: .pilot)?.enabled, today: c.optional(Summary.AutonomyToday.self, forKey: .today),
+                  plays: c.lossyList(Summary.AutonomyPlay.self, forKey: .plays) ?? [],
+                  people: c.lossyList(Summary.AutonomyPerson.self, forKey: .people) ?? [])
+    }
+}
+
+extension Summary.AutonomyToday: Decodable {
+    private enum Keys: String, CodingKey { case decisions, enviaria, pediria, soSugestao, segurada, ordersCreated, ordersConfirmed }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(decisions: c.optional(Int.self, forKey: .decisions), enviaria: c.optional(Int.self, forKey: .enviaria),
+                  pediria: c.optional(Int.self, forKey: .pediria), soSugestao: c.optional(Int.self, forKey: .soSugestao),
+                  segurada: c.optional(Int.self, forKey: .segurada), ordersCreated: c.optional(Int.self, forKey: .ordersCreated),
+                  ordersConfirmed: c.optional(Int.self, forKey: .ordersConfirmed))
+    }
+}
+
+/// A 0–1 fraction or nil: anything else (a percent sent by mistake, NaN) is N/D, never a made-up share.
+private func fraction(_ v: Double?) -> Double? { guard let v, v.isFinite, v >= 0, v <= 1 else { return nil }; return v }
+
+extension Summary.AutonomyPlay: Decodable {
+    private enum Keys: String, CodingKey { case id, label, stage, agreement, n }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(id: try c.decode(String.self, forKey: .id), label: c.optional(String.self, forKey: .label), stage: c.optional(String.self, forKey: .stage),
+                  agreement: fraction(c.optional(Double.self, forKey: .agreement)), n: c.optional(Int.self, forKey: .n))
+    }
+}
+
+extension Summary.AutonomyPerson: Decodable {
+    private enum Keys: String, CodingKey { case person, name, agreement, n }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(person: try c.decode(String.self, forKey: .person), name: c.optional(String.self, forKey: .name),
+                  agreement: fraction(c.optional(Double.self, forKey: .agreement)), n: c.optional(Int.self, forKey: .n))
+    }
+}
+
+extension Summary.AutonomyCampaign: Decodable {
+    private enum Keys: String, CodingKey { case projectId, adAccountId, objectId, mode }
+    /// All four are required: an entry without its ids or its mode is skipped, and the project level applies.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(projectId: try c.decode(String.self, forKey: .projectId), adAccountId: try c.decode(String.self, forKey: .adAccountId),
+                  objectId: try c.decode(String.self, forKey: .objectId), mode: try c.decode(String.self, forKey: .mode))
+    }
+}
+
+extension Summary.AutonomyIsland: Decodable {
+    private enum Keys: String, CodingKey { case observing, agreement, n }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(observing: c.lossyList(String.self, forKey: .observing) ?? [], agreement: fraction(c.optional(Double.self, forKey: .agreement)),
+                  n: c.optional(Int.self, forKey: .n))
     }
 }

@@ -221,3 +221,85 @@ test('Patterns per person, anticipation over watched hours, proposals with the p
  const dual=teamStats([{kind:'team',actions:{[base0.id]:base0,twin}}],{now:NOW,coverage:{[P]:hours,[P2]:hours}});
  assert.deepEqual([dual.all.actions,dual.projects[P].actions,dual.projects[P2].actions],[1,1,1]);
 });
+
+// --- Modo Gestor (W3): identity by Malva actor key, exclusions, d7, reversals, hours, base, D+3, backfill ----------
+import {personId,actorExclusion,exclusionCounts,teamReversals,backfillMoves,launchApps} from '../lib/team-learning.mjs';
+const info=(key,name,over={})=>({key,kind:'malva',name,profile:null,app:'malva',...over});
+
+test('Actor key beats the display name: one person across renames, the owner under any name, never by name alone',()=>{
+ const renamed=run([edit({eventId:'k1',actor:'Ana Souza',actorInfo:info('malva:fake-ana','Ana Souza')}),edit({eventId:'k2',objectId:'c2',actor:'Ana S.',actorInfo:info('malva:fake-ana','Ana S.'),field:'dailyBudget',before:100,after:130})]);
+ assert.equal(new Set(renamed.actions.map(a=>a.person)).size,1,'same key, two names: one person');
+ assert.deepEqual(renamed.actions.map(a=>a.role),['team','team']);assert.match(renamed.actions[0].person,/^p:[0-9a-z]+$/);
+ assert.doesNotMatch(JSON.stringify(renamed.actions),/malva:fake-ana/,'the raw key is never stored in the move');
+ const st=teamStats([{kind:'team',actions:Object.fromEntries(renamed.actions.map(a=>[a.id,a]))}],{now:NOW});
+ assert.equal(st.all.people.length,1);assert.equal(st.all.people[0].actions,2);assert.equal(st.all.people[0].person,renamed.actions[0].person);
+ // The owner's key, learned from his own name, recognizes him after a rename; another key under his name is not him.
+ const owner=run([edit({eventId:'o1',actor:'Dono Teste',actorInfo:info('malva:fake-owner','Dono Teste')}),edit({eventId:'o2',objectId:'c2',actor:'Dono T.',actorInfo:info('malva:fake-owner','Dono T.'),field:'dailyBudget',before:100,after:80})]);
+ assert.deepEqual(owner.actions.map(a=>[a.who,a.person]),[['owner','owner'],['owner','owner']]);
+ const impostor=run([edit({eventId:'o3',actor:'Dono Teste',actorInfo:info('malva:fake-other','Dono Teste')})],state(),{ownerKeys:['malva:fake-owner']});
+ assert.deepEqual(impostor.actions.map(a=>a.who),['team'],'a known owner key wins over a matching display name');
+ assert.equal(personId({who:'team',name:outsideLabel,outside:true}),'outside');assert.equal(personId({who:'owner'}),'owner');
+ assert.equal(personId({who:'team',name:'Ana Souza'}),personId({who:'team',name:'Ana Souza'}),'legacy records: stable by name');
+});
+
+test('Exclusions by Malva actor fields: automations, Meta, launch tools; counted per reason',()=>{
+ assert.equal(actorExclusion(info('automacao:x','Automação: y',{kind:'automation'})),'automation');
+ assert.equal(actorExclusion({key:'sistema',kind:'system',name:'Meta'}),'meta');
+ assert.equal(actorExclusion({key:'fora',kind:'outside',name:outsideLabel,profile:'Meta'}),'meta','an outside "Meta" profile flips issues: not a decision');
+ for(const app of launchApps)assert.equal(actorExclusion({key:'fora',kind:'outside',profile:'Pessoa',app}),'launch-tool',app);
+ assert.equal(actorExclusion({key:'fora',kind:'outside',profile:'Malva',app:null}),'launch-tool');
+ assert.equal(actorExclusion(info('malva:fake-ana','Ana Souza')),null);assert.equal(actorExclusion(null),null);
+ const out=run([edit({eventId:'x1',actor:outsideLabel,actorInfo:{key:'fora',kind:'outside',name:outsideLabel,profile:'Malva',app:'Malva Epidemia'}}),edit({eventId:'x2',actor:null}),edit({eventId:'x3',project:'other'})]);
+ assert.deepEqual(out.actions,[]);assert.deepEqual(exclusionCounts(out.excluded).byReason,{'launch-tool':1,'no-author':1,'out-of-scope':1});
+ assert.deepEqual(exclusionCounts([]),{total:0,byReason:{},quarantined:0});
+});
+
+test('Context gains the closed 7 days; moves keep hours; reversals within 48 h; base and D+3 for team moves',()=>{
+ const st=state({snapshots:[today([row('c1',{spend:80})]),closedWin('yesterday','2026-11-08',[row('c1',{spend:30,revenueNet:60})]),closedWin('3d','2026-11-06',[row('c1',{spend:90,revenueNet:200})]),closedWin('7d','2026-11-02',[row('c1',{spend:210,revenueNet:400})])]});
+ const c=actionContext(st,{project:P,adAccountId:'acc-1',objectId:'c1',at:ago(30)});
+ assert.deepEqual(c.d7,{spend:210,roi:1.905,result:190});
+ assert.equal(actionContext(state(),{project:P,adAccountId:'acc-1',objectId:'c1',at:ago(30)}).d7,null,'no closed 7 days: N/D');
+ const mk=(id,kind,at,person='p:a')=>({id,kind,at,person,name:'X',adAccountId:'acc-1',objectId:'c1'});
+ const rev=teamReversals([mk('a','pause','2026-11-08T12:00:00Z'),mk('b','activate','2026-11-09T10:00:00Z','p:b'),mk('c','increase','2026-11-01T12:00:00Z'),mk('d','reduce','2026-11-05T12:00:00Z')]);
+ assert.deepEqual(rev.get('a'),{person:'p:b',name:'X',kind:'activate',at:'2026-11-09T10:00:00Z'});assert.equal(rev.has('c'),false,'4 days later is not a reversal');
+ const y=(day,rows)=>({projectId:P,period:'yesterday',level:'campaign',complete:true,source:'Malva MCP',timezone:TZ,from:day+'T03:00:00.000Z',rows});
+ const d3=(day,rows)=>({projectId:P,period:'3d',level:'campaign',complete:true,source:'Malva MCP',timezone:TZ,from:day+'T03:00:00.000Z',to:new Date(Date.parse(day+'T03:00:00.000Z')+3*86400000).toISOString(),rows});
+ const shard={day:'2026-11-05',project:P,kind:'team',actions:{up:{id:'up',day:'2026-11-05',project:P,kind:'increase',minute:600,adAccountId:'acc-1',objectId:'c1',who:'team',name:'Ana Souza',at:'2026-11-05T13:00:00Z'}}};
+ const g1=gradeTeamShard(shard,[y('2026-11-06',[row('c1',{revenueNet:300})])]);assert.equal(g1.actions.up.grade.verdict,'acertou');assert.equal(g1.actions.up.grade.d3,undefined);
+ const g3=gradeTeamShard(g1,[d3('2026-11-06',[row('c1',{spend:300,revenueNet:100})])]);
+ assert.deepEqual([g3.actions.up.grade.verdict,g3.actions.up.grade.d3.verdict,g3.actions.up.grade.d3.target],['acertou','errou','2026-11-06'],'D+3 added apart; D+1 unchanged');
+ assert.equal(gradeTeamShard(g3,[d3('2026-11-06',[row('c1',{revenueNet:900})])]),null,'D+3 is read once');
+ const stats=teamStats([g3],{now:NOW,bases:[{project:P,day:'2026-11-06',campaigns:10,loss:3,profit:6}]});
+ const ana=stats.all.people[0];
+ assert.deepEqual(ana.budget.base,{graded:1,expected:0.6,edge:0.4});assert.deepEqual([ana.budget.d3.graded,ana.budget.d3.right],[1,0]);
+ assert.equal(ana.hours[10],1);assert.equal(ana.hours.length,24);
+ const undo={...g3,actions:{...g3.actions,dn:{id:'dn',day:'2026-11-05',project:P,kind:'reduce',minute:700,adAccountId:'acc-1',objectId:'c1',who:'team',name:'Bruno Lima',at:'2026-11-05T20:00:00Z'}}};
+ assert.equal(teamStats([undo],{now:NOW}).all.people.find(p=>p.name==='Ana Souza').reversed,1,'her raise was undone the same day');
+ assert.equal(teamStats([g3],{now:NOW}).all.people[0].budget.base,null,'no bases given: N/D');
+});
+
+test('Backfilled moves: same exclusions as the live capture, day-level only, the live id (no double count)',()=>{
+ const ev=(eventId,over={})=>({key:'history:'+P+':'+eventId,eventId,project:P,adAccountId:'acc-1',objectId:'c1',name:'Campanha c1',field:'status',before:'ACTIVE',after:'PAUSED',currency:'BRL',at:'2026-11-03T15:00:00.000Z',actor:'Ana Souza',automatic:false,actorInfo:info('malva:fake-ana','Ana Souza'),...over});
+ const bunk=state({proposals:[order('xb','bunk',{},{objectId:'c9'})],executions:[execution('xb',{submittedAt:'2026-11-03T14:59:00.000Z',confirmedAt:'2026-11-03T14:59:30.000Z'})]});
+ const out=backfillMoves([ev('b1'),ev('b2',{objectId:'c9',actor:'Dono Teste',actorInfo:info('malva:fake-owner','Dono Teste')}),ev('b3',{actor:'Automação: x',actorInfo:{key:'automacao:1',kind:'automation',name:'Automação: x'}}),ev('b4',{after:'DELETED'}),ev('b5',{name:'[AQUECIMENTO] y'})],{state:bunk,ownerNames:['Dono Teste'],timezone:TZ});
+ assert.deepEqual(out.moves.map(m=>[m.person,m.kind,m.day,m.ctx.source]),[[personId({who:'team',name:'Ana Souza',key:'malva:fake-ana'}),'pause','2026-11-03','backfill-daily']]);
+ assert.equal(out.moves[0].id,actionId({eventId:'b1',project:P},{}),'the same id the live capture gives that Malva event');
+ assert.deepEqual(exclusionCounts(out.excluded).byReason,{bunk:1,automation:1,'create-delete':1,'out-of-scope':1});
+ assert.equal(out.moves[0].campaign,'Campanha c1');assert.equal(out.moves[0].minute,12*60);
+});
+
+test('One person across the deploy: a move stored before the actor key joins the key-based id of the same name',async()=>{
+ const {personId:pidOf,personResolver}=await import('../lib/team-learning.mjs');
+ const keyed=pidOf({who:'team',name:'Jorge Souza',key:'malva:fake-jorge'});
+ const old={id:'old1',day:'2026-11-04',project:P,who:'team',name:'Jorge Souza',kind:'pause',at:'2026-11-04T15:00:00.000Z',adAccountId:'acc-1',objectId:'c1',minute:720,guard:{level:'review',pauseAt:110},ctx:{since:{spend:90},today:{spend:90}}};
+ const fresh={...old,id:'new1',day:'2026-11-09',at:'2026-11-09T15:00:00.000Z',objectId:'c2',person:keyed,role:'team'};
+ const st=teamStats([{kind:'team',actions:{old1:old,new1:fresh}}],{now:NOW});
+ assert.deepEqual(st.all.people.map(p=>[p.name,p.person,p.actions]),[['Jorge Souza',keyed,2]],'one person, both moves, the key-based id');
+ assert.ok(teamLines(st).every(l=>!/Jorge 1 .*Jorge 1/.test(l)),'lines never name the same person twice');
+ // Two different keys under one display name: ambiguous, the old record keeps its name hash (never guessed).
+ const other={...fresh,id:'new2',person:pidOf({who:'team',name:'Jorge Souza',key:'malva:fake-jorge-2'})};
+ const r=personResolver([fresh,other]);assert.equal(r(old),pidOf({who:'team',name:'Jorge Souza'}));
+ // Known pairs (pb:people) also resolve; the owner and the outside label never change.
+ assert.equal(personResolver([],[[keyed,'Jorge Souza']])(old),keyed);
+ assert.equal(personResolver([fresh])({...old,who:'owner'}),'owner');assert.equal(personResolver([fresh])({...old,name:outsideLabel,outside:true}),'outside');
+});

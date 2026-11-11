@@ -688,6 +688,7 @@ struct NowTab: View {
                     }
                 }
             }
+            if let a = s.autonomy { AutonomyIslandRow(autonomy: a) }
             // Also on a quiet day: the 7-day score and the memory stay visible when there is something to show.
             if let sh = s.shadow, sh.total > 0 || (sh.learning.map { $0.graded > 0 || ($0.blindSpots ?? 0) > 0 } ?? false) {
                 let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
@@ -712,7 +713,10 @@ struct NowTab: View {
                                 subtitle: Format.shadowChange(item) + " · " + (item.ruleLabel ?? item.rule ?? ""),
                                 tag: Format.queueTag(project: showProject ? item.project : nil, account: item.account),
                                 value: Format.stamp(item.firstAt), valueCaption: Format.shadowOutcome(item),
-                                accessory: AdjustPreset.from(item).map { preset in AnyView(ShadowActionButton(item: item, preset: preset)) })
+                                accessory: AdjustPreset.from(item).flatMap { preset in
+                                    // Desligado hides the quick action; Sombra/Confirmar/Automático: "Fazer eu mesmo" (contract b.3).
+                                    ShadowActionButton.label(mode: s.autonomy?.mode(for: item), preset: preset).map { AnyView(ShadowActionButton(item: item, preset: preset, label: $0)) }
+                                })
                     }
                 }
             }
@@ -725,6 +729,8 @@ struct NowTab: View {
 struct ShadowActionButton: View {
     @EnvironmentObject var notch: NotchState
     let item: Summary.ShadowItem; let preset: AdjustPreset
+    /// Chip text from `label(mode:preset:)`; nil keeps the preset's own label (older server, unknown mode).
+    var label: String? = nil
     var body: some View {
         let tone: Tone = preset.action == "increase" ? .good : .bad
         Button {
@@ -732,10 +738,118 @@ struct ShadowActionButton: View {
                 notch.adjust = AdjustTarget(project: item.projectId, adAccountId: item.adAccountId, campaignId: item.objectId, name: item.campaign, preset: preset)
             }
         } label: {
-            TintChip(text: preset.label, icon: OwnerAdjust.symbols[preset.action] ?? "slider.horizontal.3", tone: tone, outlined: true)
+            TintChip(text: label ?? preset.label, icon: OwnerAdjust.symbols[preset.action] ?? "slider.horizontal.3", tone: tone, outlined: true)
         }
         .buttonStyle(.pressable)
-        .help("Abre sua ordem com \(preset.label.lowercased()) já escolhido. Você confere o valor ao vivo e confirma com Touch ID em \"Executar agora\".")
+        .help("Abre sua ordem com \(preset.label.lowercased()) já escolhido. Você confere o valor ao vivo e confirma com Touch ID em \"Executar agora\". O Bunk não envia nada por este botão.")
+    }
+    /// Contract b.3 on the campaign's effective mode: hidden (nil) only when it is exactly "off" (Desligado: the Bunk
+    /// neither acts nor suggests); "Fazer eu mesmo" in Sombra, Confirmar and Automático; any other value or no
+    /// autonomy block (older server) keeps today's button.
+    static func label(mode: String?, preset: AdjustPreset) -> String? {
+        switch mode {
+        case "off": return nil
+        case "shadow", "confirm", "auto": return "Fazer eu mesmo"
+        default: return preset.label
+        }
+    }
+}
+
+/// Island row of the Autonomia v2 block: "Bunk · observando · John, Gabe · concordância 74%" and today's counts.
+/// Reading only: in this phase a learned play never sends anything.
+struct AutonomyIslandRow: View {
+    let autonomy: Summary.Autonomy
+    var body: some View {
+        let observing = AutonomyText.observing(autonomy)
+        ListRow(id: "autonomy:island", symbol: observing.isEmpty ? "moon.zzz" : "eye", tone: observing.isEmpty ? .neutral : .accent,
+                title: AutonomyText.islandLine(autonomy), subtitle: AutonomyText.todayLine(autonomy.projects) ?? AutonomyText.quietLine(autonomy))
+            .help(autonomy.enabled
+                  ? "Nível por projeto salvo pelo dono no painel Autonomia. Jogadas aprendidas com a equipe só observam nesta fase: nada é enviado por elas."
+                  : "Interruptor geral desligado: o Bunk não envia nada sozinho, só observa e aprende. Ligar é só do dono, no painel Autonomia.")
+    }
+}
+
+/// Pure text for the autonomy block, shared by the views and the self-test. N/D stays N/D, never 0%.
+enum AutonomyText {
+    /// 0–1 fraction as a whole percent; nil (or no case behind it) is N/D.
+    static func percent(_ value: Double?, n: Int? = nil) -> String {
+        guard let value, value.isFinite, n != 0 else { return "N/D" }
+        return "\(Int((value * 100).rounded()))%"
+    }
+    static func observing(_ a: Summary.Autonomy) -> [String] {
+        if let names = a.island?.observing, !names.isEmpty { return names }
+        return a.projects.filter { $0.mode != nil && $0.mode != "off" }.map { $0.name ?? $0.id }
+    }
+    /// What the Bunk may do at most in the observed projects: sending needs the general switch on.
+    static func stateWord(_ a: Summary.Autonomy) -> String {
+        let modes = Set(a.projects.compactMap(\.mode))
+        guard a.enabled else { return "observando" }
+        if modes.contains("auto") { return "pode enviar" }
+        if modes.contains("confirm") { return "pode pedir" }
+        return "observando"
+    }
+    static func islandLine(_ a: Summary.Autonomy) -> String {
+        let names = observing(a)
+        guard !names.isEmpty else { return "Bunk · desligado" + (a.projects.isEmpty ? "" : " nos projetos") }
+        var parts = ["Bunk", stateWord(a), names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " +\(names.count - 3)" : "")]
+        if let i = a.island, i.agreement != nil, i.n != 0 { parts.append("concordância " + percent(i.agreement, n: i.n)) }
+        return parts.joined(separator: " · ")
+    }
+    /// Today's fixed-rule decisions summed over the projects; nil when any project lacks the count (no partial sum).
+    static func todayLine(_ projects: [Summary.AutonomyProject]) -> String? {
+        guard !projects.isEmpty else { return nil }
+        let todays = projects.compactMap(\.today)
+        guard todays.count == projects.count else { return nil }
+        func sum(_ k: KeyPath<Summary.AutonomyToday, Int?>) -> Int? {
+            let v = todays.map { $0[keyPath: k] }
+            return v.contains(where: { $0 == nil }) ? nil : v.reduce(0) { $0 + ($1 ?? 0) }
+        }
+        guard let total = sum(\.decisions) else { return nil }
+        if total == 0 { return "Hoje: nenhuma decisão da Sombra ainda" }
+        var parts: [String] = []
+        if let n = sum(\.enviaria), n > 0 { parts.append("\(n) enviaria") }
+        if let n = sum(\.pediria), n > 0 { parts.append("\(n) pediria a você") }
+        if let n = sum(\.soSugestao), n > 0 { parts.append("\(n) só sugestão") }
+        if let n = sum(\.segurada), n > 0 { parts.append(Format.count(n, "segurada", "seguradas")) }
+        if let n = sum(\.ordersCreated), n > 0 { parts.append(Format.count(n, "ordem do Bunk", "ordens do Bunk") + (sum(\.ordersConfirmed).map { " (\($0) confirmada\($0 == 1 ? "" : "s"))" } ?? "")) }
+        return "Hoje: " + Format.count(total, "decisão", "decisões") + (parts.isEmpty ? "" : " · " + parts.joined(separator: " · "))
+    }
+    static func quietLine(_ a: Summary.Autonomy) -> String {
+        a.enabled ? "Jogadas da equipe só observam nesta fase" : "Interruptor geral desligado · o Bunk só observa e aprende"
+    }
+    static func stage(_ value: String?) -> String {
+        switch value {
+        case "observando": return "observando"
+        case "candidata": return "candidata"
+        case "sombra": return "na Sombra"
+        case "pode-pedir": return "pode pedir"
+        case "pode-enviar": return "pode enviar"
+        default: return "estágio N/D"
+        }
+    }
+    static func stageTone(_ value: String?) -> Tone {
+        switch value { case "candidata", "sombra": return .accent; case "pode-pedir", "pode-enviar": return .good; default: return .neutral }
+    }
+    /// "candidata · concorda 74% em 12 casos" (n = the times the play would have acted) or "observando · concordância N/D".
+    static func playLine(_ p: Summary.AutonomyPlay) -> String {
+        let agreement = p.agreement != nil && p.n != 0
+            ? "concorda " + percent(p.agreement, n: p.n) + (p.n.map { " em " + Format.count($0, "caso", "casos") } ?? "")
+            : "concordância N/D"
+        return stage(p.stage) + " · " + agreement
+    }
+    /// "O Bunk pegou 68% dos seus movimentos (25)", or "John · o Bunk pegou…" on the all-projects summary; N/D while there is
+    /// no case. Per person the executor sends the share of that person's moves a play caught (recall), never a precision.
+    static func ownerLine(_ person: Summary.AutonomyPerson, project: String? = nil) -> String {
+        let body = person.agreement != nil && person.n != 0
+            ? "o Bunk pegou " + percent(person.agreement, n: person.n) + " dos seus movimentos" + (person.n.map { " (" + Format.count($0, "movimento", "movimentos") + ")" } ?? "")
+            : "o Bunk pegou dos seus movimentos: N/D (sem casos ainda)"
+        return project.map { $0 + " · " + body } ?? "O" + body.dropFirst()
+    }
+    /// The other people, compact: "Jorge 70% · Leonardo N/D".
+    static func othersLine(_ people: [Summary.AutonomyPerson]) -> String? {
+        let others = people.filter { !$0.isOwner }
+        guard !others.isEmpty else { return nil }
+        return others.map { ($0.name ?? "Pessoa") + " " + percent($0.agreement, n: $0.n) }.joined(separator: " · ")
     }
 }
 
@@ -764,6 +878,7 @@ struct ManagersTab: View {
                     }
                 }
             }
+            if let a = s.autonomy, !a.projects.isEmpty { ManagerPlays(autonomy: a, showProject: s.project == "all") }
             let list = s.activity.recent.filter { notch.activityFilter == nil || $0.action == notch.activityFilter }
             SectionHeader(title: notch.activityFilter.map { (Format.actionLabels[$0] ?? $0) + " recentes" } ?? "Mais recentes", detail: Format.count(list.count, "registro", "registros") + " no resumo")
             if list.isEmpty { EmptyLine(text: "Nenhuma mudança neste filtro.", kind: .info) }
@@ -799,6 +914,45 @@ struct ManagersTab: View {
             .contentShape(Rectangle())
         }.buttonStyle(.pressable).disabled(count == 0)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// Gestores tab: the plays the Bunk learned from the team and how often it agrees with each person (contract b.3).
+/// Reading only, no button: adopting a play arrives in the next phase, on the web.
+struct ManagerPlays: View {
+    let autonomy: Summary.Autonomy
+    let showProject: Bool
+    var body: some View {
+        let projects = autonomy.projects
+        // Same play id in two projects ('all' summary): the row key carries the project.
+        let plays = projects.flatMap { p in p.plays.map { (key: p.id + ":" + $0.id, project: p, play: $0) } }
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            SectionHeader(title: "Modo Gestor · jogadas da equipe", detail: "aprendidas com os seus movimentos e os dos gestores · só observação")
+                .help("O Bunk compara o que faria com o que você e os gestores fizeram. Concordância da jogada: das vezes em que ela agiria, quantas a equipe fez o mesmo. Por pessoa: quantos dos movimentos dela uma jogada pegou. Associação, não causa. Nenhuma jogada envia ordem nesta fase.")
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(projects) { p in
+                    if let owner = p.people.first(where: \.isOwner) {
+                        Text(AutonomyText.ownerLine(owner, project: showProject ? (p.name ?? p.id) : nil))
+                            .font(DS.Font.caption).foregroundStyle(owner.agreement == nil ? DS.Color.inkMuted : DS.Color.inkSoft).lineLimit(1)
+                    }
+                    if let others = AutonomyText.othersLine(p.people) {
+                        Text((showProject ? (p.name ?? p.id) + " · " : "") + "equipe: " + others).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
+                    }
+                }
+            }
+            if plays.isEmpty {
+                EmptyLine(text: "Observando: nenhuma jogada com casos suficientes ainda.", kind: .waiting)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(plays, id: \.key) { row in
+                        ListRow(id: "pb:" + row.key, symbol: "person.2.wave.2", tone: AutonomyText.stageTone(row.play.stage),
+                                title: row.play.label ?? "Jogada da equipe", subtitle: AutonomyText.playLine(row.play),
+                                tag: showProject ? row.project.name : nil,
+                                value: AutonomyText.percent(row.play.agreement, n: row.play.n), valueCaption: "concordância")
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -14,7 +14,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound(); testAlertPriorityAndCounters()
+        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound(); testAlertPriorityAndCounters(); testAutonomyBlock()
         failures += bunkFailures
         failures += DSAudit.run()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
@@ -138,6 +138,80 @@ enum SelfTest {
             check(f.scheduled[0].startsOn == "08/11", #line)
         } else { check(false, #line) }
         check(Format.who(s.activity.recent[1]) == "Pausas · autor não informado", #line)
+    }
+
+    /// Autonomia v2 · Modo Gestor (contract (b)): decode with and without the block, a broken block never costs the
+    /// summary (nor the "Dias" tab), the quick action is hidden only in Desligado, N/D never reads 0%.
+    private static func testAutonomyBlock() {
+        let core = #"{"generatedAt":"2026-11-10T15:00:00.000Z","project":"all","projects":[{"id":"p1","name":"John"},{"id":"p2","name":"Gabe"}],"today":{"deltas":{}},"days":{"rows":[{"day":"2026-11-10","spend":100,"orders":2,"cpa":50,"revenueNet":150,"profit":20,"roas":1.5,"roi":1.18}],"currency":"BRL","today":"2026-11-10"}"#
+        func summary(_ extra: String) -> Summary? { try? JSONDecoder().decode(Summary.self, from: Data((core + extra + "}").utf8)) }
+        let block = #","autonomy":{"v":1,"at":"2026-11-10T15:00:00.000Z","enabled":true,"projects":[{"id":"p1","name":"John","mode":"shadow","exceptions":1,"pilot":null,"today":{"decisions":9,"enviaria":0,"pediria":0,"soSugestao":7,"segurada":2,"ordersCreated":0,"ordersConfirmed":0},"plays":[{"id":"pb:test-pause","label":"Pausar teste sem venda","stage":"candidata","agreement":0.74,"n":12},{"id":"pb:night-raise","label":"Subir à meia-noite","stage":"observando","agreement":null,"n":0}],"people":[{"person":"owner","name":"Você","agreement":0.68,"n":25},{"person":"p:ab12","name":"Jorge","agreement":0.7,"n":10},{"person":"p:cd34","name":"Leonardo","agreement":null,"n":0}]},{"id":"p2","name":"Gabe","mode":"off","exceptions":0,"pilot":null,"today":{"decisions":0,"enviaria":0,"pediria":0,"soSugestao":0,"segurada":0,"ordersCreated":0,"ordersConfirmed":0},"plays":[],"people":[]}],"campaigns":[{"projectId":"p1","adAccountId":"a","objectId":"off1","mode":"off"},{"projectId":"p2","adAccountId":"a","objectId":"sh2","mode":"shadow"}],"island":{"observing":["John","Gabe"],"agreement":0.74,"n":12}}"#
+        guard let s = summary(block), let a = s.autonomy else { check(false, #line); return }
+        check(a.v == 1 && a.enabled && a.projects.count == 2 && a.campaigns.count == 2, #line)
+        check(a.projects[0].mode == "shadow" && a.projects[0].exceptions == 1 && a.projects[0].pilotEnabled == nil, #line)
+        check(a.projects[0].today?.decisions == 9 && a.projects[0].today?.segurada == 2, #line)
+        check(a.projects[0].plays.count == 2 && a.projects[0].plays[0].agreement == 0.74 && a.projects[0].plays[1].agreement == nil, #line)
+        check(a.projects[0].people.first?.isOwner == true && a.island?.observing == ["John", "Gabe"], #line)
+        check(s.days?.rows.count == 1, #line)
+        // Without the block (older server): nil, the rest unchanged, and today's button and label.
+        guard let old = summary("") else { check(false, #line); return }
+        check(old.autonomy == nil && old.days?.rows.first?.cpa == 50 && old.projects.count == 2, #line)
+        // A broken block: not an object → nil; bad fields inside → defaults, bad items skipped. The summary and "Dias" survive.
+        let bad = summary(#","autonomy":"x""#)
+        check(bad != nil && bad?.autonomy == nil && bad?.days?.rows.count == 1, #line)
+        check(summary(#","autonomy":null"#)?.autonomy == nil, #line)
+        let odd = summary(#","autonomy":{"enabled":"sim","projects":[{"name":"sem id"},{"id":"p1","mode":5,"today":"x","plays":[{"id":"x","agreement":74},{"label":"sem id"}],"people":"x"}],"campaigns":[{"projectId":"p1","mode":"off"},7],"island":7}"#)
+        check(odd?.days?.rows.count == 1, #line)
+        if let o = odd?.autonomy {
+            check(!o.enabled && o.projects.count == 1 && o.projects[0].mode == nil && o.projects[0].today == nil, #line)
+            check(o.projects[0].plays.count == 1 && o.projects[0].plays[0].agreement == nil && o.projects[0].people.isEmpty, #line)
+            check(o.campaigns.isEmpty && o.island == nil, #line)
+        } else { check(false, #line) }
+        // Effective mode, first match wins: the campaign entry, then the project level, else unknown.
+        check(a.mode(projectId: "p1", adAccountId: "a", objectId: "off1") == "off", #line)
+        check(a.mode(projectId: "p1", adAccountId: "a", objectId: "other") == "shadow", #line)
+        check(a.mode(projectId: "p2", adAccountId: "a", objectId: "sh2") == "shadow" && a.mode(projectId: "p2", adAccountId: nil, objectId: nil) == "off", #line)
+        check(a.mode(projectId: "p9", adAccountId: "a", objectId: "1") == nil && a.mode(projectId: nil, adAccountId: "a", objectId: "off1") == nil, #line)
+        // ShadowActionButton: hidden only in Desligado; "Fazer eu mesmo" in Sombra/Confirmar/Automático; unknown keeps today's label.
+        let pause = AdjustPreset(action: "pause", percent: nil)
+        check(ShadowActionButton.label(mode: "off", preset: pause) == nil, #line)
+        check(ShadowActionButton.label(mode: "shadow", preset: pause) == "Fazer eu mesmo", #line)
+        check(ShadowActionButton.label(mode: "confirm", preset: pause) == "Fazer eu mesmo" && ShadowActionButton.label(mode: "auto", preset: pause) == "Fazer eu mesmo", #line)
+        check(ShadowActionButton.label(mode: nil, preset: pause) == "Pausar" && ShadowActionButton.label(mode: "team", preset: pause) == "Pausar", #line)
+        let row = #"{"action":"status","before":{"status":"ACTIVE"},"after":{"status":"PAUSED"},"wouldExecute":true,"current":true,"blockedBy":[],"adAccountId":"a","#
+        if let offItem = try? JSONDecoder().decode(Summary.ShadowItem.self, from: Data((row + #""projectId":"p2","objectId":"x"}"#).utf8)),
+           let offCampaign = try? JSONDecoder().decode(Summary.ShadowItem.self, from: Data((row + #""projectId":"p1","objectId":"off1"}"#).utf8)),
+           let shadowItem = try? JSONDecoder().decode(Summary.ShadowItem.self, from: Data((row + #""projectId":"p1","objectId":"y"}"#).utf8)),
+           let preset = AdjustPreset.from(shadowItem) {
+            check(ShadowActionButton.label(mode: a.mode(for: offItem), preset: preset) == nil, #line)
+            check(ShadowActionButton.label(mode: a.mode(for: offCampaign), preset: preset) == nil, #line)
+            check(ShadowActionButton.label(mode: a.mode(for: shadowItem), preset: preset) == "Fazer eu mesmo", #line)
+            check(ShadowActionButton.label(mode: old.autonomy?.mode(for: shadowItem), preset: preset) == "Pausar", #line)
+        } else { check(false, #line) }
+        // Island row and today's counts.
+        check(AutonomyText.islandLine(a) == "Bunk · observando · John, Gabe · concordância 74%", #line)
+        var noAgreement = a; noAgreement.island?.agreement = nil
+        check(AutonomyText.islandLine(noAgreement) == "Bunk · observando · John, Gabe", #line)
+        var zeroCases = a; zeroCases.island = Summary.AutonomyIsland(observing: ["John"], agreement: 0, n: 0)
+        check(AutonomyText.islandLine(zeroCases) == "Bunk · observando · John", #line)
+        var auto = a; auto.projects[0].mode = "auto"
+        check(AutonomyText.islandLine(auto).hasPrefix("Bunk · pode enviar · "), #line)
+        auto.enabled = false
+        check(AutonomyText.islandLine(auto).hasPrefix("Bunk · observando · "), #line)
+        let allOff = Summary.Autonomy(enabled: true, projects: [Summary.AutonomyProject(id: "p", name: "John", mode: "off")], island: Summary.AutonomyIsland(observing: [], agreement: nil, n: 0))
+        check(AutonomyText.islandLine(allOff) == "Bunk · desligado nos projetos", #line)
+        check(AutonomyText.todayLine(a.projects) == "Hoje: 9 decisões · 7 só sugestão · 2 seguradas", #line)
+        check(AutonomyText.todayLine([a.projects[1]]) == "Hoje: nenhuma decisão da Sombra ainda", #line)
+        check(AutonomyText.todayLine([a.projects[0], Summary.AutonomyProject(id: "p3")]) == nil, #line)   // a missing count is N/D, not a partial sum
+        // Gestores tab lines: N/D is never 0%.
+        check(AutonomyText.playLine(a.projects[0].plays[0]) == "candidata · concorda 74% em 12 casos", #line)
+        check(AutonomyText.playLine(a.projects[0].plays[1]) == "observando · concordância N/D", #line)
+        check(AutonomyText.percent(nil) == "N/D" && AutonomyText.percent(0, n: 0) == "N/D" && AutonomyText.percent(0, n: 5) == "0%", #line)
+        check(AutonomyText.ownerLine(a.projects[0].people[0]) == "O Bunk pegou 68% dos seus movimentos (25 movimentos)", #line)
+        check(AutonomyText.ownerLine(a.projects[0].people[0], project: "John") == "John · o Bunk pegou 68% dos seus movimentos (25 movimentos)", #line)
+        check(AutonomyText.ownerLine(Summary.AutonomyPerson(person: "owner")) == "O Bunk pegou dos seus movimentos: N/D (sem casos ainda)", #line)
+        check(AutonomyText.othersLine(a.projects[0].people) == "Jorge 70% · Leonardo N/D" && AutonomyText.othersLine([]) == nil, #line)
+        check(AutonomyText.stage("pode-pedir") == "pode pedir" && AutonomyText.stage("x") == "estágio N/D", #line)
     }
 
     private static func testFormattingKeepsMissingAsND() {
