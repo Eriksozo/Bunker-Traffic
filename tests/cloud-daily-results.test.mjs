@@ -61,3 +61,21 @@ test('another cache revision during collection cannot be overwritten by the firs
  f.source.read=async(tool,args)=>{const result=await original(tool,args);if(tool==='tracking_ad_detail')await dailyDataAction(f.db,f.state,{action:'failure',...target,expectedRevision:1,error:{code:'SOURCE_STALE'}},at);return result;};
  const result=await requestCloudDaily(f.options);assert.equal(result.item.revision,2);assert.equal(result.item.error.code,'SOURCE_STALE');assert.equal(result.item.snapshot,null);f.sql.close();
 });
+
+test('IC of each day comes from the exact campaign row; another account, period or a failed day stays N/D',async()=>{
+ const f=fixture(),r=dailyRange(at,project.timezone),original=f.source.read;
+ f.detail.daily=[{day:r.to,spend:120,orders:1,impressions:4000,linkClicks:60},{day:r.days[5],spend:90,orders:0,impressions:3000,linkClicks:30},{day:r.days[4],spend:50,orders:0}];
+ f.source.read=async(tool,args)=>{
+  if(tool!=='tracking_campaigns')return original(tool,args);
+  f.calls.push({tool,args});const day=args.from,row={id,adAccountId,externalId:target.objectId,level:'campaign',provider:'meta',checkouts:day===r.to?6:day===r.days[5]?3:2};
+  if(day===r.days[3])throw Error('outage');
+  return {period:{timezone:project.timezone,days:[day]},rows:day===r.days[5]?[{...row,adAccountId:'another-account'}]:[row]};
+ };
+ const rows=(await requestCloudDaily(f.options)).item.snapshot.rows,today=rows[6],yesterday=rows[5];
+ assert.equal(today.checkouts,6);assert.equal(today.costPerCheckout,20);assert.equal(today.cpc,2);assert.equal(today.cpm,30);
+ assert.equal(yesterday.checkouts,null);assert.equal(yesterday.costPerCheckout,null);assert.equal(yesterday.cpc,3);
+ assert.equal(rows[4].checkouts,2);assert.equal(rows[3].checkouts,null);assert.equal(rows[3].spend,null);
+ const asks=f.calls.filter(c=>c.tool==='tracking_campaigns');assert.equal(asks.length,7);
+ for(const c of asks){assert.equal(c.args.from,c.args.to);assert.deepEqual(c.args.campaignIds,[target.objectId]);assert.deepEqual(c.args.accountIds,[adAccountId]);assert.equal(c.args.sales,'traffic');}
+ f.sql.close();
+});

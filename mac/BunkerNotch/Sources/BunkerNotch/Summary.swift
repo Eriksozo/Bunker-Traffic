@@ -228,6 +228,8 @@ struct Summary: Decodable, Equatable {
         var id: String { day }
         let day: String; let spend: Double?; let orders: Double?; let cpa: Double?
         let revenueNet: Double?; let profit: Double?; let roas: Double?; let roi: Double?
+        /// Campaign detail only (lib/campaign-daily-data.mjs): IC, cost per IC, CPC and CPM of the day. Absent = N/D.
+        var checkouts: Double? = nil; var costPerCheckout: Double? = nil; var cpc: Double? = nil; var cpm: Double? = nil
     }
     struct Days: Decodable, Equatable {
         let rows: [DayRow]; let currency: String?; let today: String?; let at: String?

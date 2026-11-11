@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {dailyDataAction} from '../lib/campaign-daily-data.mjs';
+import {dailyDataAction,withDailyRatios} from '../lib/campaign-daily-data.mjs';
 import {BUNKER_DAILY_TOOL,DAILY_CHECK_INTERVAL_MS,DailyRelay,DailySyncError,dailyPublicError,dailyRange,dailySnapshot,validateDailyPending,waitWithDaily} from '../scripts/local-daily-sync.mjs';
 import {BUNKER_TOOL,BUNKER_COMPAT_TOOL,CodexMcpClient,MALVA_TOOLS,POLL_INTERVAL_MS} from '../scripts/local-live-sync.mjs';
 
@@ -35,7 +35,7 @@ class FakeClient{
     assert.ok(['import','failure'].includes(args.action));assert.equal(args.expectedRevision,entry.revision);assert.equal(this.paused,false);
     if(args.action==='import'){
       if(this.importTimeout)throw new Error('private ambiguous response');
-      if(!this.skipPersist){const s=args.snapshot,d=s.detail;entry.snapshot={source:s.source,fetchedAt:s.fetchedAt,lastSyncAt:null,timezone:d.period.timezone,currency:d.currency,from:d.dailyRange.from,to:d.dailyRange.to,rows:clone(d.daily)};entry.revision++;entry.nextDueAt=iso(this.clock+60000);entry.error=null;}
+      if(!this.skipPersist){const s=args.snapshot,d=s.detail;entry.snapshot={source:s.source,fetchedAt:s.fetchedAt,lastSyncAt:null,timezone:d.period.timezone,currency:d.currency,from:d.dailyRange.from,to:d.dailyRange.to,rows:clone(d.daily).map(withDailyRatios)};entry.revision++;entry.nextDueAt=iso(this.clock+60000);entry.error=null;}
       return {siteProjectId:this.site,paused:false,ok:true,item:clone(entry),revision:this.skipPersist?entry.revision+1:entry.revision};
     }
     entry.revision++;entry.error=clone(args.error);entry.nextDueAt=iso(this.clock+60000);return {siteProjectId:this.site,paused:false,ok:true,item:clone(entry),revision:entry.revision};
@@ -54,7 +54,7 @@ test('only an interested due campaign is queried, by internal UUID with the exac
   const query=client.calls.find(c=>c.tool==='tracking_ad_detail');assert.deepEqual(query.args,{projectId:PROJECT.id,objectId:TARGET.internalObjectId,sales:'traffic',preset:'custom',from:'2026-10-28',to:'2026-11-03'});
   const save=writes(client)[0];assert.equal(save.args.expectedRevision,3);assert.equal(save.args.snapshot.fetchedAt,iso(NOW+125));assert.equal(save.args.snapshot.detail.row.budgetCurrency,undefined);
   assert.deepEqual(Object.keys(save.args.snapshot.detail),['row','provider','level','externalId','daily','dailyRange','period','currency']);
-  assert.equal(JSON.stringify(save.args).includes('secret'),false);assert.equal(JSON.stringify(save.args).includes('impressions'),false);assert.equal(client.items[0].snapshot.lastSyncAt,null);
+  assert.equal(JSON.stringify(save.args).includes('secret'),false);assert.equal(save.args.snapshot.detail.daily.at(-1).impressions,1000);assert.equal(save.args.snapshot.detail.daily.at(-1).checkouts,null);assert.equal(JSON.stringify(save.args).includes('hourly'),false);assert.equal(client.items[0].snapshot.lastSyncAt,null);
   assert.deepEqual([...new Set(client.calls.filter(c=>c.server==='malva').map(c=>c.tool))],['workspace_whoami','tracking_list_projects','tracking_ad_detail']);assert.equal(client.calls.at(-1).args.action,'read');
 });
 test('pause and an empty queue do not call the source or write anything',async()=>{
@@ -89,7 +89,7 @@ test('exact day range, no extension, unique days and finite metric values are ma
 test('omitted metrics or days remain N/D and unordered daily rows are normalized without inventing zeroes',()=>{
   const d=detail();d.daily.shift();delete d.daily[0].roi;d.daily.reverse();delete d.currency;
   const expected=dailySnapshot(d,item(),PROJECT,NOW).expected;assert.deepEqual(expected.rows.map(r=>r.day),dailyRange(NOW,PROJECT.timezone).days);assert.equal(expected.currency,null);
-  assert.deepEqual(expected.rows[0],{day:'2026-10-28',spend:null,orders:null,cpa:null,revenueNet:null,profit:null,roas:null,roi:null});assert.equal(expected.rows[1].spend,100);assert.equal(expected.rows[1].roi,null);
+  assert.deepEqual(expected.rows[0],{day:'2026-10-28',spend:null,orders:null,cpa:null,revenueNet:null,profit:null,roas:null,roi:null,impressions:null,linkClicks:null,checkouts:null,cpc:null,cpm:null,costPerCheckout:null});assert.equal(expected.rows[1].spend,100);assert.equal(expected.rows[1].roi,null);
   const empty=detail();empty.daily=[];assert.ok(dailySnapshot(empty,item(),PROJECT,NOW).expected.rows.every(r=>r.spend===null&&r.orders===null));
 });
 test('source errors are sanitized and preserve the prior snapshot',async()=>{
@@ -140,4 +140,12 @@ test('relay projection round-trips through the real daily backend without changi
     assert.deepEqual(await relay(client).runOnce(),{paused:false,imported:1,failed:0});
     const saved=await dailyDataAction(db,s,{action:'read',...ids},NOW);assert.equal(saved.item.snapshot.rows.length,7);assert.equal(saved.item.snapshot.currency,null);assert.ok(saved.item.snapshot.rows.some(r=>r.spend===null));assert.equal(JSON.stringify(s),before);
   }finally{database.close();}
+});
+
+test('IC per day joins the detail rows; cost ratios come from spend and stay N/D without a denominator',()=>{
+  const d=detail();d.daily=d.daily.map(r=>({...r,linkClicks:r.spend?40:0}));const days=dailyRange(NOW,PROJECT.timezone).days;
+  const snap=dailySnapshot(d,item(),PROJECT,NOW,{checkouts:new Map([[days[6],8],[days[5],null]])}),last=snap.expected.rows[6],prior=snap.expected.rows[5],first=snap.expected.rows[0];
+  assert.equal(snap.snapshot.detail.daily[6].checkouts,8);assert.equal(last.costPerCheckout,12.5);assert.equal(last.cpc,2.5);assert.equal(last.cpm,100);
+  assert.equal(prior.checkouts,null);assert.equal(prior.costPerCheckout,null);assert.equal(first.cpc,null);assert.equal(first.cpm,0);
+  assert.throws(()=>dailySnapshot(d,item(),PROJECT,NOW,{checkouts:new Map([[days[6],2.5]])}),DailySyncError);
 });

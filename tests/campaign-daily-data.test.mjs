@@ -79,7 +79,7 @@ test('import retains only the daily display whitelist; absent days, metrics, cur
  const {d,api}=db(),s=state(),before=JSON.stringify(s);await call(api,s,'request');
  const snap=source();snap.lastSyncAt='2026-11-03T14:00:00Z';snap.detail.currency=undefined;snap.detail.transcript='PRIVATE';snap.detail.row.token='PRIVATE';snap.detail.daily[0].frontOrders=99;snap.detail.daily[0].secret='PRIVATE';delete snap.detail.daily[0].roi;
  const result=await call(api,s,'import',{expectedRevision:1,snapshot:snap}),saved=result.item.snapshot;
- assert.equal(result.item.status,'ready');assert.equal(result.revision,2);assert.equal(saved.lastSyncAt,null);assert.equal(saved.currency,null);assert.equal(saved.rows.length,7);assert.deepEqual(saved.rows[0],{day:'2026-10-28',spend:null,orders:null,cpa:null,revenueNet:null,profit:null,roas:null,roi:null});
+ assert.equal(result.item.status,'ready');assert.equal(result.revision,2);assert.equal(saved.lastSyncAt,null);assert.equal(saved.currency,null);assert.equal(saved.rows.length,7);assert.deepEqual(saved.rows[0],{day:'2026-10-28',spend:null,orders:null,cpa:null,revenueNet:null,profit:null,roas:null,roi:null,impressions:null,linkClicks:null,checkouts:null,cpc:null,cpm:null,costPerCheckout:null});
  assert.equal(saved.rows[6].orders,2);assert.equal(saved.rows[6].cpa,50);assert.equal(saved.rows[6].roi,null);assert.equal(saved.rows[6].profit,45);assert.equal('frontOrders' in saved.rows[6],false);assert.equal(JSON.stringify(result).includes('PRIVATE'),false);assert.equal(d.prepare("SELECT payload FROM bunker_records WHERE key LIKE 'daily:%'").get().payload.includes('PRIVATE'),false);assert.equal(JSON.stringify(s),before);d.close();
 });
 
@@ -122,4 +122,21 @@ test('seven local calendar days across DST use explicit project boundaries rathe
 test('size and corrupt-record guards do not truncate rows or dispatch untrusted records',async()=>{
  const {d,api}=db(),s=state();await call(api,s,'request');const huge=source();huge.detail.extra='á'.repeat(campaignDailyLimits.recordBytes);await assert.rejects(call(api,s,'import',{expectedRevision:1,snapshot:huge}),e=>e.code==='DAILY_LIMIT');
  const key=d.prepare("SELECT key FROM bunker_records WHERE key LIKE 'daily:%'").get().key;d.prepare('UPDATE bunker_records SET payload=? WHERE key=?').run('{bad',key);await assert.rejects(call(api,s,'read'),e=>e.code==='DAILY_CACHE_INVALID');assert.deepEqual((await call(api,s,'pending')).items,[]);d.close();
+});
+
+test('IC, clicks and impressions are kept; Custo IC, CPC and CPM are rebuilt from spend, never taken from the input',async()=>{
+ const {d,api}=db(),s=state();await call(api,s,'request');
+ const snap=source();Object.assign(snap.detail.daily[0],{impressions:2000,linkClicks:40,checkouts:5,cpc:999,cpm:999,costPerCheckout:999});
+ const saved=(await call(api,s,'import',{expectedRevision:1,snapshot:snap})).item.snapshot.rows[6];
+ assert.equal(saved.checkouts,5);assert.equal(saved.costPerCheckout,20);assert.equal(saved.cpc,2.5);assert.equal(saved.cpm,50);
+ for(const bad of [{checkouts:-1},{checkouts:1.5},{impressions:-3}]){const again=source();Object.assign(again.detail.daily[0],bad);await assert.rejects(call(api,s,'import',{expectedRevision:2,snapshot:again}),e=>e.code==='DAILY_INVALID_SNAPSHOT');}
+ assert.equal((await call(api,s,'read')).item.snapshot.rows[6].checkouts,5);d.close();
+});
+
+test('a cache written before IC was read still opens, with the new columns as N/D',async()=>{
+ const {d,api}=db(),s=state();await call(api,s,'request');await call(api,s,'import',{expectedRevision:1,snapshot:source()});
+ const row=d.prepare("SELECT key,payload FROM bunker_records WHERE key LIKE 'daily:%'").get(),item=JSON.parse(row.payload);
+ const legacy=['day','spend','orders','cpa','revenueNet','profit','roas','roi'];item.snapshot.rows=item.snapshot.rows.map(r=>Object.fromEntries(legacy.map(k=>[k,r[k]])));
+ d.prepare('UPDATE bunker_records SET payload=? WHERE key=?').run(JSON.stringify(item),row.key);
+ const read=(await call(api,s,'read')).item.snapshot.rows[6];assert.equal(read.spend,100);assert.equal(read.checkouts,undefined);d.close();
 });

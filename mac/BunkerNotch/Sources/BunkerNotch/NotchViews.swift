@@ -1091,6 +1091,45 @@ struct DayTable: View {
     }
 }
 
+/// One campaign's day table (DIA · GASTOS · ROAS · VENDAS · IC · CUSTO IC · CPC · CPM), newest first.
+/// Vendas count every order (upsells included); IC = checkouts iniciados. Missing numbers stay N/D.
+struct CampaignDayTable: View {
+    let rows: [Summary.DayRow]
+    let currency: String?
+    let today: String?
+    private static let widths: [CGFloat] = [62, 82, 50, 50, 46, 70, 62, 70]
+    var body: some View {
+        VStack(spacing: 0) {
+            row(["DIA", "GASTOS", "ROAS", "VENDAS", "IC", "CUSTO IC", "CPC", "CPM"], header: true)
+            ForEach(rows) { r in
+                Divider().overlay(DS.Color.stroke)
+                let c = currency
+                row([Format.dayLabel(r.day), Format.money(r.spend, currency: c), Format.ratio(r.roas), Format.orders(r.orders), Format.orders(r.checkouts),
+                     Format.money(r.costPerCheckout, currency: c), Format.money(r.cpc, currency: c), Format.money(r.cpm, currency: c)], partial: r.day == today)
+            }
+        }
+        .padding(.vertical, DS.Space.xs)
+        .background(DS.Color.surface, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+    }
+    @ViewBuilder func row(_ cells: [String], header: Bool = false, partial: Bool = false) -> some View {
+        HStack(spacing: 4) {
+            ForEach(cells.indices, id: \.self) { i in
+                Group {
+                    if i == 0 && partial {
+                        HStack(spacing: 3) { Text(cells[i]); Text("parcial").font(DS.Font.micro).foregroundStyle(DS.Color.warn) }
+                    } else { Text(cells[i]) }
+                }
+                .font(header ? DS.Font.microStrong : (i == 0 ? DS.Font.bodyStrong : DS.Font.number))
+                .foregroundStyle(header ? DS.Color.inkMuted : DS.Color.ink)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .frame(width: Self.widths[i], alignment: i == 0 ? .leading : .trailing)
+            }
+        }
+        .padding(.horizontal, DS.Space.s).padding(.vertical, header ? 5 : 7)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// View state of CampaignDaysView (this toolchain has no SwiftUI @State macro).
 @MainActor final class DailyLoader: ObservableObject { @Published var result: Store.DailyResult? }
 
@@ -1110,8 +1149,8 @@ struct CampaignDaysView: View {
                 EmptyLine(text: message, kind: .info)
             case .some(.ok(let d)):
                 if let snap = d.snapshot, !snap.rows.isEmpty {
-                    DayTable(rows: Array(snap.rows.sorted { $0.day > $1.day }.prefix(7)), currency: snap.currency, today: Format.civilDay(Date(), timeZone: snap.timezone))
-                    Text("Vendas incluem upsells · CPA = investimento ÷ vendas · hoje parcial").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
+                    CampaignDayTable(rows: Array(snap.rows.sorted { $0.day > $1.day }.prefix(7)), currency: snap.currency, today: Format.civilDay(Date(), timeZone: snap.timezone))
+                    Text("Vendas incluem upsells · IC = checkout iniciado · Custo IC, CPC e CPM = gastos ÷ IC, cliques, mil impressões · hoje parcial").font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted)
                 } else {
                     EmptyLine(text: d.error.map { $0 + "." } ?? "Aguardando o resultado por dia da Malva.", kind: .waiting)
                 }

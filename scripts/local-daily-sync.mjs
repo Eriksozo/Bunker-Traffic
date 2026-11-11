@@ -1,12 +1,15 @@
 /** On-demand, read-only campaign-day relay. Reuses the existing MCP client. */
 import {validTimeZone} from '../lib/snapshot-schema.mjs';
+import {withDailyRatios} from '../lib/campaign-daily-data.mjs';
 
 export const BUNKER_DAILY_TOOL='bunker_otimiza_o_de_campanhas.bunker_dados_diarios';
 export const DAILY_CHECK_INTERVAL_MS=10_000;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const UTC=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-const METRICS=['spend','orders','cpa','revenueNet','profit','roas','roi'];
+const METRICS=['spend','orders','cpa','revenueNet','profit','roas','roi','impressions','linkClicks','checkouts'];
+// Counts: never negative, always whole. IC (checkouts) is not in the detail's day series; the caller may pass it per day.
+const COUNTS=['orders','impressions','linkClicks','checkouts'];
 const MESSAGES=Object.freeze({
   MALVA_UNAVAILABLE:'Não foi possível consultar o resultado por dia no Malva.',
   SOURCE_IDENTITY:'A identidade da campanha, conta ou projeto não confere.',
@@ -62,7 +65,7 @@ function sourceProjects(who,listed,workspaceId){
 }
 function projectFor(item,projects){const project=projects.get(item.target.projectId);if(!project||project.archivedAt||project.name!==item.target.projectName||project.timezone!==item.target.timezone)fail('SOURCE_IDENTITY');return project;}
 /** Projection excludes assets, transcript, pixels, hourly data and native budgets. */
-export function dailySnapshot(detail,item,project,now){
+export function dailySnapshot(detail,item,project,now,{checkouts=null}={}){
   validateItem(item,now);const t=item.target,r=dailyRange(now,t.timezone),row=detail?.row;
   if(!object(detail)||detail.provider!=='meta'||detail.level!=='campaign'||detail.externalId!==t.objectId||!object(row)||row.id!==t.internalObjectId||row.projectId!==t.projectId||row.adAccountId!==t.adAccountId||row.externalId!==t.objectId||row.provider!=='meta'||row.level!=='campaign'||row.projectName!==undefined&&row.projectName!==t.projectName)fail('SOURCE_IDENTITY');
   const currency=detail.currency??null;
@@ -70,13 +73,13 @@ export function dailySnapshot(detail,item,project,now){
   if(!Array.isArray(detail.daily)||detail.daily.length>7)fail('SOURCE_INCOMPLETE');
   const rows=new Map();for(const entry of detail.daily){
     if(!object(entry)||!r.days.includes(entry.day)||rows.has(entry.day))fail('SOURCE_INCOMPLETE');
-    const values={day:entry.day};for(const field of METRICS){const value=entry[field]??null;if(value!==null&&(typeof value!=='number'||!Number.isFinite(value)))fail('SOURCE_INVALID');if(['spend','orders','cpa'].includes(field)&&value!==null&&value<0||field==='orders'&&value!==null&&!Number.isInteger(value))fail('SOURCE_INVALID');values[field]=value;}
+    const values={day:entry.day};for(const field of METRICS){const value=(field==='checkouts'&&checkouts?checkouts.get(entry.day):entry[field])??null;if(value!==null&&(typeof value!=='number'||!Number.isFinite(value)))fail('SOURCE_INVALID');if(['spend','cpa',...COUNTS].includes(field)&&value!==null&&value<0||COUNTS.includes(field)&&value!==null&&!Number.isInteger(value))fail('SOURCE_INVALID');values[field]=value;}
     rows.set(entry.day,values);
   }
   // A day absent from the response is unknown, never an observed zero day.
-  const normalized=r.days.map(value=>rows.get(value)||{day:value,...Object.fromEntries(METRICS.map(field=>[field,null]))});
-  const projected={row:Object.fromEntries(['id','projectId','level','externalId','adAccountId','provider'].map(field=>[field,row[field]])),provider:'meta',level:'campaign',externalId:t.objectId,daily:normalized,dailyRange:{from:r.from,to:r.to,extended:false},period:{preset:'custom',timezone:t.timezone,from:r.start,to:r.end,days:r.days},currency};
-  return {snapshot:{source:'Malva MCP',fetchedAt:new Date(now).toISOString(),detail:projected},expected:{source:'Malva MCP',fetchedAt:new Date(now).toISOString(),lastSyncAt:null,timezone:t.timezone,currency,from:r.from,to:r.to,rows:normalized}};
+  const days=r.days.map(value=>rows.get(value)||{day:value,...Object.fromEntries(METRICS.map(field=>[field,null]))});
+  const projected={row:Object.fromEntries(['id','projectId','level','externalId','adAccountId','provider'].map(field=>[field,row[field]])),provider:'meta',level:'campaign',externalId:t.objectId,daily:days,dailyRange:{from:r.from,to:r.to,extended:false},period:{preset:'custom',timezone:t.timezone,from:r.start,to:r.end,days:r.days},currency};
+  return {snapshot:{source:'Malva MCP',fetchedAt:new Date(now).toISOString(),detail:projected},expected:{source:'Malva MCP',fetchedAt:new Date(now).toISOString(),lastSyncAt:null,timezone:t.timezone,currency,from:r.from,to:r.to,rows:days.map(withDailyRatios)}};
 }
 function samePending(a,b){return !!b&&a.revision===b.revision&&same(a.target,b.target)&&same(a.range,b.range);}
 function itemRead(value,item,siteId){if(!object(value)||value.siteProjectId!==siteId||typeof value.paused!=='boolean')fail('MCP_UNAVAILABLE');if(value.item&&!same(value.item.target,item.target))fail('SOURCE_IDENTITY');return value;}

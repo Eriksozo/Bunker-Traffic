@@ -1103,3 +1103,19 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 ## Login do Worker pelo formulário de e-mail
 
 - **Registro (2026-11-11 02:10:17 UTC, dono respondeu "Sim, ajustar login"):** `/auth/login` e `/signin-with-chatgpt` mostram sempre o formulário de e-mail do dono; o Site privado fica num link explícito (`/auth/login?site=1`), sem redirecionamento automático. `BUNKER_DIRECT_ACCESS_URL` e segredos não mudaram. Página de login com as cores do notch.
+
+## Resultado por dia da campanha: Gastos, ROAS, Vendas, IC, Custo IC, CPC e CPM
+
+- **Pedido do dono (11/11/2026):** a tabela "Resultado por dia" do detalhe da campanha mostra Gastos, ROAS, Vendas, IC, Custo IC, CPC e CPM, nessa ordem, no notch e no web.
+- **Origem:**
+  - gasto, impressões, cliques no link, vendas e ROAS vêm do dia a dia de `tracking_ad_detail` (como antes);
+  - o IC (checkouts iniciados, recorte `traffic`) não vem nessa série. Por isso a leitura faz uma consulta `tracking_campaigns` por dia, filtrada pela campanha e conta exatas (`lib/cloud-daily-results.mjs`, `campaignDayCheckouts`);
+  - se o dia não confirmar a mesma campanha, conta e período, ou se a consulta falhar, o IC fica N/D, sem zerar e sem derrubar o resto.
+- **Cálculo dos custos:** Custo IC, CPC e CPM são calculados no cache (`withDailyRatios` em `lib/campaign-daily-data.mjs`), nunca copiados da entrada:
+  - Custo IC = gasto ÷ IC;
+  - CPC = gasto ÷ cliques no link;
+  - CPM = gasto ÷ impressões × 1000;
+  - sem denominador, o valor fica N/D.
+  - Conferido contra a linha da campanha na Malva num dia real: os três batem.
+- **Cache antigo:** registros gravados antes desta mudança continuam válidos, mostram as colunas novas como N/D e se completam na próxima leitura (até 1 por minuto com o detalhe aberto).
+- **Escopo:** só exibição. Nada disso entra em análise, proposta, aprovação ou conferência de ordem. A aba "Dias" do projeto (`lib/daily-series.mjs`) não mudou e o gráfico do web segue com Investimento, Fat. líquido e Lucro.
