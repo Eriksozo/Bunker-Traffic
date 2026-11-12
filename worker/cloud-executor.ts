@@ -32,7 +32,8 @@ import {buildAccountPanel,readMetaAccounts,accountPanelPolicy,runningAccounts} f
 import {pendingLiveRefresh} from '../lib/owner-applied.mjs';
 import {changeWatchPolicy,fastLaneKinds,watchProject,nextPulse,liveOrder,orderPulse,newestLiveItems} from '../lib/change-watch.mjs';
 import {ownerOrderReceipts} from '../lib/owner-orders.mjs';
-import {autonomyGrant,recordAutonomyOrder,autonomyLogEntry,mergeAutonomyLog,autonomyBudgetCap} from '../lib/autonomy-grant.mjs';
+import {autonomyGrant,recordAutonomyOrder,autonomyLogEntry,mergeAutonomyLog,autonomyBudgetCap,autonomyAskEntry,mergeAutonomyAsks} from '../lib/autonomy-grant.mjs';
+import {pruneDirectOrders} from '../lib/owner-direct-order.mjs';
 import {liveOrderRow} from '../lib/owner-order-live.mjs';
 import {decisionContingency} from '../lib/decision-contingency.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
@@ -178,8 +179,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   */
  private async autonomyAct(state:any,batches:any[],now:number){
   const config=state?.autonomy,acting=(m:any)=>m==='confirm'||m==='auto';
-  if(!config?.projects||!Object.values(config.projects).some((p:any)=>acting(p?.mode)||Object.values(p?.campaigns||{}).some((c:any)=>acting(c?.mode)))){await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config?.enabled,acting:false});return;}
-  const log:any[]=[],woke=new Set<string>();let created=0;
+  if(!config?.projects||!Object.values(config.projects).some((p:any)=>acting(p?.mode)||Object.values(p?.campaigns||{}).some((c:any)=>acting(c?.mode)))){await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config?.enabled,acting:false});await this.ctx.storage.delete('autonomyAsks');return;}
+  const log:any[]=[],asks:any[]=[],woke=new Set<string>();let created=0;
   const tz=(project:string)=>(this.liveItems||[]).find((i:any)=>i.projectId===project)?.snapshot?.timezone||'America/Sao_Paulo';
   for(const [list,day] of batches)for(const raw of list){
    if(!raw?.wouldExecute)continue;
@@ -188,11 +189,14 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    const g=autonomyGrant(state,d,{now,timezone});
    if(g.mode==='off'||g.mode==='shadow')continue;
    if(g.act==='none'){log.push(autonomyLogEntry(d,g,{kind:'blocked',blockers:g.blockers},now));continue;}
-   if(g.act==='confirm'){log.push(autonomyLogEntry(d,g,{kind:'confirm',text:'Aguarda sua confirmação no notch (Touch ID).'},now));continue;}
+   // Confirmar: never an order. The request goes to "Aguardando você" (web and notch, with an alert); the owner executes it.
+   if(g.act==='confirm'){log.push(autonomyLogEntry(d,g,{kind:'confirm',text:'Aguarda sua confirmação no notch (Touch ID).'},now));asks.push(autonomyAskEntry(d,g,now));continue;}
    const live=liveOrderRow(this.liveItems,d.project,d.adAccountId,d.objectId,Date.now());
    const check=(s:any)=>{
     const guard=decisionContingency({state:s,project:d.project,row:live?.row||{},proposal:null,action:g.action,percent:g.percent,liveItems:this.liveItems});
     if(guard.blocked)return {blocked:guard.blockers.map((b:any)=>String(b))};
+    // Week-old finished orders leave first, so the Bunk's own orders never fill the proposals limit.
+    pruneDirectOrders(s,Date.now());
     return recordAutonomyOrder(s,d,{live,now:Date.now(),timezone});
    };
    // Dry run on a copy first: a blocked decision never writes the central.
@@ -203,8 +207,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    created++;woke.add(d.project);log.push(autonomyLogEntry(d,g,{kind:'order',proposalId:out.proposal.id,text:'Ordem do Bunk aprovada pela sua permissão; executor envia uma vez e confere.'},now));
   }
   if(log.length)await this.ctx.storage.put('autonomyLog',mergeAutonomyLog(await this.ctx.storage.get<any[]>('autonomyLog'),log));
+  // Open requests of the level Confirmar: only projects this pass really evaluated are replaced.
+  const evaluated=batches.filter((b:any)=>typeof b?.[2]==='string'&&!b?.[3]).map((b:any)=>b[2]);
+  const openAsks=mergeAutonomyAsks(await this.ctx.storage.get<any[]>('autonomyAsks')||[],asks,evaluated);
+  if(openAsks.length)await this.ctx.storage.put('autonomyAsks',openAsks);else await this.ctx.storage.delete('autonomyAsks');
   if(woke.size){const prev=await this.ctx.storage.get<any>('wake');await this.ctx.storage.put('wake',{order:true,projects:[...new Set([...(prev?.projects||[]),...woke])].slice(0,6),at:new Date().toISOString()});if(!this.running)await this.ctx.storage.setAlarm(Date.now()+300);}
-  await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config.enabled,acting:true,created,logged:log.length});
+  await this.ctx.storage.put('autonomyStatus',{at:new Date(now).toISOString(),ok:true,enabled:!!config.enabled,acting:true,created,logged:log.length,asks:openAsks.length});
  }
  /**
   * Modo Gestor runner (lib/playbook-runner.mjs), only when it is present and switched on. The runner only ever gets the
@@ -299,12 +307,12 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  private async companionAutonomy(state:any,shadow:any[],out:Record<string,any>,shadowStatus:any,shadowDay:string,now:number){
   try{
    const projects=Object.keys(state.config||{});
-   const got:any=await this.ctx.storage.get<any>(['autonomyDeepBase','autonomyLog','pb:view',...projects.map(p=>'pb:view:'+p)]),val=(k:string)=>got&&typeof got.get==='function'?got.get(k):undefined;
+   const got:any=await this.ctx.storage.get<any>(['autonomyDeepBase','autonomyLog','autonomyAsks','pb:view',...projects.map(p=>'pb:view:'+p)]),val=(k:string)=>got&&typeof got.get==='function'?got.get(k):undefined;
    const base=val('autonomyDeepBase');if(!base?.projects)return;
    const pbViews=Object.fromEntries(projects.map(p=>[p,val('pb:view:'+p)]).filter(([,v])=>v)),days=Object.fromEntries(projects.map(p=>[p,shadowStatus?.days?.[p]||shadowDay]));
    for(const project of ['all',...projects]){
     const summary=out['companion:'+project];if(!summary)continue;
-    try{const block=autonomyCompanion({base,shadowRecent:summary.shadow?.recent||[],log:val('autonomyLog')||[],pbView:val('pb:view')||null,pbViews,project,now,entries:shadow,days,shadowAt:shadowStatus?.failed?null:shadowStatus?.at||null});if(block)summary.autonomy=block;}catch{/* key omitted */}
+    try{const block=autonomyCompanion({base,shadowRecent:summary.shadow?.recent||[],log:val('autonomyLog')||[],pbView:val('pb:view')||null,pbViews,project,now,entries:shadow,days,shadowAt:shadowStatus?.failed?null:shadowStatus?.at||null,asks:val('autonomyAsks')||[]});if(block)summary.autonomy=block;}catch{/* key omitted */}
    }
   }catch{/* every summary keeps its other keys */}
  }
@@ -321,7 +329,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const learnedRaw=await this.ctx.storage.get<any>('learningSummary'),learnedStatus=await this.ctx.storage.get<any>('learningStatus');
   const learned=learnedStatus?.ok===false&&Date.parse(learnedStatus.at||'')>Date.parse(learnedRaw?.at||'')?null:learnedRaw;
   const accuracy=Object.fromEntries(scoreGatedRules.map(rule=>[rule,gateAccuracy(learned,rule,ruleAccuracy(prior,rule),{now})]));
-  let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={},days:Record<string,string>={},batches:any[]=[];
+  let decisions:any[]=[],day:string|null=null;const skipped:Record<string,string>={},days:Record<string,string>={},batches:any[]=[],covered:string[]=[];
   // Same as shadowLocalDay: the day of a pulse where every project was skipped (stale source), so "hoje" stays today.
   const fallbackDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
   for(const project of Object.keys(state.config||{})){
@@ -329,7 +337,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    // The owner's autonomy ceiling (web, lib/autonomy-grant.mjs) fills or lowers the private one; never raises it.
    const cap=autonomyBudgetCap(state.autonomy,project),params=cap===null?base:{...base,budgetCap:Number.isFinite(base.budgetCap)&&base.budgetCap>0?Math.min(base.budgetCap,cap):cap};
    const out=evaluateShadow(state,{project,liveItem:(this.liveItems||[]).find((i:any)=>i.projectId===project)||null,events,params,now,meta,accuracy:accuracy as any});
-   if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;if(out.day)days[project]=out.day;batches.push([out.decisions,out.day||fallbackDay]);
+   if(out.skipped)skipped[project]=out.skipped;decisions=decisions.concat(out.decisions);day=day||out.day||null;if(out.day)days[project]=out.day;covered.push(project);batches.push([out.decisions,out.day||fallbackDay,project,out.skipped||null]);
   }
   // Each project's decisions keep that project's own local day (id and grading window), never the first project's.
   // Each decision is graded by the real next day once the closed windows cover it (assertiveness, read-only).
@@ -339,7 +347,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   const entries=merged.filter((e:any)=>before.get(e.id)!==JSON.stringify(e)).map((e:any)=>['shadow:'+e.id,e] as [string,any]);
   for(let i=0;i<entries.length;i+=100)await this.ctx.storage.put(Object.fromEntries(entries.slice(i,i+100)));
   for(let i=0;i<stale.length;i+=128)await this.ctx.storage.delete(stale.slice(i,i+128));
-  await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:Object.keys(policy?.projects||{}),evaluated:decisions.length,stored:merged.length,skipped,ms:Date.now()-now});
+  await this.ctx.storage.put('shadowStatus',{at:new Date(now).toISOString(),version:shadowPolicy.version,day:day||fallbackDay,days,projects:covered,evaluated:decisions.length,stored:merged.length,skipped,ms:Date.now()-now});
   // Autonomy (owner permissions): only decisions of this very pass; a failure never blocks the shadow.
   await this.autonomyAct(state,batches,now).catch(async(e:any)=>{await this.ctx.storage.put('autonomyStatus',{at:new Date().toISOString(),ok:false,error:String(e?.name||'Error').slice(0,40)+': '+String(e?.message||'').slice(0,160)}).catch(()=>{});});
   // Modo Gestor (observation only): hook A after the autonomy acted on this pass, so a play can never feed it; then the
@@ -701,7 +709,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    catch{return Response.json({error:'Leitura da autonomia indisponível.'},{status:503});}
   }
   // Read-only: what the autonomy module did or held back (lib/autonomy-grant.mjs). The permissions live in the central.
-  if(input.action==='autonomy'){const shadow=await this.ctx.storage.get<any>('shadowStatus');return Response.json({shadowProjects:Array.isArray(shadow?.projects)?shadow.projects:null,shadowAt:shadow?.at||null,status:await this.ctx.storage.get<any>('autonomyStatus')||null,log:(await this.ctx.storage.get<any[]>('autonomyLog')||[]).slice(0,100)});}
+  if(input.action==='autonomy'){const shadow=await this.ctx.storage.get<any>('shadowStatus');return Response.json({shadowProjects:Array.isArray(shadow?.projects)?shadow.projects:null,shadowAt:shadow?.at||null,status:await this.ctx.storage.get<any>('autonomyStatus')||null,log:(await this.ctx.storage.get<any[]>('autonomyLog')||[]).slice(0,100),asks:(await this.ctx.storage.get<any[]>('autonomyAsks')||[]).slice(0,40)});}
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]).map(({actorInfo:_actorInfo,...item}:any)=>item),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
   if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse'),phone=await this.ctx.storage.get<any>('phoneAlerts');return Response.json({...runtime,phone:{configured:!!(this.env.PUSHOVER_TOKEN&&this.env.PUSHOVER_USER),primed:!!phone?.primed,sent:phone?.sent||0,lastSentAt:phone?.lastSentAt||null,lastError:phone?.lastError||null,lastErrorAt:phone?.lastErrorAt||null},attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true,
    // Which central format this running code reads and writes (two-step rollout of the journal segments, lib/history-storage.mjs).

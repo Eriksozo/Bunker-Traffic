@@ -66,7 +66,7 @@ test('Search is multi-term AND, accent and case insensitive, over name, ID and a
 test('Chips filter status (OR) and spend; counts follow the search; taken and warm-up are hidden',()=>{
  const e=campaignPickerRows(rows);
  const all=filterCampaignPicker(e,{});
- assert.deepEqual(all.counts,{active:2,paused:1,inactive:2,withSpend:2});
+ assert.deepEqual(all.counts,{active:2,paused:1,inactive:2,withSpend:2,noDelivery:0});
  assert.equal(all.outOfScope,1);assert.equal(all.available,6);assert.equal(all.takenSales,0);
  assert.equal(all.rows.some(x=>x.warmup),false);
  assert.deepEqual(filterCampaignPicker(e,{active:true}).rows.map(x=>x.id),['4','1']);
@@ -77,7 +77,7 @@ test('Chips filter status (OR) and spend; counts follow the search; taken and wa
  assert.equal(t.rows.some(x=>x.key==='act_1:1'),false);
  assert.equal(t.available,5);assert.equal(t.takenSales,1);
  assert.equal(filterCampaignPicker(e,{taken:new Set(['act_2:4'])}).rows.some(x=>x.key==='act_2:4'),false);
- assert.deepEqual(filterCampaignPicker(e,{query:'jhon'}).counts,{active:1,paused:1,inactive:0,withSpend:1});
+ assert.deepEqual(filterCampaignPicker(e,{query:'jhon'}).counts,{active:1,paused:1,inactive:0,withSpend:1,noDelivery:0});
  assert.equal(filterCampaignPicker(e,{query:'engajamento'}).outOfScope,1);
 });
 
@@ -90,7 +90,7 @@ test('Nothing available: "already exceptions" only when a sales campaign is take
  const allTaken=filterCampaignPicker(mixed,{taken:{'act_1:2':{mode:'off',name:'[ESCALA] Vendas'}}});
  assert.equal(allTaken.available,0);assert.equal(allTaken.takenSales,1);
  // The panel picks the message from these two counts.
- assert.match(src,/!result\.available\?\(result\.takenSales\?[^:]*já são exceções[\s\S]*?Nenhuma campanha de vendas na leitura de hoje/);
+ assert.match(src,/!result\.available\?\(result\.takenSales\?[^:]*já têm nível próprio[\s\S]*?Nenhuma campanha de vendas na leitura de hoje/);
 });
 
 test('Groups follow the account order and 500+ entries filter quickly',()=>{
@@ -122,8 +122,16 @@ test('Spend uses the reading currency; without a valid code it is a bare number,
  assert.doesNotMatch(src,/currency:'BRL'/);
 });
 
-test('Adding still saves {mode:"off",name} under the same key through edit(); nothing is added on its own',()=>{
- assert.match(src,/const addCampaigns=useCallback\(\(list:any\[\]\)=>\{for\(const r of list\)edit\(x=>\{x\.campaigns\[r\.key\]=\{mode:'off',name:r\.name\};return x;\}\);/);
- assert.equal((src.match(/x\.campaigns\[[^\]]+\]=\{/g)||[]).length,1);
+test('Adding writes {mode,name} under the same key through edit(), with the level the owner picked; nothing is added on its own',async()=>{
+ // The owner picks the level in the list (12/11/2026): no level is preselected and the add button stays disabled without one.
+ assert.match(src,/const addPicked=useCallback\(\(list:any\[\],mode:string\)=>\{edit\(x=>\{x\.campaigns=addCampaigns\(x\.campaigns,list,mode\);return x;\}\);/);
+ assert.match(src,/const \[level,setLevel\]=useState\(''\);/);assert.match(src,/disabled=\{disabled\|\|!n\|\|!level\}/);
+ assert.doesNotMatch(src,/x\.campaigns\[[^\]]+\]=\{/,'campaign levels are written only through the pure helpers');
+ const {addCampaigns}=await import('../lib/autonomy-ui.mjs');
+ const before={'act_1:1':{mode:'auto',name:'já tinha'}};
+ assert.deepEqual(addCampaigns(before,[{key:'act_1:2',name:'nova'},{key:'act_1:1',name:'outra'}],'confirm'),{'act_1:1':{mode:'auto',name:'já tinha'},'act_1:2':{mode:'confirm',name:'nova'}});
+ assert.deepEqual(addCampaigns({}, [{key:'act_1:3',name:'x'}]),{'act_1:3':{mode:'off',name:'x'}},'without a level it stays Desligado');
+ assert.deepEqual(addCampaigns({}, [{key:'act_1:3',name:'x'}],'superpoder'),{'act_1:3':{mode:'off',name:'x'}});
+ assert.deepEqual(before,{'act_1:1':{mode:'auto',name:'já tinha'}},'input untouched');
  assert.ok(!fs.existsSync(new URL('../lib/autonomy-campaign-picker.mjs',import.meta.url)));
 });

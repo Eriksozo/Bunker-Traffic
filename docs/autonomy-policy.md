@@ -164,3 +164,36 @@ Pedido do proprietário: "quero poder ativar quando for pra ele assumir o contro
 - **Visibilidade:** recibos em "Suas ordens" com `by:'bunk'`; no web, registro do que o Bunk fez, o que aguarda o dono e o que foi segurado (com o motivo).
 
 **Registro do dono (09/11/2026, "Sim, registrar"):** o `CLAUDE.md` passou a permitir a ordem do Bunk só no modo Automático, com o interruptor geral ligado, dentro das ações e limites salvos pelo dono. Ligar continua sendo decisão dele, na interface. Ajustes de segurança feitos em 09/11/2026: recibos do notch com "Bunk ·" e a regra da ordem; aviso do Mac e do iPhone com o título "Bunk (autonomia): …" quando a ordem do Bunk é confirmada, falha ou precisa de conferência; a Edge Function `malva-mcp` (v12) e o guarda do Worker recusam o envio de ordem do Bunk se o interruptor geral estiver desligado no instante do despacho. Testes: `tests/autonomy-grant.test.mjs`.
+
+## Ajustes de 12/11/2026: Confirmar avisa, campanhas com nível próprio e ordem que venceu sem envio
+
+Pedido do dono em 12/11/2026 (aba Autonomia confusa; campanhas em Confirmar não o chamaram em 11/11; subidas novas não apareciam na lista). Nada aqui muda o que o Bunk pode enviar: só o Automático envia, dentro das ações e limites salvos.
+
+- **Confirmar passa a pedir de verdade.**
+  - Antes, o executor só gravava uma linha no registro. Não havia aviso, som nem item no notch.
+  - Agora o executor mantém a lista `autonomyAsks` (no próprio executor, fora da central): um pedido por decisão que executaria agora, com a mudança exata.
+  - O pedido fecha sozinho quando a regra deixa de propor, o nível muda ou o interruptor geral é desligado.
+  - A web mostra "Aguardando você" acima das abas. O notch mostra "Bunk pede a você", alerta uma vez por pedido e abre a ordem do dono já preenchida. Quem executa é o dono, com Touch ID (`recordDirectOrder`).
+  - Confirmar continua exigindo o interruptor geral ligado. Desligado, o Bunk não envia nem pede, e a tela diz isso.
+- **Nível do projeto e nível da campanha.**
+  - A campanha com nível próprio passa por cima do projeto; ações e limites são sempre os do projeto. A regra não mudou (`effectiveMode`), a tela passou a dizer.
+  - A seção "Exceções por campanha" virou "Campanhas com nível próprio". Ela marca as iguais ao projeto (sem efeito) e as que ficam acima dele, e permite mudar ou tirar várias de uma vez.
+  - Campanha pausada, arquivada ou fora da leitura de hoje sai da lista principal e fica num grupo recolhido. O nível salvo não é apagado sozinho: tirar é escolha do dono.
+  - Ao adicionar campanhas, o dono escolhe o nível na própria lista. Nenhum nível vem marcado.
+- **Lista de campanhas.**
+  - Usa a leitura ao vivo (a mais nova) por cima da leitura da análise, então a subida de minutos atrás aparece.
+  - Campanha ativa sem entrega aparece como "Programada · começa …" ou "Sem entrega ainda", com filtro próprio.
+  - Leitura de outro dia nunca é mostrada como de hoje.
+- **Salvar.**
+  - O rascunho não se perde ao trocar de aba; fechar a página com rascunho pede confirmação.
+  - A barra de salvar lista o que muda, avisa quando a mudança deixa o Bunk fazer mais e não salva com limite fora da faixa.
+  - Depois de salvar, ela diz se está valendo ou se a autonomia está desligada.
+- **Ordem do Bunk que venceu sem envio** (`unsentAutonomyOrder`).
+  - Antes, uma ordem que vencia em 10 min sem sair (por exemplo, porque o dono salvou uma permissão) deixava a decisão marcada como "já virou ordem" e contava no limite do dia e na pausa de 1h. A campanha ficava sem ação do Bunk até o dia seguinte.
+  - Agora essa ordem não conta. Uma nova só nasce de uma decisão nova da Sombra, com leitura nova da Malva, pelo mesmo claim → prepare → submit único → releitura.
+  - Qualquer ordem com despacho (`submittedAt`, Enviada, Verificação necessária, Confirmada ou aplicada) continua contando e nunca é tentada de novo.
+  - Depois de 3 ordens da mesma decisão vencidas sem envio no dia, o Bunk para de tentar.
+- **Limpeza.** Ordens do Bunk terminadas há mais de uma semana saem da central antes de uma nova (`pruneDirectOrders`), para não baterem no limite de propostas.
+- **Cobertura.** A lista de projetos avaliados pela Sombra traz só os realmente avaliados; um projeto desativado na política privada volta a mostrar o aviso "Bunk não avalia".
+- **Testes.** `tests/autonomy-flow-battery.test.mjs` (130 testes) cobre níveis, o que está valendo, lista de campanhas, rascunho e salvar, pedidos do Confirmar (executor, web e notch), ordem do Automático e o caminho inteiro de uma campanha de teste do dia.
+

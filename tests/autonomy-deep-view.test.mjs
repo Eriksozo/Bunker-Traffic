@@ -213,7 +213,7 @@ test('The executor\'s deep and sim reads use only Durable Object keys: no centra
  assert.deepEqual((await executor({}).control({action:'autonomy',view:'deep',project:'all'})).body,{deep:null},'base not written yet');
  // The plain action is unchanged for current callers.
  const plain=await control({action:'autonomy'});
- assert.deepEqual(Object.keys(plain.body),['shadowProjects','shadowAt','status','log']);
+ assert.deepEqual(Object.keys(plain.body),['shadowProjects','shadowAt','status','log','asks']);
 });
 
 test('storeShadow: hook A runs after autonomyAct, writes the deep base, and a failing or missing runner changes nothing else',async()=>{

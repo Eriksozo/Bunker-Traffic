@@ -1119,3 +1119,22 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Conferido contra a linha da campanha na Malva num dia real: os três batem.
 - **Cache antigo:** registros gravados antes desta mudança continuam válidos, mostram as colunas novas como N/D e se completam na próxima leitura (até 1 por minuto com o detalhe aberto).
 - **Escopo:** só exibição. Nada disso entra em análise, proposta, aprovação ou conferência de ordem. A aba "Dias" do projeto (`lib/daily-series.mjs`) não mudou e o gráfico do web segue com Investimento, Fat. líquido e Lucro.
+
+## Autonomia: Confirmar avisa, tela de permissões refeita e bateria de 130 testes (registro escrito às 2026-11-12 por `date -u`, ver commit)
+
+- **Pedido do dono (12/11/2026):** a aba Autonomia estava confusa (nível do projeto × nível por campanha); as campanhas em Confirmar de 11/11 não o chamaram; as subidas novas e programadas não apareciam na lista; campanha pausada devia sair da lista; e pediu uma bateria de testes de todos os fluxos, sem depender dele.
+- **Causa do 11/11:** o nível Confirmar nunca avisou ninguém. O executor só gravava uma linha em `autonomyLog`; não existia alerta, som nem item no notch. Com o interruptor geral desligado, a decisão nem virava pedido. Não li o estado de produção (sem sessão e sem acesso ao D1 nesta sessão), então não sei se o interruptor estava ligado naquele dia.
+- **Feito:** detalhado em `docs/autonomy-policy.md`, seção "Ajustes de 12/11/2026".
+  - executor: lista `autonomyAsks`, limpeza de ordens antigas antes de uma nova e cobertura só dos projetos avaliados;
+  - `lib/autonomy-grant.mjs`: `unsentAutonomyOrder`, `autonomyAskEntry`, `mergeAutonomyAsks`;
+  - `lib/autonomy-ui.mjs` (novo): regras puras da tela;
+  - web: `app/autonomy/permissions.tsx` refeita, `app/autonomy/asks.tsx` novo, ilha com o que age, pede e observa;
+  - notch: seção "Bunk pede a você", alerta por pedido e contagem no notch fechado.
+- **Mudança de comportamento do Automático:** uma ordem do Bunk que venceu sem nenhum despacho deixa de travar a decisão, o limite do dia e a pausa de 1h (até 3 tentativas por decisão por dia). Ordem com despacho nunca é repetida.
+- **Conferido:** 1676 testes (130 novos em `tests/autonomy-flow-battery.test.mjs`), typecheck, build e autoteste do notch. Três defeitos injetados de propósito foram acusados pela bateria.
+- **Não conferido:**
+  - a tela nova com dados reais (o app local não tem sessão nem projetos; só o topo da aba foi visto renderizado);
+  - um pedido real do Confirmar chegando ao notch em produção;
+  - uma ordem real do Automático depois da mudança.
+- **Do dono, na interface:** salvar as permissões (o John aparecia como "Não salvo" na captura de 12/11) e conferir se o interruptor geral está ligado. Nenhum agente fez nem deve fazer isso por ele.
+

@@ -147,7 +147,8 @@ final class Store: ObservableObject {
     /// Dismissed or snoozed items do not count: the badge only asks for what still needs the owner.
     var attention: Int {
         guard let s = summary else { return 0 }
-        return (approvalsQuiet ? 0 : s.approvals.count) + s.queue.filter { $0.kind == "loss" && !isQuiet($0) }.count
+        // Requests of the level Confirmar count too: the Bunk is waiting for the owner.
+        return (approvalsQuiet ? 0 : s.approvals.count) + s.queue.filter { $0.kind == "loss" && !isQuiet($0) }.count + (s.autonomy?.asksTotal ?? s.autonomy?.asks.count ?? 0)
     }
 
     /// `--render-notch` only: a fictional summary, no network call, no credential.
@@ -322,6 +323,11 @@ final class Store: ObservableObject {
             if !isQuiet(q) { fresh.append(("lo:" + q.id, came ? "Perda mudou desde que você dispensou" : "Perda para revisar", (q.campaign ?? "Campanha") + " · " + Format.money(q.amount), .loss)) }
         }
         if approvalsQuiet { fresh.removeAll { $0.3 == .approval } }
+        // Level Confirmar: the Bunk asks and the owner executes with Touch ID. One alert per request, when it first appears.
+        for a in s.autonomy?.asks ?? [] where !seen.contains("ask:" + a.id) {
+            seen.insert("ask:" + a.id)
+            fresh.append(("ask:" + a.id, "Bunk pede sua confirmação", (a.campaign ?? "Campanha") + " · " + a.changeText + (a.ruleLabel.map { " · " + $0 } ?? ""), .approval))
+        }
         // Pace warnings, once a day per project and kind (runs out before 18:00, or far below pace).
         // The Bunker's day (Boa Vista), not UTC: at 21:00 in Brazil the UTC date flips and the same warning would ring again.
         let day = Format.bunkerDay(s.generatedAt)
@@ -370,6 +376,7 @@ final class Store: ObservableObject {
         s.approvals.items.map { "ap:" + $0.id } + s.activity.recent.map(changeKey) + s.queue.filter { $0.kind == "loss" }.map { "lo:" + $0.id }
             + (s.pace?.byProject ?? []).compactMap { p in p.alert.map { "pace:" + (p.project ?? "") + ":" + $0 + ":" + day } }
             + (s.sales?.recent ?? []).map { "sa:" + $0.at + ":" + String($0.amount) } + (s.orders ?? []).map { "or:" + $0.id + ":" + $0.stage }
+            + (s.autonomy?.asks ?? []).map { "ask:" + $0.id }
     }
     /// Seen alerts stay bounded over days of uptime: past the limit only what the summary still shows is kept
     /// (anything older cannot come back in the summary, so it cannot ring twice).

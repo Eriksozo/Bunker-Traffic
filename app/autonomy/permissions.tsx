@@ -7,10 +7,12 @@
  * The campaign exceptions picker below is moved untouched (tests/autonomy-campaign-picker.test.mjs reads its block). */
 import {memo,useCallback,useDeferredValue,useEffect,useId,useMemo,useRef,useState} from 'react';
 import type {CSSProperties,KeyboardEvent as ReactKeyboardEvent} from 'react';
-import {Archive,Bot,Check,CircleOff,Eye,FingerprintPattern,Pause,Play,Plus,Save,Search,Trash2,Users,X,Zap} from 'lucide-react';
+import {Archive,Bot,Check,CircleOff,Clock,Eye,FingerprintPattern,Pause,Play,Plus,Save,Search,Trash2,Users,X,Zap} from 'lucide-react';
 import {autonomyView,autonomyModes,autonomyActions,autonomyLimits,modeLabels,actionLabels,campaignKey} from '../../lib/autonomy-grant.mjs';
 import {isWarmupCampaign} from '../../lib/campaign-scope.mjs';
 import {simulateGrant} from '../../lib/autonomy-simulate.mjs';
+import {currentLiveSnapshot} from '../../lib/live-display.mjs';
+import {modeCopy,levelOutcome,actionsSentence,exceptionRows,setCampaignModes,removeCampaigns,addCampaigns,pickerReading,deliveryNote,currencyGroups,isMixedCurrency,draftChanges,saveStateView,turnOnSummary} from '../../lib/autonomy-ui.mjs';
 
 // picker-helpers:start
 /* Campaign picker helpers for "Exceções por campanha" (presentation only, 10/11/2026). Pure: no React, no DOM; tested by
@@ -44,10 +46,11 @@ function campaignPickerRows(rows:any){
 }
 const isTaken=(taken:any,key:string)=>!!taken&&(taken instanceof Set?taken.has(key):Object.prototype.hasOwnProperty.call(taken,key));
 /** Search (every term must match name, ID or account; accents and case ignored), status chips (OR between them; none = any),
- * "Com gasto hoje" (spend > 0). Already-added campaigns never appear (takenSales counts the sales ones); warm-up/engagement is
+ * "Com gasto hoje" (spend > 0), "Sem entrega ainda" (entries the panel marked with a delivery note: scheduled or active with nothing
+ * delivered today). Already-added campaigns never appear (takenSales counts the sales ones); warm-up/engagement is
  * counted apart and hidden. Chip counts follow the search, not the chips themselves. */
-function filterCampaignPicker(entries:any[],{query='',active=false,paused=false,inactive=false,withSpend=false,taken=null}:{query?:string;active?:boolean;paused?:boolean;inactive?:boolean;withSpend?:boolean;taken?:any}={}){
- const terms=foldText(query).split(/\s+/).filter(Boolean),counts:Record<'active'|'paused'|'inactive'|'withSpend',number>={active:0,paused:0,inactive:0,withSpend:0},rows:any[]=[];
+function filterCampaignPicker(entries:any[],{query='',active=false,paused=false,inactive=false,withSpend=false,noDelivery=false,taken=null}:{query?:string;active?:boolean;paused?:boolean;inactive?:boolean;withSpend?:boolean;noDelivery?:boolean;taken?:any}={}){
+ const terms=foldText(query).split(/\s+/).filter(Boolean),counts:Record<'active'|'paused'|'inactive'|'withSpend'|'noDelivery',number>={active:0,paused:0,inactive:0,withSpend:0,noDelivery:0},rows:any[]=[];
  const anyStatus=active||paused||inactive;
  let outOfScope=0,available=0,takenSales=0,matched=0;
  for(const e of entries||[]){
@@ -58,8 +61,10 @@ function filterCampaignPicker(entries:any[],{query='',active=false,paused=false,
   matched++;
   if(e.status==='active'||e.status==='paused'||e.status==='inactive')counts[e.status as 'active'|'paused'|'inactive']++;
   if(e.spend>0)counts.withSpend++;
+  if(e.note)counts.noDelivery++;
   if(anyStatus&&!((active&&e.status==='active')||(paused&&e.status==='paused')||(inactive&&e.status==='inactive')))continue;
   if(withSpend&&!(e.spend>0))continue;
+  if(noDelivery&&!e.note)continue;
   rows.push(e);
  }
  return {rows,counts,matched,outOfScope,available,takenSales,terms:terms.length};
@@ -84,7 +89,7 @@ function splitCampaignName(name:any){
 const pickerMoney=(v:number,currency?:string|null)=>currency&&/^[A-Z]{3}$/.test(currency)?v.toLocaleString('pt-BR',{style:'currency',currency,maximumFractionDigits:2}):v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 // picker-helpers:end
 
-export const modeHelp:Record<string,string>={off:'Não mexe e não sugere ação rápida.',shadow:'Só registra o que faria (como hoje).',confirm:'Prepara e avisa; você executa com Touch ID no notch.',auto:'Executa sozinho dentro dos limites abaixo.'};
+export const modeHelp:Record<string,string>=modeCopy;
 export const modeIcon:Record<string,typeof Bot>={off:CircleOff,shadow:Eye,confirm:FingerprintPattern,auto:Zap};
 const numOrNull=(v:string)=>v.trim()===''?null:Number(v.replace(',','.'));
 const fmt=(v:number)=>v.toLocaleString('pt-BR',{maximumFractionDigits:2});
@@ -108,32 +113,41 @@ function permissionSummary(p:any){
 /** Budget in its native currency (code from the reading); without a valid code, a bare number. */
 const budgetMoney=(v:any,currency:any)=>!fin(v)?'N/D':typeof currency==='string'&&/^[A-Z]{3}$/.test(currency)?v.toLocaleString('pt-BR',{style:'currency',currency,maximumFractionDigits:2}):fmt(v);
 
+/** The open draft outlives the panel (it unmounts when the owner opens another view): memory of this page only, never storage. */
+type Draft={base:string;projects:any[]};
+let draftMemory:Draft|null=null;
 /** The draft of the owner's permissions, the single save and the switch (moved from the panel shell, same bodies). */
 export function useAutonomyDraft(state:any,write:(body:any)=>Promise<any>){
  const saved=useMemo(()=>autonomyView(state),[state]),savedKey=JSON.stringify(saved.projects);
- const [draft,setDraft]=useState<{base:string;projects:any[]}|null>(null);
+ const [draft,setDraftState]=useState<Draft|null>(draftMemory);
+ const setDraft=useCallback((next:Draft|null|((prev:Draft|null)=>Draft|null))=>setDraftState(prev=>{const value=typeof next==='function'?next(prev):next;draftMemory=value;return value;}),[]);
+ /** Closing or reloading the page with unsaved permissions asks first. */
+ const open=!!draft;
+ useEffect(()=>{if(!open||typeof window==='undefined')return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[open]);
  const projects=draft?.projects||saved.projects,conflict=!!draft&&draft.base!==savedKey;
  const [error,setError]=useState('');
  const [last,setLast]=useState<'saved'|'failed'|null>(null);
  /** Which button started the write in progress (visual only: picks where the spinner goes; `saving` still gates every control). */
  const [busy,setBusy]=useState<'save'|'on'|'kill'|null>(null);
  /** Stable between renders (same body as before) so each ProjectRow is memoized and only the edited project re-renders. */
- const edit=useCallback((id:string,fn:(p:any)=>any)=>{setLast(null);setDraft(prev=>({base:prev?.base||savedKey,projects:(prev?.projects||saved.projects).map((p:any)=>p.id===id?fn(structuredClone(p)):p)}));},[savedKey,saved.projects]);
+ /** An edit that puts everything back as saved closes the draft (nothing left to save). */
+ const edit=useCallback((id:string,fn:(p:any)=>any)=>{setLast(null);setDraft(prev=>{const base=prev?.base||savedKey,next=(prev?.projects||saved.projects).map((p:any)=>p.id===id?fn(structuredClone(p)):p);return base===savedKey&&JSON.stringify(next)===savedKey?null:{base,projects:next};});},[savedKey,saved.projects,setDraft]);
  const payload=(enabled:boolean)=>({enabled,projects:Object.fromEntries(projects.map((p:any)=>[p.id,{mode:p.mode,actions:p.actions,limits:p.limits,campaigns:p.campaigns}]))});
  async function save(enabled=saved.enabled){
   setError('');if(conflict){setError('As permissões salvas mudaram em outra sessão. Carregue as salvas antes de editar.');return;}
   for(const p of projects){for(const k of ['maxIncreasePct','maxReducePct','budgetCap','ordersPerDay'])if(p.limits[k]!==null&&!Number.isFinite(p.limits[k])){setError(`${p.name}: confira os limites (use só números).`);return;}}
+  const bad=projects.find(hasIssue);if(bad){setError(`${bad.name}: corrija os limites marcados antes de salvar.`);return;}
   setBusy(enabled===saved.enabled?'save':'on');let ok;try{ok=await write({op:'autonomyConfig',config:payload(enabled)});}finally{setBusy(null);}if(ok)setDraft(null);setLast(ok?'saved':'failed');
  }
  async function turnOn(){
-  const auto=projects.filter((p:any)=>p.mode==='auto'||Object.values(p.campaigns).some((c:any)=>c.mode==='auto')).map((p:any)=>p.name);
-  const text=auto.length?`Ligar a autonomia do Bunk?\n\nAutomático em: ${auto.join(', ')}.\nEle vai pausar/ajustar orçamento sozinho dentro dos limites salvos, sempre pelo Malva, uma vez por ordem e com conferência.`:'Ligar a autonomia do Bunk?\n\nNenhum projeto está em Automático: só os projetos em Confirmar vão avisar.';
+  const lines=turnOnSummary({projects});
+  const text=lines.length?`Ligar a autonomia do Bunk?\n\nO que passa a valer:\n${lines.map((l:string)=>`• ${l}`).join('\n')}\n\nCada ordem vai pelo Malva, uma vez, com conferência. Você desliga a qualquer momento.`:'Ligar a autonomia do Bunk?\n\nNenhum projeto ou campanha está em Confirmar ou Automático: ligada assim, o Bunk continua só observando.';
   if(globalThis.confirm(text))await save(true);
  }
  async function kill(){setError('');setBusy('kill');try{await write({op:'autonomyKill'});}finally{setBusy(null);}}
  const savedById=useMemo(()=>Object.fromEntries(saved.projects.map((p:any)=>[p.id,JSON.stringify(p)])),[saved.projects]);
  const changed=draft?projects.filter((p:any)=>savedById[p.id]!==JSON.stringify(p)).length:0;
- return {saved,draft,discard:()=>setDraft(null),projects,conflict,error,last,busy,edit,payload,save,turnOn,kill,savedById,changed};
+ return {saved,draft,discard:()=>{setError('');setDraft(null);},projects,conflict,error,last,busy,edit,payload,save,turnOn,kill,savedById,changed};
 }
 export type DraftControl=ReturnType<typeof useAutonomyDraft>;
 
@@ -143,9 +157,10 @@ export type LimitContext={count:number;max:number|null;currency:string|null;mixe
 export function limitContext(campaigns:any):LimitContext{
  if(!Array.isArray(campaigns))return null;
  const withBudget=campaigns.filter((c:any)=>fin(c?.budget?.dailyBudget)).sort((a:any,b:any)=>b.budget.dailyBudget-a.budget.dailyBudget);
- const currencies=[...new Set(withBudget.map((c:any)=>c.budget.currency??null))] as (string|null)[];
+ const groups=currencyGroups(campaigns),currencies=groups.map((g:any)=>g.currency) as (string|null)[];
  const top=withBudget[0]||null;
- return {count:campaigns.length,max:top?top.budget.dailyBudget:null,currency:top?top.budget.currency??null:null,mixed:currencies.length>1||campaigns.some((c:any)=>c?.guard?.capUse?.mixedCurrency===true),currencies};
+ /** A campaign without a known currency is "moeda N/D", never a second currency. */
+ return {count:campaigns.length,max:top?top.budget.dailyBudget:null,currency:top?top.budget.currency??null:null,mixed:isMixedCurrency(groups)||campaigns.some((c:any)=>c?.guard?.capUse?.mixedCurrency===true),currencies};
 }
 /** "Maior orçamento hoje R$ 600 → +30% = R$ 780 · teto R$ 1.000". */
 export function limitContextLines(limits:any,ctx:LimitContext){
@@ -222,22 +237,32 @@ function SimLine({ctl,projectIds}:{ctl:DraftControl;projectIds:string[]}){
 }
 
 export type ProjectCtx={campaigns:any[]|null;team:any|null;plays:any[]|null}|null;
-/** Permissões: level legend, one row per project (level, actions, limits with context, exceptions), simulator, savebar. */
-export function PermissionsTab({ctl,state,saving,covered,contexts}:{ctl:DraftControl;state:any;saving:boolean;covered:(id:string)=>boolean;contexts:Record<string,ProjectCtx>}){
+/** Permissões: how the levels work, one row per project (level, what is in force, actions, limits, campaigns with their own
+ * level), the simulator and the save bar. `liveItems` is the display-only live reading: it only feeds the campaign list. */
+export function PermissionsTab({ctl,state,saving,covered,contexts,liveItems=null,now=Date.now()}:{ctl:DraftControl;state:any;saving:boolean;covered:(id:string)=>boolean;contexts:Record<string,ProjectCtx>;liveItems?:any[]|null;now?:number}){
  const {projects,draft,conflict,last,busy,changed,savedById,edit}=ctl,saveStatusId=useId();
  const draftAuto=autoNames(projects).length;
  const busySave=saving&&busy==='save';
  const projectIds=useMemo(()=>ctl.saved.projects.map((p:any)=>p.id),[ctl.saved.projects]);
- const pendingText=changed===0?'Rascunho aberto, igual às permissões salvas.':changed===1?'1 projeto com alterações não salvas.':`${changed} projetos com alterações não salvas.`;
- const saveStatus=conflict?{tone:'warn',text:'Rascunho preservado, mas as permissões salvas mudaram em outra sessão.'}:busySave?{tone:'busy',text:'Salvando…'}:draft&&last==='failed'?{tone:'bad',text:`Não foi possível salvar. ${pendingText}`}:draft?{tone:'warn',text:pendingText}:last==='saved'?{tone:'good',text:'Permissões salvas na central.'}:last==='failed'?{tone:'bad',text:'Não foi possível salvar as permissões. Tente de novo.'}:{tone:'info',text:'Sem alterações para salvar.'};
+ const invalid=projects.some(hasIssue);
+ const changes=useMemo(()=>draft?draftChanges(ctl.saved.projects,projects):{lines:[] as string[],raises:false},[draft,ctl.saved.projects,projects]);
+ const saveStatus=saveStateView({draft:!!draft,changed,conflict,busy:busySave,last,error:ctl.error,invalid,enabled:ctl.saved.enabled});
+ const liveById=useMemo(()=>new Map((liveItems||[]).map((i:any)=>[i?.projectId,i])),[liveItems]);
+ const namesKey=JSON.stringify(projects.map((p:any)=>[p.id,p.name]));
+ const names=useMemo(()=>(JSON.parse(namesKey) as [string,string][]).map(([id,name])=>({id,name})),[namesKey]);
  const statusGlyph:Record<string,string>={good:'ds-glyph--good',bad:'ds-glyph--bad',warn:'ds-glyph--warn',info:'ds-glyph--info'};
  return <div className="aut-tab aut-perm">
   <section className="ds-card aut-legend-card" aria-labelledby="aut-legend-title">
-   <span className="ds-eyebrow">Como funcionam os níveis</span><h2 id="aut-legend-title" className="ds-title">O nível é o teto do que o Bunk pode fazer</h2>
-   <p className="aut-master__how">Você escolhe o nível por projeto e as exceções por campanha. Só o <strong>Automático</strong> envia ordens sozinho, e só quando a Sombra executaria agora, o placar da regra permite e tudo cabe nos seus limites. Cada ordem vai pelo Malva, uma vez, com releitura. Mudar qualquer permissão ou desligar cancela as ordens ainda não enviadas. As jogadas aprendidas com a equipe ainda não enviam nada: só observam.</p>
+   <span className="ds-eyebrow">Como funcionam os níveis</span><h2 id="aut-legend-title" className="ds-title">Você escolhe quanto o Bunk pode fazer</h2>
    <div className="aut-legend" role="list" aria-label="Níveis de autonomia">
     {autonomyModes.map(m=>{const Icon=modeIcon[m];return <div key={m} role="listitem" className={`aut-legend__item mode-${m}`}><span className={`ds-badge ${m==='auto'?'ds-badge--accent':'ds-badge--neutral'}`} aria-hidden="true"><Icon size={14}/></span><span className="aut-legend__text"><strong>{modeLabels[m]}</strong><small>{modeHelp[m]}</small></span></div>;})}
    </div>
+   <ul className="aut-rules">
+    <li>O nível do projeto vale para todas as campanhas de vendas dele, inclusive as que você subir depois.</li>
+    <li>Uma campanha com nível próprio passa por cima do nível do projeto. As ações e os limites são sempre os do projeto.</li>
+    <li>Nada vale antes de salvar. Confirmar e Automático só funcionam com a autonomia ligada no interruptor geral.</li>
+   </ul>
+   <details className="aut-more"><summary>Como o Bunk decide e envia</summary><p className="aut-master__how">Só o <strong>Automático</strong> envia ordens sozinho, e só quando a regra executaria agora, o placar da regra permite e tudo cabe nos seus limites. Cada ordem vai pelo Malva, uma vez, com releitura. Mudar qualquer permissão ou desligar cancela as ordens ainda não enviadas. As jogadas aprendidas com a equipe ainda não enviam nada: só observam.</p></details>
   </section>
   <section className="ds-card aut-projects" aria-labelledby="aut-projects-title">
    <header className="aut-projects__head">
@@ -245,13 +270,17 @@ export function PermissionsTab({ctl,state,saving,covered,contexts}:{ctl:DraftCon
     <span className="ds-caption aut-projects__count">{projects.length===1?'1 projeto':`${projects.length} projetos`}{draftAuto?` · ${draftAuto} com Automático`:''}</span>
    </header>
    {!projects.length?<p className="ds-empty aut-projects__empty">Nenhum projeto configurado no Bunker ainda: as permissões aparecem aqui quando houver projeto.</p>:
-    <ul className="ds-list ds-list--divided aut-list">{projects.map((p:any)=><ProjectRow key={p.id} p={p} state={state} covered={covered(p.id)} disabled={saving} dirty={!!draft&&savedById[p.id]!==JSON.stringify(p)} editProject={edit} ctx={contexts[p.id]||null}/>)}</ul>}
+    <ul className="ds-list ds-list--divided aut-list">{projects.map((p:any)=><ProjectRow key={p.id} p={p} state={state} covered={covered(p.id)} disabled={saving} dirty={!!draft&&savedById[p.id]!==JSON.stringify(p)} editProject={edit} ctx={contexts[p.id]||null} enabled={ctl.saved.enabled} liveItem={liveById.get(p.id)||null} minute={Math.floor(now/60000)} names={names}/>)}</ul>}
    <SimLine ctl={ctl} projectIds={projectIds}/>
-   <div className="aut-savebar">
-    <p className={`aut-savebar__status tone-${saveStatus.tone}`} id={saveStatusId} role="status">{saveStatus.tone==='busy'?<span className="ds-spinner" aria-hidden="true"/>:<span className={`ds-glyph ${statusGlyph[saveStatus.tone]}`} aria-hidden="true"/>}<span>{saveStatus.text}</span></p>
+   <div className={`aut-savebar${draft?' is-dirty':''}`}>
+    <div className="aut-savebar__body">
+     <p className={`aut-savebar__status tone-${saveStatus.tone}`} id={saveStatusId} role="status">{saveStatus.tone==='busy'?<span className="ds-spinner" aria-hidden="true"/>:<span className={`ds-glyph ${statusGlyph[saveStatus.tone]}`} aria-hidden="true"/>}<span>{saveStatus.text}</span></p>
+     {!!changes.lines.length&&<ul className="aut-savebar__changes" aria-label="O que muda ao salvar">{changes.lines.slice(0,4).map((t:string,i:number)=><li key={i}>{t}</li>)}{changes.lines.length>4&&<li>e mais {changes.lines.length-4}.</li>}</ul>}
+     {changes.raises&&<p className="ds-hint ds-hint--warn aut-savebar__raise">Esta mudança deixa o Bunk fazer mais do que hoje{ctl.saved.enabled?' e passa a valer assim que você salvar':''}.</p>}
+    </div>
     <div className="aut-savebar__actions">
      {draft&&<button type="button" className="ds-btn ds-btn--ghost" disabled={saving} onClick={ctl.discard}>Descartar alterações</button>}
-     <button type="button" className={`ds-btn ${draft?'ds-btn--primary':''}`} disabled={saving||!draft||conflict} aria-busy={busySave||undefined} aria-describedby={saveStatusId} onClick={()=>ctl.save()}>{busySave?<span className="ds-spinner" aria-hidden="true"/>:<Save size={15} aria-hidden="true"/>} Salvar permissões</button>
+     <button type="button" className={`ds-btn ${saveStatus.canSave?'ds-btn--primary':''}`} disabled={saving||!saveStatus.canSave} aria-busy={busySave||undefined} aria-describedby={saveStatusId} onClick={()=>ctl.save()}>{busySave?<span className="ds-spinner" aria-hidden="true"/>:<Save size={15} aria-hidden="true"/>} Salvar permissões</button>
     </div>
    </div>
   </section>
@@ -266,25 +295,34 @@ function CampaignName({name,className=''}:{name:string;className?:string}){const
 /** Status as dot + glyph + hidden text (never color alone, never a "(PAUSED)" suffix). */
 const statusIcon:Record<string,typeof Play>={active:Play,paused:Pause,inactive:Archive};
 function StatusMark({kind,label}:{kind:string|null;label:string|null}){if(!kind)return null;const Icon=statusIcon[kind]||Archive;return <span className={`aut-status is-${kind}`} title={label||undefined}><span className={`ds-dot ds-dot--sm ${kind==='active'?'ds-dot--good':'ds-dot--neutral'}`} aria-hidden="true"/><Icon size={10} aria-hidden="true"/><span className="ds-sr-only">{label}</span></span>;}
+const outcomePill:Record<string,string>={good:'ds-pill--good',warn:'ds-pill--warn',bad:'ds-pill--bad',neutral:'ds-pill--neutral'};
 
-
-const ProjectRow=memo(function ProjectRow({p,state,covered,disabled,dirty,editProject,ctx}:{p:any;state:any;covered:boolean;disabled:boolean;dirty:boolean;editProject:(id:string,fn:(p:any)=>any)=>void;ctx:ProjectCtx}){
+const ProjectRow=memo(function ProjectRow({p,state,covered,disabled,dirty,editProject,ctx,enabled,liveItem,minute,names}:{p:any;state:any;covered:boolean;disabled:boolean;dirty:boolean;editProject:(id:string,fn:(p:any)=>any)=>void;ctx:ProjectCtx;enabled:boolean;liveItem:any;minute:number;names:{id:string;name:string}[]}){
  const edit=useCallback((fn:(p:any)=>any)=>editProject(p.id,fn),[editProject,p.id]);
  const [open,setOpen]=useState(false);
  const [picking,setPicking]=useState(false);
  const [prefillNotes,setPrefillNotes]=useState<string[]|null>(null);
- /** Today's Meta campaign reading, built only while the row is open (same source as before: latest campaign/today snapshot of the project). */
- const reading=useMemo(()=>{if(!open)return null;const s=(state.snapshots||[]).filter((x:any)=>x.projectId===p.id&&x.level==='campaign'&&x.period==='today').sort((a:any,b:any)=>Date.parse(b.fetchedAt)-Date.parse(a.fetchedAt))[0];return {at:s?.fetchedAt||null,currency:typeof s?.currency==='string'&&/^[A-Z]{3}$/.test(s.currency)?s.currency:null,entries:campaignPickerRows(s?.rows||[])};},[open,state,p.id]);
+ /** Today's Meta campaigns, built only while the row is open: the live reading (newest; it has the campaigns created minutes
+  * ago and the scheduled ones) over today's analysis reading. Display only: it never decides a permission. */
+ const reading=useMemo(()=>{
+  if(!open)return null;
+  const at=minute*60000+59999;
+  const analysis=(state.snapshots||[]).filter((x:any)=>x.projectId===p.id&&x.level==='campaign'&&x.period==='today').sort((a:any,b:any)=>Date.parse(b.fetchedAt)-Date.parse(a.fetchedAt))[0]||null;
+  const r=pickerReading({analysis,live:currentLiveSnapshot(liveItem,p.id,undefined,at),now:at});
+  const rowOf=new Map<string,any>(r.rows.map((row:any)=>[campaignKey(row.adAccountId,row.externalId),row]));
+  return {at:r.at as string|null,source:r.source as string|null,stale:r.stale,currency:r.currency as string|null,entries:campaignPickerRows(r.rows).map((e:any)=>({...e,note:deliveryNote(rowOf.get(e.key),{now:at,timezone:r.timezone||undefined})}))};
+ },[open,state,p.id,liveItem,minute]);
  const entries=reading?.entries||EMPTY_ENTRIES;
- const byKey=useMemo(()=>new Map(entries.map((e:any)=>[e.key,e])),[entries]);
+ const byKey=useMemo(()=>new Map<string,any>(entries.map((e:any)=>[e.key,e])),[entries]);
  const uid=useId(),detailId=`${uid}-detail`,pickerId=`${uid}-picker`,noReadId=`${uid}-noread`,prefillId=`${uid}-prefill`;
  const trigger=useRef<HTMLButtonElement>(null);
  /** Focus goes back to the trigger only when it can take it (it is disabled while saving or without a reading). */
  const closePicker=useCallback(()=>{setPicking(false);requestAnimationFrame(()=>{const t=trigger.current;if(t&&!t.disabled)t.focus();});},[]);
- const addCampaigns=useCallback((list:any[])=>{for(const r of list)edit(x=>{x.campaigns[r.key]={mode:'off',name:r.name};return x;});closePicker();},[edit,closePicker]);
- const exceptions=Object.entries(p.campaigns||{}) as [string,any][];
+ const addPicked=useCallback((list:any[],mode:string)=>{edit(x=>{x.campaigns=addCampaigns(x.campaigns,list,mode);return x;});closePicker();},[edit,closePicker]);
+ const own=useMemo(()=>exceptionRows(p,{known:entries.length>0,byKey},{projects:names}),[p,entries.length,byKey,names]);
  const invalid=hasIssue(p),modeIndex=Math.max(0,autonomyModes.indexOf(p.mode));
- const autoExceptions=exceptions.filter(([,c])=>c.mode==='auto').length;
+ const outcome=levelOutcome({enabled,paused:state?.paused===true,mode:p.mode,actions:p.actions,limits:p.limits,covered});
+ const acting=p.mode==='confirm'||p.mode==='auto';
  /** Read-only context from the executor's deep view: largest budget today, mixed currencies, the team's usual steps. */
  const lctx=useMemo(()=>limitContext(ctx?.campaigns??null),[ctx]);
  const contextLines=limitContextLines(p.limits,lctx);
@@ -292,6 +330,22 @@ const ProjectRow=memo(function ProjectRow({p,state,covered,disabled,dirty,editPr
  const prefill=teamPrefill(p.limits,steps),canPrefill=prefill.changed;
  const prefillReason=!ctx?'Sem leitura do executor para este projeto agora.':!steps.up&&!steps.down?'Ainda não há passos da equipe (N/D).':!canPrefill?'Seus limites já estão iguais ou abaixo do jeito da equipe (nunca preenche acima do atual).':'';
  const limit=(k:string,label:string,unit:string,hint:string,placeholder='Não definido')=>{const id=`${uid}-${k}`,issue=limitIssue(k,p.limits[k]);return <div className="ds-form-row aut-limit"><label className="ds-label" htmlFor={id}>{label}</label><div className="aut-limit__input"><input id={id} className="ds-field" type="number" min="0" step="any" inputMode="decimal" value={p.limits[k]??''} placeholder={placeholder} disabled={disabled} aria-invalid={issue?true:undefined} aria-describedby={`${id}-hint${issue?` ${id}-err`:''}`} onChange={e=>edit(x=>{x.limits[k]=numOrNull(e.target.value);return x;})}/><span className="aut-limit__unit" aria-hidden="true">{unit}</span></div><p className="ds-hint" id={`${id}-hint`}>{hint}</p>{issue&&<p className="ds-hint ds-hint--error" id={`${id}-err`}>{issue}</p>}</div>;};
+ const ownCount=Object.keys(p.campaigns||{}).length;
+ const ownRow=(r:any)=><li className="autonomy-exception" key={r.key}>
+  <StatusMark kind={r.status==='absent'?'inactive':r.status} label={r.statusLabel}/>
+  <span className="aut-exc__main">
+   <CampaignName name={r.name} className="autonomy-exception__name"/>
+   <span className="aut-exc__meta">
+    {r.account&&<span className="ds-truncate" title={`Conta ${r.account}`}>{r.account}</span>}
+    {r.status==='absent'&&<span className="ds-pill ds-pill--neutral">Fora da leitura de hoje</span>}
+    {r.same&&<span className="ds-pill ds-pill--neutral" title="O nível desta campanha repete o do projeto: não muda nada hoje.">Igual ao projeto: sem efeito</span>}
+    {r.above&&<span className="ds-pill ds-pill--warn" title="Esta campanha pode mais do que o nível do projeto.">Acima do projeto</span>}
+    {r.foreign&&<span className="ds-pill ds-pill--neutral" title={`O nome traz a marca [${r.foreign}], mas a campanha está na leitura deste projeto (conta de anúncio compartilhada).`}>Nome do {r.foreign}</span>}
+   </span>
+  </span>
+  <select className="ds-field ds-field--sm" aria-label={`Nível de ${r.name}`} value={r.mode} disabled={disabled} onChange={ev=>{const v=ev.target.value;edit(x=>{x.campaigns=v==='follow'?removeCampaigns(x.campaigns,[r.key]):setCampaignModes(x.campaigns,[r.key],v);return x;});}}>{autonomyModes.map(m=><option key={m} value={m}>{modeLabels[m]}</option>)}<option value="follow">Seguir o projeto ({modeLabels[p.mode]})</option></select>
+  <button type="button" className="ds-btn ds-btn--icon ds-btn--sm" aria-label={`Tirar o nível próprio de ${r.name}`} title="Tirar o nível próprio: volta a seguir o projeto" disabled={disabled} onClick={()=>edit(x=>{x.campaigns=removeCampaigns(x.campaigns,[r.key]);return x;})}><Trash2 size={14} aria-hidden="true"/></button>
+ </li>;
  return <li className={`aut-project autonomy-project mode-${p.mode} ${open?'is-open':''}`}>
   <div className="aut-project__row">
    <button type="button" className="aut-project__toggle" aria-expanded={open} aria-controls={open?detailId:undefined} onClick={()=>{if(open)setPicking(false);setOpen(!open);}}>
@@ -299,12 +353,13 @@ const ProjectRow=memo(function ProjectRow({p,state,covered,disabled,dirty,editPr
     <span className={`ds-monogram ${p.mode==='auto'?'ds-monogram--accent':'ds-monogram--tag'}`} aria-hidden="true">{String(p.name||p.id).trim().charAt(0)}</span>
     <span className="aut-project__main">
      <span className="aut-project__name"><span className="ds-truncate" title={p.name}>{p.name}</span>
-      {dirty&&<span className="ds-pill ds-pill--warn"><span className="ds-glyph ds-glyph--warn" aria-hidden="true"/>Não salvo</span>}
+      {dirty?<span className="ds-pill ds-pill--warn" title="Esta alteração só vale depois de salvar."><span className="ds-glyph ds-glyph--warn" aria-hidden="true"/>Não salvo: ainda não vale</span>
+       :<span className={`ds-pill ${outcomePill[outcome.tone]}`} title={outcome.reasons.join(' ')||undefined}>{outcome.label}</span>}
       {invalid&&<span className="ds-pill ds-pill--bad"><span className="ds-glyph ds-glyph--bad" aria-hidden="true"/>Limite fora da faixa</span>}
-      {!covered&&<span className="ds-pill ds-pill--bad" title="A Sombra não avalia este projeto."><span className="ds-glyph ds-glyph--bad" aria-hidden="true"/>Sem Sombra</span>}
-      {lctx?.mixed&&<span className="ds-pill ds-pill--warn" title="Campanhas em moedas diferentes: o teto único é ambíguo."><span className="ds-glyph ds-glyph--warn" aria-hidden="true"/>Moedas mistas</span>}
+      {!covered&&<span className="ds-pill ds-pill--bad" title="O Bunk não avalia este projeto: sem regras configuradas para ele."><span className="ds-glyph ds-glyph--bad" aria-hidden="true"/>Bunk não avalia</span>}
+      {lctx?.mixed&&<span className="ds-pill ds-pill--warn" title="Campanhas em moedas diferentes: o teto único vale na moeda de cada campanha."><span className="ds-glyph ds-glyph--warn" aria-hidden="true"/>Teto em 2 moedas</span>}
      </span>
-     <span className="aut-project__sub">{permissionSummary(p)}{exceptions.length?` · ${exceptions.length===1?'1 exceção':`${exceptions.length} exceções`}${autoExceptions?` (${autoExceptions} em Automático)`:''}`:''}</span>
+     <span className="aut-project__sub">{permissionSummary(p)}{ownCount?` · ${plural(ownCount,'campanha','campanhas')} com nível próprio${own.above.length?` (${own.above.length} acima do projeto)`:''}`:''}</span>
     </span>
    </button>
    <div className={`ds-segmented ds-segmented--sliding aut-levels ${p.mode==='auto'?'is-auto':''}`} role="radiogroup" aria-label={`Nível de ${p.name}`} style={{'--ds-seg-count':autonomyModes.length,'--ds-seg-index':modeIndex} as CSSProperties}>
@@ -312,11 +367,16 @@ const ProjectRow=memo(function ProjectRow({p,state,covered,disabled,dirty,editPr
    </div>
   </div>
   {open&&<div className="aut-detail" id={detailId} role="region" aria-label={`Permissões de ${p.name}`}>
-   {p.mode==='auto'&&<div className="ds-banner ds-banner--accent"><div className="ds-banner__body"><strong>Automático: executa sozinho dentro destes limites.</strong><p>Só as ações ligadas abaixo, sem pedir sua confirmação, e só com a autonomia ligada.</p></div></div>}
-   {!covered&&<div className="ds-banner ds-banner--bad"><div className="ds-banner__body"><strong>A Sombra não avalia este projeto.</strong><p>Sem limiares na política privada, o Bunk não decide nada aqui, em nenhum nível.</p></div></div>}
-   <div className="aut-detail__grid">
+   <p className="aut-detail__level"><strong>{modeLabels[p.mode]}.</strong> {modeHelp[p.mode]}</p>
+   {acting&&outcome.inForce&&p.mode==='auto'&&<div className="ds-banner ds-banner--accent"><div className="ds-banner__body"><strong>Automático: executa sozinho dentro destes limites.</strong><p>{actionsSentence(p.actions,p.limits)}</p></div></div>}
+   {acting&&outcome.inForce&&p.mode==='confirm'&&<div className="ds-banner ds-banner--accent"><div className="ds-banner__body"><strong>Confirmar: o Bunk pede e você executa.</strong><p>O pedido aparece em “Aguardando você”, aqui e no notch, com aviso. Nada é enviado sem o seu Touch ID.</p></div></div>}
+   {acting&&!outcome.inForce&&<div className="ds-banner ds-banner--warn"><div className="ds-banner__body"><strong>{modeLabels[p.mode]} não está valendo agora.</strong><p>{outcome.reasons.join(' ')}{!enabled?(p.mode==='confirm'?' Desligada, o Bunk nem pede: só observa.':' Desligada, o Bunk não envia nada.'):''}</p></div></div>}
+   {!covered&&<div className="ds-banner ds-banner--bad"><div className="ds-banner__body"><strong>O Bunk não avalia este projeto.</strong><p>Sem limiares na política privada, o Bunk não decide nada aqui, em nenhum nível.</p></div></div>}
+   {own.above.length>0&&<div className="ds-banner ds-banner--warn"><div className="ds-banner__body"><strong>{plural(own.above.length,'campanha fica','campanhas ficam')} acima do nível do projeto.</strong><p>Elas têm nível próprio e continuam nele mesmo com o projeto em {modeLabels[p.mode]}.</p></div><div className="ds-banner__actions"><button type="button" className="ds-btn ds-btn--sm" disabled={disabled} onClick={()=>edit(x=>{x.campaigns=removeCampaigns(x.campaigns,own.above);return x;})}>Trazer para o nível do projeto</button></div></div>}
+   <div className={`aut-detail__grid${acting?'':' is-idle'}`}>
     <div className="aut-block">
      <h3 className="ds-eyebrow">O que ele pode fazer</h3>
+     {!acting&&<p className="ds-hint aut-block__lead">Ações e limites só valem em Confirmar e Automático (do projeto ou de uma campanha com nível próprio).</p>}
      <div className="aut-actions">{autonomyActions.map(a=>{const noRule=a==='activate',lock=noRule&&!p.actions[a],cap=`${uid}-act-${a}`;return <label className="ds-switch-row" key={a}><span className="aut-actions__text"><span className="ds-body-strong">{actionLabels[a]}</span>{noRule&&<small className="ds-caption" id={cap}>Sem regra ainda: nada é reativado sozinho.</small>}</span><input type="checkbox" role="switch" className="ds-switch" checked={!!p.actions[a]} disabled={disabled||lock} aria-describedby={noRule?cap:undefined} title={lock?'Sem regra ainda':undefined} onChange={e=>edit(x=>{x.actions[a]=e.target.checked;return x;})}/></label>;})}</div>
     </div>
     <div className="aut-block">
@@ -339,20 +399,31 @@ const ProjectRow=memo(function ProjectRow({p,state,covered,disabled,dirty,editPr
    </div>
    <div className="aut-block aut-exc">
     <div className="aut-exc__head">
-     <h3 className="ds-eyebrow">Exceções por campanha</h3>
+     <h3 className="ds-eyebrow">Campanhas com nível próprio</h3>
      <button ref={trigger} type="button" className="ds-btn ds-btn--ghost ds-btn--sm" aria-expanded={picking} aria-controls={picking?pickerId:undefined} aria-describedby={!entries.length?noReadId:undefined} disabled={disabled||!entries.length} onClick={()=>picking?closePicker():setPicking(true)}><Plus size={14} aria-hidden="true"/>Adicionar campanha</button>
     </div>
-    {!entries.length&&<p className="ds-empty ds-empty--waiting" id={noReadId}>Sem leitura de hoje das campanhas. A lista para escolher aparece quando a leitura de hoje chegar.</p>}
-    {picking&&!!entries.length&&<CampaignPicker id={pickerId} entries={entries} taken={p.campaigns||EMPTY_CAMPAIGNS} readAt={reading?.at||null} currency={reading?.currency||null} disabled={disabled} onAdd={addCampaigns} onClose={closePicker}/>}
-    {!exceptions.length&&<p className="ds-empty">Nenhuma. Todas as campanhas de vendas Meta do projeto seguem o nível acima (aquecimento/engajamento ficam sempre de fora).</p>}
-    {!!exceptions.length&&<ul className="ds-list ds-list--divided aut-exceptions">{exceptions.map(([key,c])=>{const e:any=byKey.get(key);return <li className="autonomy-exception" key={key}><StatusMark kind={e?.status||null} label={e?.statusLabel||null}/><CampaignName name={c.name||key} className="autonomy-exception__name"/><select className="ds-field ds-field--sm" aria-label={`Nível de ${c.name||key}`} value={c.mode} disabled={disabled} onChange={ev=>edit(x=>{x.campaigns[key].mode=ev.target.value;return x;})}>{autonomyModes.map(m=><option key={m} value={m}>{modeLabels[m]}</option>)}</select><button type="button" className="ds-btn ds-btn--icon ds-btn--sm" aria-label={`Remover exceção ${c.name||key}`} title="Remover exceção" disabled={disabled} onClick={()=>edit(x=>{delete x.campaigns[key];return x;})}><Trash2 size={14} aria-hidden="true"/></button></li>;})}</ul>}
+    <p className="ds-hint aut-block__lead">O nível da campanha passa por cima do nível do projeto ({modeLabels[p.mode]}). As ações e os limites são sempre os do projeto. Campanha pausada sai desta lista sozinha.</p>
+    {!entries.length&&<p className="ds-empty ds-empty--waiting" id={noReadId}>{reading?.stale?'A última leitura das campanhas é de outro dia. A lista para escolher aparece quando a leitura de hoje chegar.':'Sem leitura de hoje das campanhas. A lista para escolher aparece quando a leitura de hoje chegar.'}</p>}
+    {picking&&!!entries.length&&<CampaignPicker id={pickerId} entries={entries} taken={p.campaigns||EMPTY_CAMPAIGNS} readAt={reading?.at||null} live={reading?.source==='live'} currency={reading?.currency||null} projectMode={p.mode} disabled={disabled} onAdd={addPicked} onClose={closePicker}/>}
+    {!own.total&&<p className="ds-empty">Nenhuma. Todas as campanhas de vendas Meta do projeto seguem o nível do projeto ({modeLabels[p.mode]}), inclusive as novas. Use isto só para uma campanha que deve ficar diferente (aquecimento/engajamento ficam sempre de fora).</p>}
+    {own.total>0&&(own.live.length>1||own.same.length>0)&&<div className="aut-exc__tools">
+     {own.live.length>1&&<label className="aut-exc__bulk"><span>Mudar {own.known?`as ${own.live.length} ativas`:`as ${own.live.length}`} para</span><select className="ds-field ds-field--sm" value="" disabled={disabled} aria-label="Mudar o nível de todas as campanhas da lista" onChange={ev=>{const v=ev.target.value;if(!v)return;edit(x=>{x.campaigns=setCampaignModes(x.campaigns,own.live.map((r:any)=>r.key),v);return x;});}}><option value="">Escolher nível…</option>{autonomyModes.map(m=><option key={m} value={m}>{modeLabels[m]}</option>)}</select></label>}
+     {own.same.length>0&&<button type="button" className="ds-btn ds-btn--ghost ds-btn--sm" disabled={disabled} title="Elas repetem o nível do projeto: tirar não muda nada hoje." onClick={()=>edit(x=>{x.campaigns=removeCampaigns(x.campaigns,own.same);return x;})}><Trash2 size={14} aria-hidden="true"/>Tirar {own.same.length===1?'1 igual':`${own.same.length} iguais`} ao projeto</button>}
+    </div>}
+    {!!own.live.length&&<ul className="ds-list ds-list--divided aut-exceptions">{own.live.map(ownRow)}</ul>}
+    {own.total>0&&!own.known&&<p className="ds-hint">Sem leitura de hoje: não dá para separar as pausadas agora.</p>}
+    {!!own.parked.length&&<details className="aut-exc__parked">
+     <summary>{plural(own.parked.length,'pausada ou fora da leitura de hoje','pausadas ou fora da leitura de hoje')}</summary>
+     <div className="aut-exc__parked-head"><p className="ds-hint">Saíram da lista porque não estão rodando. O nível fica guardado e volta a valer se a campanha for reativada.</p><button type="button" className="ds-btn ds-btn--ghost ds-btn--sm" disabled={disabled} onClick={()=>edit(x=>{x.campaigns=removeCampaigns(x.campaigns,own.parked.map((r:any)=>r.key));return x;})}><Trash2 size={14} aria-hidden="true"/>Tirar {own.parked.length===1?'esta':`as ${own.parked.length}`}</button></div>
+     <ul className="ds-list ds-list--divided aut-exceptions">{own.parked.map(ownRow)}</ul>
+    </details>}
    </div>
   </div>}
  </li>;
 });
 
-type PickerChips={active:boolean;paused:boolean;inactive:boolean;withSpend:boolean};
-const NO_CHIPS:PickerChips={active:false,paused:false,inactive:false,withSpend:false};
+type PickerChips={active:boolean;paused:boolean;inactive:boolean;withSpend:boolean;noDelivery:boolean};
+const NO_CHIPS:PickerChips={active:false,paused:false,inactive:false,withSpend:false,noDelivery:false};
 
 /** One option row. Memoized with a stable onPick: an arrow move or a toggle re-renders only the 1–2 rows that changed. */
 const PickerOption=memo(function PickerOption({entry,optionId,active,selected,currency,onPick}:{entry:any;optionId:string;active:boolean;selected:boolean;currency:string|null;onPick:(key:string)=>void}){
@@ -360,15 +431,18 @@ const PickerOption=memo(function PickerOption({entry,optionId,active,selected,cu
   <span className="aut-check" aria-hidden="true">{selected&&<Check size={12}/>}</span>
   <StatusMark kind={entry.status} label={entry.statusLabel}/>
   <CampaignName name={entry.name}/>
+  {entry.note&&<span className={`ds-pill ${entry.note.kind==='scheduled'?'ds-pill--accent':'ds-pill--neutral'} aut-pick__note`}>{entry.note.kind==='scheduled'&&<Clock size={11} aria-hidden="true"/>}{entry.note.label}</span>}
   {entry.spend>0&&<span className="aut-pick__spend" title={currency?'Gasto de hoje':'Gasto de hoje (moeda N/D)'}>{pickerMoney(entry.spend,currency)}</span>}
  </div>;
 });
 
 /** Inline picker: search, status/spend chips with counts, results grouped by ad account (listbox, several at once),
- * at most pickerPageSize per page. Adding hands the chosen entries back; the row saves each one as {mode:'off',name}. */
-const CampaignPicker=memo(function CampaignPicker({id,entries,taken,readAt,currency,disabled,onAdd,onClose}:{id:string;entries:any[];taken:Record<string,any>;readAt:string|null;currency:string|null;disabled:boolean;onAdd:(list:any[])=>void;onClose:()=>void}){
+ * at most pickerPageSize per page. The owner picks the level for the chosen campaigns here (nothing is preselected);
+ * adding hands the entries and that level back, and the row writes them to the draft as {mode,name}. */
+const CampaignPicker=memo(function CampaignPicker({id,entries,taken,readAt,live,currency,projectMode,disabled,onAdd,onClose}:{id:string;entries:any[];taken:Record<string,any>;readAt:string|null;live:boolean;currency:string|null;projectMode:string;disabled:boolean;onAdd:(list:any[],mode:string)=>void;onClose:()=>void}){
  const uid=useId(),search=useRef<HTMLInputElement>(null),list=useRef<HTMLDivElement>(null);
- const hasStatus=useMemo(()=>entries.some((e:any)=>e.status),[entries]),hasInactive=useMemo(()=>entries.some((e:any)=>e.status==='inactive'),[entries]),hasSpend=useMemo(()=>entries.some((e:any)=>e.spend!==null),[entries]);
+ const hasStatus=useMemo(()=>entries.some((e:any)=>e.status),[entries]),hasInactive=useMemo(()=>entries.some((e:any)=>e.status==='inactive'),[entries]),hasSpend=useMemo(()=>entries.some((e:any)=>e.spend!==null),[entries]),hasNotes=useMemo(()=>entries.some((e:any)=>e.note),[entries]);
+ const [level,setLevel]=useState('');
  const [query,setQueryState]=useState('');const q=useDeferredValue(query);
  const [chips,setChipsState]=useState<PickerChips>({...NO_CHIPS,active:hasStatus});
  const [selected,setSelected]=useState<ReadonlySet<string>>(()=>new Set());
@@ -408,30 +482,31 @@ const CampaignPicker=memo(function CampaignPicker({id,entries,taken,readAt,curre
    {g.rows.map((e:any)=>{const i=indexOf.get(e.key) as number;return <PickerOption key={e.key} entry={e} optionId={`${uid}-o${i}`} active={i===activeIndex} selected={selected.has(e.key)} currency={currency} onPick={onPick}/>;})}
   </div>;}),[groups,indexOf,activeIndex,selected,currency,onPick,uid]);
  const chip=(k:keyof PickerChips,label:string,n:number)=><button type="button" className="ds-chip ds-chip--neutral ds-chip--outlined aut-pick__chip" aria-pressed={chips[k]} onClick={()=>setChips(c=>({...c,[k]:!c[k]}))}>{chips[k]&&<Check aria-hidden="true"/>}{label}<span className="aut-pick__count">{n.toLocaleString('pt-BR')}</span></button>;
- const filtered=chips.active||chips.paused||chips.inactive||chips.withSpend,rest=result.rows.length-visible.length,n=chosen.length;
+ const filtered=chips.active||chips.paused||chips.inactive||chips.withSpend||chips.noDelivery,rest=result.rows.length-visible.length,n=chosen.length;
  const time=readAt?new Date(readAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):null;
  const countText=result.rows.length?plural(result.rows.length,'campanha','campanhas'):'Nenhuma campanha encontrada';
  /** Screen readers hear only the short count, once typing settles; the reading time and the scope note stay plain text. */
  const [announce,setAnnounce]=useState('');
  useEffect(()=>{const t=setTimeout(()=>setAnnounce(countText),600);return()=>clearTimeout(t);},[countText]);
- return <div className="ds-card ds-card--flush aut-pick" id={id} role="group" aria-label="Escolher campanhas para exceção" onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();onClose();}}}>
+ return <div className="ds-card ds-card--flush aut-pick" id={id} role="group" aria-label="Escolher campanhas para dar um nível próprio" onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();onClose();}}}>
   <div className="aut-pick__top">
    <div className="aut-pick__search" role="search">
     <Search size={14} aria-hidden="true" className="aut-pick__search-icon"/>
     <input ref={search} type="search" className="ds-field ds-field--sm" placeholder="Buscar por nome ou ID" aria-label="Buscar campanha por nome ou ID" aria-controls={result.rows.length?`${uid}-list`:undefined} autoComplete="off" spellCheck={false} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={onSearchKey}/>
     {query&&<button type="button" className="ds-btn ds-btn--icon ds-btn--sm aut-pick__clear" aria-label="Limpar busca" title="Limpar busca" onClick={()=>{setQuery('');search.current?.focus();}}><X size={14} aria-hidden="true"/></button>}
    </div>
-   {(hasStatus||hasSpend)&&<div className="aut-pick__chips" role="group" aria-label="Filtros">
+   {(hasStatus||hasSpend||hasNotes)&&<div className="aut-pick__chips" role="group" aria-label="Filtros">
     {hasStatus&&chip('active','Ativas',result.counts.active)}
     {hasStatus&&chip('paused','Pausadas',result.counts.paused)}
     {hasInactive&&chip('inactive','Inativas',result.counts.inactive)}
     {hasSpend&&chip('withSpend','Com gasto hoje',result.counts.withSpend)}
+    {hasNotes&&chip('noDelivery','Programadas ou sem entrega',result.counts.noDelivery)}
    </div>}
-   <p className="aut-pick__meta"><span>{countText}</span>{rest>0?` · mostrando ${visible.length.toLocaleString('pt-BR')}`:''}{time?` · leitura de hoje às ${time}`:''}{result.outOfScope?<span className="aut-pick__scope" title="O Bunk não dá ordens de vendas em campanhas de aquecimento ou engajamento, em nenhum nível."> · {result.outOfScope.toLocaleString('pt-BR')} fora do escopo (aquecimento/engajamento)</span>:null}</p>
+   <p className="aut-pick__meta"><span>{countText}</span>{rest>0?` · mostrando ${visible.length.toLocaleString('pt-BR')}`:''}{time?` · ${live?'leitura ao vivo':'leitura da análise'} de hoje às ${time}`:''}{result.outOfScope?<span className="aut-pick__scope" title="O Bunk não dá ordens de vendas em campanhas de aquecimento ou engajamento, em nenhum nível."> · {result.outOfScope.toLocaleString('pt-BR')} fora do escopo (aquecimento/engajamento)</span>:null}</p>
    <span className="ds-sr-only" role="status">{announce}</span>
   </div>
   {!result.rows.length?<div className="aut-pick__empty">
-    {!result.available?(result.takenSales?<p className="ds-empty ds-empty--clear">Todas as campanhas de vendas da leitura de hoje já são exceções deste projeto.</p>
+    {!result.available?(result.takenSales?<p className="ds-empty ds-empty--clear">Todas as campanhas de vendas da leitura de hoje já têm nível próprio neste projeto.</p>
      :<p className="ds-empty">Nenhuma campanha de vendas na leitura de hoje (só aquecimento/engajamento, que ficam sempre de fora).</p>)
     :query.trim()?<p className="ds-empty">Nenhuma campanha encontrada para “{query.trim()}”{filtered?' com os filtros marcados':''}. Confira a grafia ou busque pelo ID.</p>
     :<p className="ds-empty">Nenhuma campanha com os filtros marcados.</p>}
@@ -444,8 +519,9 @@ const CampaignPicker=memo(function CampaignPicker({id,entries,taken,readAt,curre
   <div className="aut-pick__foot">
    <p className="aut-pick__sel" aria-live="polite">{n?plural(n,'selecionada','selecionadas'):'Marque uma ou mais campanhas.'}{n?<> <button type="button" className="aut-pick__link" onClick={()=>setSelected(new Set())}>Limpar seleção</button></>:null}</p>
    <div className="aut-pick__foot-actions">
+    <label className="aut-pick__level"><span>Nível das escolhidas</span><select className="ds-field ds-field--sm" value={level} disabled={disabled} onChange={e=>setLevel(e.target.value)}><option value="">Escolher nível…</option>{autonomyModes.map(m=><option key={m} value={m}>{modeLabels[m]}{m===projectMode?' (igual ao projeto)':''}</option>)}</select></label>
     <button type="button" className="ds-btn ds-btn--ghost ds-btn--sm" onClick={onClose}>Cancelar</button>
-    <button type="button" className="ds-btn ds-btn--primary ds-btn--sm" disabled={disabled||!n} title={!n?'Marque ao menos uma campanha.':undefined} onClick={()=>onAdd(chosen)}>{n===1?'Adicionar 1 (começa Desligado)':n?`Adicionar ${n.toLocaleString('pt-BR')} (começam Desligado)`:'Adicionar (começam Desligado)'}</button>
+    <button type="button" className="ds-btn ds-btn--primary ds-btn--sm" disabled={disabled||!n||!level} title={!n?'Marque ao menos uma campanha.':!level?'Escolha o nível das campanhas marcadas.':undefined} onClick={()=>onAdd(chosen,level)}>{!n?'Adicionar':`Adicionar ${n.toLocaleString('pt-BR')}${level?` em ${modeLabels[level]}`:''}`}</button>
    </div>
   </div>
  </div>;

@@ -21,7 +21,7 @@ test('Meta spend, clicks and budget overlay the Malva row; ratios follow the Mal
  assert.equal(out.cpm,100);assert.equal(out.ctr,0.02);assert.equal(out.cpc,5);assert.equal(out.costPerCheckout,37.5);
  assert.deepEqual([out.checkouts,out.orders,out.revenueNet],[4,2,270],'IC, orders and revenue are the Malva\'s');
  assert.equal(out.dailyBudget,150,'minor units of USD');
- assert.deepEqual(out.metaLive,{at:iso(now),status:false,budget:true,spend:true,checkouts:9,purchases:3},'pixel IC and purchases kept apart');
+ assert.deepEqual(out.metaLive,{at:iso(now),status:false,budget:true,spend:true,checkouts:9,purchases:3,startTime:null},'pixel IC and purchases kept apart');
 });
 const round4=n=>Math.round(n*10000)/10000;
 

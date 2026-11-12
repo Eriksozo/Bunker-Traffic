@@ -14,13 +14,15 @@ import {LearningTab} from './autonomy/learning';
 import {ScoreTab} from './autonomy/score';
 import {PermissionsTab,useAutonomyDraft,type ProjectCtx} from './autonomy/permissions';
 import {LogTab,type LogEntry} from './autonomy/log';
+import {AsksCard} from './autonomy/asks';
+import {openAsks} from '../lib/autonomy-ui.mjs';
 import {CampaignDrawer} from './autonomy/drawer';
 import type {CampaignRef} from './autonomy/components';
 import './autonomy-panel.css';
 
 export const cockpitTabs=[['agora','Agora'],['aprendizado','Aprendizado'],['placar','Placar'],['permissoes','Permissões'],['registro','Registro']] as const;
 type Tab=typeof cockpitTabs[number][0];
-type Remote={log:LogEntry[];shadowProjects:string[]|null;status:any};
+type Remote={log:LogEntry[];shadowProjects:string[]|null;status:any;asks:any[]|null};
 type DeepState={key:string;data:any|null;error:string|null;loading:boolean};
 
 /** The deep read model for the chosen project (or all), every 30 s while the page is visible. A 503 ("em preparação") or a
@@ -42,14 +44,14 @@ function useDeepView(project:string):DeepState{
  return s.key===project?s:{key:project,data:null,error:null,loading:true};
 }
 
-export default function AutonomyPanel({state,write,saving}:any){
+export default function AutonomyPanel({state,write,saving,liveItems=null,liveNow}:any){
  const ctl=useAutonomyDraft(state,write);
  const [tab,setTab]=useState<Tab>('agora');
  const [filter,setFilter]=useState('all');
  const [open,setOpen]=useState<CampaignRef|null>(null);
  const [now,setNow]=useState(()=>Date.now());
  const [remote,setRemote]=useState<Remote|null>(null);
- useEffect(()=>{let alive=true;const load=()=>fetch('/api/autonomy',{cache:'no-store'}).then(r=>r.ok?r.json():null).then((d:any)=>{if(alive&&d)setRemote({log:d.log||[],shadowProjects:d.shadowProjects??null,status:d.status||null});}).catch(()=>{});load();const t=setInterval(()=>{load();setNow(Date.now());},30000);return()=>{alive=false;clearInterval(t);};},[]);
+ useEffect(()=>{let alive=true;const load=()=>fetch('/api/autonomy',{cache:'no-store'}).then(r=>r.ok?r.json():null).then((d:any)=>{if(alive&&d)setRemote({log:d.log||[],shadowProjects:d.shadowProjects??null,status:d.status||null,asks:Array.isArray(d.asks)?d.asks:null});}).catch(()=>{});load();const t=setInterval(()=>{load();setNow(Date.now());},30000);return()=>{alive=false;clearInterval(t);};},[]);
  /** A project removed from the config falls back to all. */
  const projectIds=ctl.saved.projects.map((p:any)=>p.id);
  const scope=filter==='all'||projectIds.includes(filter)?filter:'all';
@@ -58,6 +60,8 @@ export default function AutonomyPanel({state,write,saving}:any){
  const covered=useCallback((id:string)=>!remote?.shadowProjects||remote.shadowProjects.includes(id),[remote]);
  const contexts=useMemo(()=>Object.fromEntries(Object.entries<any>(deep.data?.projects||{}).map(([id,p])=>[id,{campaigns:p?.now?.campaigns??null,team:p?.team??null,plays:p?.playbook?.plays??null} as ProjectCtx])),[deep.data]);
  const showProject=scope==='all'&&ctl.saved.projects.length>1;
+ /** Open requests of the level Confirmar: shown above every tab, so a request is never hidden behind one. */
+ const asks=useMemo(()=>openAsks(remote,{enabled:ctl.saved.enabled,now,project:scope}),[remote,ctl.saved.enabled,now,scope]);
  const tabRefs=useRef<Record<string,HTMLButtonElement|null>>({});
  function onTabKey(e:ReactKeyboardEvent<HTMLDivElement>){
   const i=cockpitTabs.findIndex(([k])=>k===tab),n=cockpitTabs.length;
@@ -70,6 +74,7 @@ export default function AutonomyPanel({state,write,saving}:any){
   {ctl.conflict&&<div className="ds-banner ds-banner--warn" role="status"><div className="ds-banner__body"><strong>As permissões salvas mudaram em outra sessão.</strong><p>Seu rascunho foi preservado. Carregue as salvas antes de editar de novo.</p></div><div className="ds-banner__actions"><button type="button" className="ds-btn ds-btn--sm" onClick={ctl.discard}>Usar as salvas</button></div></div>}
   {ctl.error&&<div className="ds-banner ds-banner--bad" role="alert"><div className="ds-banner__body"><strong>{ctl.error}</strong></div></div>}
   {remote?.status&&!remote.status.ok&&<p className="ds-hint ds-hint--error">Última passada da autonomia com falha: {remote.status.error}</p>}
+  <AsksCard asks={asks as any} showProject={showProject} onOpen={setOpen}/>
   <nav className="ds-tabs ds-tabs--underline aut-tabs" role="tablist" aria-label="Autonomia do Bunk" onKeyDown={onTabKey}>
    {cockpitTabs.map(([k,l])=><button key={k} ref={el=>{tabRefs.current[k]=el;}} type="button" role="tab" id={`aut-tab-${k}`} aria-selected={tab===k} aria-controls={tab===k?`aut-panel-${k}`:undefined} tabIndex={tab===k?0:-1} onClick={()=>setTab(k)}>{l}{k==='permissoes'&&ctl.draft?<span className="aut-tabs__dot" title="Alterações não salvas"><span className="ds-sr-only"> (alterações não salvas)</span></span>:null}</button>)}
   </nav>
@@ -77,7 +82,7 @@ export default function AutonomyPanel({state,write,saving}:any){
    {tab==='agora'&&<NowTab deep={deep.data} loading={loading} fallbackOrders={orders} showProject={showProject} onOpen={setOpen}/>}
    {tab==='aprendizado'&&<LearningTab deep={deep.data} loading={loading} showProject={showProject} onOpen={setOpen}/>}
    {tab==='placar'&&<ScoreTab deep={deep.data} loading={loading} showProject={showProject} onOpen={setOpen}/>}
-   {tab==='permissoes'&&<PermissionsTab ctl={ctl} state={state} saving={saving} covered={covered} contexts={contexts}/>}
+   {tab==='permissoes'&&<PermissionsTab ctl={ctl} state={state} saving={saving} covered={covered} contexts={contexts} liveItems={liveItems} now={liveNow??now}/>}
    {tab==='registro'&&<LogTab log={remote?remote.log:null} loading={!remote} filter={scope} showProject={showProject} onOpen={setOpen}/>}
   </div>
   <CampaignDrawer target={open} deep={deep.data} log={remote?.log||[]} saved={ctl.saved} onClose={()=>setOpen(null)}/>

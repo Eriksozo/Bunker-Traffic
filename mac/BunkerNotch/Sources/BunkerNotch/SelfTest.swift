@@ -173,6 +173,15 @@ enum SelfTest {
         check(a.mode(projectId: "p2", adAccountId: "a", objectId: "sh2") == "shadow" && a.mode(projectId: "p2", adAccountId: nil, objectId: nil) == "off", #line)
         check(a.mode(projectId: "p9", adAccountId: "a", objectId: "1") == nil && a.mode(projectId: nil, adAccountId: "a", objectId: "off1") == nil, #line)
         // ShadowActionButton: hidden only in Desligado; "Fazer eu mesmo" in Sombra/Confirmar/Automático; unknown keeps today's label.
+        // Level Confirmar: open requests decode, alert once and open the owner's order prefilled; a broken one is skipped.
+        let asking = summary(#","autonomy":{"enabled":true,"projects":[],"campaigns":[],"asksTotal":3,"asks":[{"id":"k1","at":"2026-11-12T10:00:00.000Z","projectId":"p1","projectName":"John","adAccountId":"a1","objectId":"c1","campaign":"12/11 - TESTE","action":"pause","percent":null,"ruleLabel":"Teste sem venda"},{"id":"k2","projectId":"p1","adAccountId":"a1","objectId":"c2","action":"reduce","percent":20},{"id":"k3","projectId":"p1","adAccountId":"a1","objectId":"c3","action":"activate"},{"id":"sem ids"},7]}"#)
+        check(asking?.autonomy?.asks.map(\.id) == ["k1", "k2", "k3"] && asking?.autonomy?.asksTotal == 3, #line)
+        check(asking?.autonomy?.asks[0].preset == AdjustPreset(action: "pause", percent: nil) && asking?.autonomy?.asks[0].changeText == "Pausar", #line)
+        check(asking?.autonomy?.asks[1].preset == AdjustPreset(action: "reduce", percent: 20) && asking?.autonomy?.asks[2].preset == nil, #line)
+        check(Summary.AutonomyAsk(id: "x", projectId: "p", adAccountId: "a", objectId: "o", action: "reduce", percent: 100).preset == nil, #line)
+        check(Summary.AutonomyAsk(id: "x", projectId: "p", adAccountId: "a", objectId: "o", action: "increase", percent: nil).preset == nil, #line)
+        if let a = asking { check(Store.presentKeys(a, day: "2026-11-12").filter { $0.hasPrefix("ask:") } == ["ask:k1", "ask:k2", "ask:k3"], #line) } else { check(false, #line) }
+        check(summary(#","autonomy":{"enabled":true,"projects":[],"campaigns":[]}"#)?.autonomy?.asks.isEmpty == true, #line)
         let pause = AdjustPreset(action: "pause", percent: nil)
         check(ShadowActionButton.label(mode: "off", preset: pause) == nil, #line)
         check(ShadowActionButton.label(mode: "shadow", preset: pause) == "Fazer eu mesmo", #line)

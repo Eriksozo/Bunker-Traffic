@@ -625,6 +625,20 @@ struct NowTab: View {
     var showProject: Bool { s.project == "all" }
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
+            if let asks = s.autonomy?.asks, !asks.isEmpty {
+                // Level Confirmar: the Bunk only asks. The row opens the owner's own order, already filled; Touch ID executes it.
+                SectionHeader(title: "Bunk pede a você", detail: Format.count(s.autonomy?.asksTotal ?? asks.count, "pedido", "pedidos") + " · nível Confirmar · você executa com Touch ID")
+                VStack(spacing: 2) {
+                    ForEach(asks) { a in
+                        ListRow(id: "ask:" + a.id, symbol: a.action == "pause" ? "pause.fill" : "dollarsign.circle", tone: .warn,
+                                title: a.campaign ?? "Campanha",
+                                subtitle: a.changeText + (a.ruleLabel.map { " · " + $0 } ?? ""),
+                                tag: showProject ? a.projectName : nil,
+                                value: a.at.map { Format.stamp($0) }, valueCaption: a.preset == nil ? "abrir no painel" : "Conferir",
+                                action: a.preset.map { preset in { withAnimation(DS.Motion.quick) { notch.adjust = AdjustTarget(project: a.projectId, adAccountId: a.adAccountId, campaignId: a.objectId, name: a.campaign, preset: preset) } } })
+                    }
+                }
+            }
             if s.approvals.count > 0 {
                 HStack(spacing: DS.Space.s) {
                     SectionHeader(title: "Aguardando você", detail: Format.count(s.approvals.count, "proposta exata", "propostas exatas") + " · aprovar com Touch ID")
@@ -785,7 +799,7 @@ enum AutonomyText {
         let modes = Set(a.projects.compactMap(\.mode))
         guard a.enabled else { return "observando" }
         if modes.contains("auto") { return "pode enviar" }
-        if modes.contains("confirm") { return "pode pedir" }
+        if modes.contains("confirm") || !a.asks.isEmpty { return "pode pedir" }
         return "observando"
     }
     static func islandLine(_ a: Summary.Autonomy) -> String {

@@ -156,12 +156,30 @@ struct Summary: Decodable, Equatable {
     /// Effective mode of one campaign of `shadow.recent` (exceptions already applied by the server).
     struct AutonomyCampaign: Equatable { let projectId: String; let adAccountId: String; let objectId: String; let mode: String }
     struct AutonomyIsland: Equatable { var observing: [String] = []; var agreement: Double? = nil; var n: Int? = nil }
+    /// A request of the level Confirmar still open (lib/autonomy-grant.mjs `autonomyAsks`): the Bunk asks, the owner
+    /// executes it himself with Touch ID. Never an order by itself.
+    struct AutonomyAsk: Equatable, Identifiable {
+        let id: String; let projectId: String; let adAccountId: String; let objectId: String
+        var at: String? = nil; var projectName: String? = nil; var campaign: String? = nil
+        var action: String? = nil; var percent: Double? = nil; var ruleLabel: String? = nil
+        /// The asked move as the owner's own order, or nil when the notch cannot offer it (activation, percent out of range).
+        var preset: AdjustPreset? {
+            guard let action else { return nil }
+            if action == "pause" { return AdjustPreset(action: "pause", percent: nil) }
+            guard action == "increase" || action == "reduce", let percent, OwnerAdjust.validPercent(action, percent) else { return nil }
+            return AdjustPreset(action: action, percent: (percent * 10).rounded() / 10)
+        }
+        /// "Pausar", "Reduzir 20%": what the Bunk asks.
+        var changeText: String { preset?.label ?? action.map(OwnerAdjust.label) ?? "Ação" }
+    }
     struct Autonomy: Equatable {
         var v: Int? = nil; var at: String? = nil
         /// General switch. Off: the Bunk sends nothing by itself, whatever the levels.
         var enabled = false
         var projects: [AutonomyProject] = []; var campaigns: [AutonomyCampaign] = []
         var island: AutonomyIsland? = nil
+        /// Open requests of the level Confirmar (at most 5 here); `asksTotal` counts all of them.
+        var asks: [AutonomyAsk] = []; var asksTotal: Int? = nil
 
         /// Contract b.3, first match wins: the campaign entry, then the project's level, else unknown (nil).
         func mode(projectId: String?, adAccountId: String?, objectId: String?) -> String? {

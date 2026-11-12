@@ -5,6 +5,7 @@ import {useId} from 'react';
 import {Bot,Power} from 'lucide-react';
 import {fin,firedOf,fmtInt,fmtShare,fmtRange,healthLine,memoryLine,stamp,ND,joinNames} from './components';
 import {autoNames,type DraftControl} from './permissions';
+import {islandLines} from '../../lib/autonomy-ui.mjs';
 
 /** "Ligada · 2 projetos podem enviar sozinhos" / "Desligada · o Bunk só observa e aprende". */
 export function islandStateLine(enabled:boolean,paused:boolean,savedProjects:any[]){
@@ -19,8 +20,10 @@ function Tile({label,value,foot,tone}:{label:string;value:string;foot:string;ton
 export function Island({deep,deepError,ctl,saving,now,filter,setFilter}:{deep:any;deepError:string|null;ctl:DraftControl;saving:boolean;now:number;filter:string;setFilter:(id:string)=>void}){
  const {saved,draft,busy}=ctl,onReason=useId();
  const savedAuto=autoNames(saved.projects),savedConfirm=saved.projects.some((p:any)=>p.mode==='confirm'||Object.values(p.campaigns||{}).some((c:any)=>c.mode==='confirm'));
- const nowText=!saved.enabled?'Agora o Bunk não envia nenhuma ordem sozinho: para isso, a autonomia precisa estar ligada e o projeto (ou a campanha) em Automático.':savedAuto.length?`Agora o Bunk pode enviar ordens sozinho em ${savedAuto.join(', ')}, só dentro das ações e limites salvos.${savedConfirm?' Onde está em Confirmar, ele só prepara e avisa.':''}`:`Agora nenhum projeto está em Automático: o Bunk não envia ordens sozinho.${savedConfirm?' Onde está em Confirmar, ele só prepara e avisa.':''}`;
- const t=deep?.totals,a=t?.agreement,fired=firedOf(a),hasA=!!a&&fin(a.precision)&&fired>0,observing=saved.projects.filter((p:any)=>p.mode!=='off').map((p:any)=>p.name);
+ const lines=islandLines(saved),asksNote=' Onde está em Confirmar, ele pede a você em “Aguardando você”, aqui e no notch.';
+ const nowText=!saved.enabled?(lines.stopped?`A autonomia está desligada: o Bunk não envia nada e também não pede nada a você, mesmo com ${[...lines.sends,...lines.asks].join(', ')} em Confirmar ou Automático. Ligue para valer.`:'Agora o Bunk não envia nenhuma ordem sozinho: para isso, a autonomia precisa estar ligada e o projeto (ou a campanha) em Automático.')
+  :savedAuto.length?`Agora o Bunk pode enviar ordens sozinho em ${savedAuto.join(', ')}, só dentro das ações e limites salvos.${savedConfirm?asksNote:''}`:`Agora nenhum projeto está em Automático: o Bunk não envia ordens sozinho.${savedConfirm?asksNote:''}`;
+ const t=deep?.totals,a=t?.agreement,fired=firedOf(a),hasA=!!a&&fin(a.precision)&&fired>0;
  return <section className={`ds-card ds-card--lg aut-master aut-island ${saved.enabled?'ds-card--accent is-on':''}`} aria-labelledby="aut-master-title">
   <div className="aut-master__head">
    <span className={`ds-badge ${saved.enabled?'ds-badge--accent':'ds-badge--neutral'}`} aria-hidden="true"><Bot size={16}/></span>
@@ -38,13 +41,15 @@ export function Island({deep,deepError,ctl,saving,now,filter,setFilter}:{deep:an
   <div className="aut-tiles" role="group" aria-label="Hoje">
    <Tile label="Enviadas hoje" value={t?fmtInt(t.orders?.sent):ND} foot={t?`${fmtInt(t.orders?.confirmed)} confirmadas · ${fmtInt(t.orders?.failed)} com falha`:'Leitura do executor N/D'} tone="good"/>
    <Tile label="Seguradas" value={t?fmtInt(t.decisions?.segurada):ND} foot="decisões travadas por um limite ou dado" tone="neutral"/>
-   <Tile label="Aguardam você" value={t?fmtInt(t.decisions?.pediria):ND} foot="no Confirmar, você executa com Touch ID" tone="warn"/>
+   <Tile label="Aguardam você" value={t?fmtInt(t.decisions?.pediria):ND} foot="pedidos do Confirmar: você executa com Touch ID" tone="warn"/>
    <Tile label="Concordância com a equipe" value={hasA?fmtShare(a.precision):ND} foot={!t?'Leitura do executor N/D':!hasA?'Sem casos comparáveis ainda':`${fmtRange(a.low,a.high)?`faixa ${fmtRange(a.low,a.high)} · `:''}${fmtInt(fin(a.agree)?a.agree:Math.round(a.precision*fired))} de ${fmtInt(fired)} vezes em que o Bunk agiria${fired<15?' · amostra pequena':''}`}/>
   </div>
   <ul className="aut-island__lines">
    <li><span className={`ds-dot ds-dot--sm ${deepError?'ds-dot--warn':deep?.shadowStatus?.failed?'ds-dot--bad ds-dot--pulse':deep?.shadowStatus?.skipped?.length?'ds-dot--warn':'ds-dot--good'}`} aria-hidden="true"/>{deepError?deepError:deep?healthLine(deep,now):'Lendo o executor…'}</li>
    <li><span className="ds-dot ds-dot--sm ds-dot--neutral" aria-hidden="true"/>{deep?memoryLine(deep.memory,deep.playbookStatus):'Memória: lendo…'}</li>
-   {observing.length>0&&<li><span className="ds-dot ds-dot--sm ds-dot--neutral" aria-hidden="true"/>Observando: {joinNames(observing.slice(0,6))}{observing.length>6?` e mais ${observing.length-6}`:''}</li>}
+   {lines.sends.length>0&&<li><span className={`ds-dot ds-dot--sm ${saved.enabled?'ds-dot--good':'ds-dot--warn'}`} aria-hidden="true"/>{saved.enabled?'Age sozinho em':'Automático salvo (parado) em'}: {joinNames(lines.sends.slice(0,6))}</li>}
+   {lines.asks.length>0&&<li><span className={`ds-dot ds-dot--sm ${saved.enabled?'ds-dot--good':'ds-dot--warn'}`} aria-hidden="true"/>{saved.enabled?'Pede a você em':'Confirmar salvo (parado) em'}: {joinNames(lines.asks.slice(0,6))}</li>}
+   {lines.observes.length>0&&<li><span className="ds-dot ds-dot--sm ds-dot--neutral" aria-hidden="true"/>Só observa: {joinNames(lines.observes.slice(0,6))}{lines.observes.length>6?` e mais ${lines.observes.length-6}`:''}</li>}
   </ul>
   {saved.projects.length>1&&<div className="aut-filter" role="group" aria-label="Projeto">
    {[{id:'all',name:'Todos os projetos'},...saved.projects].map((p:any)=><button key={p.id} type="button" className="ds-chip ds-chip--neutral ds-chip--outlined" aria-pressed={filter===p.id} onClick={()=>setFilter(p.id)}>{p.name}</button>)}

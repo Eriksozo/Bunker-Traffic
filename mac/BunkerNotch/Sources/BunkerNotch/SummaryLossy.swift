@@ -113,14 +113,28 @@ extension Summary.Today {
 // Every field is optional with a default (lists empty, switch off, numbers nil). An item without its id is skipped.
 
 extension Summary.Autonomy: Decodable {
-    private enum Keys: String, CodingKey { case v, at, enabled, projects, campaigns, island }
+    private enum Keys: String, CodingKey { case v, at, enabled, projects, campaigns, island, asks, asksTotal }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         self.init(v: c.optional(Int.self, forKey: .v), at: c.optional(String.self, forKey: .at),
                   enabled: c.optional(Bool.self, forKey: .enabled) ?? false,
                   projects: c.lossyList(Summary.AutonomyProject.self, forKey: .projects) ?? [],
                   campaigns: c.lossyList(Summary.AutonomyCampaign.self, forKey: .campaigns) ?? [],
-                  island: c.optional(Summary.AutonomyIsland.self, forKey: .island))
+                  island: c.optional(Summary.AutonomyIsland.self, forKey: .island),
+                  asks: c.lossyList(Summary.AutonomyAsk.self, forKey: .asks) ?? [], asksTotal: c.optional(Int.self, forKey: .asksTotal))
+    }
+}
+
+extension Summary.AutonomyAsk: Decodable {
+    private enum Keys: String, CodingKey { case id, at, projectId, projectName, adAccountId, objectId, campaign, action, percent, ruleLabel }
+    /// The four ids are required: a request without them cannot open the owner's order and is skipped.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(id: try c.decode(String.self, forKey: .id), projectId: try c.decode(String.self, forKey: .projectId),
+                  adAccountId: try c.decode(String.self, forKey: .adAccountId), objectId: try c.decode(String.self, forKey: .objectId),
+                  at: c.optional(String.self, forKey: .at), projectName: c.optional(String.self, forKey: .projectName),
+                  campaign: c.optional(String.self, forKey: .campaign), action: c.optional(String.self, forKey: .action),
+                  percent: c.optional(Double.self, forKey: .percent), ruleLabel: c.optional(String.self, forKey: .ruleLabel))
     }
 }
 
