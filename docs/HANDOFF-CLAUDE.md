@@ -1153,3 +1153,26 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Conferido:** autoteste do notch, prévias renderizadas com dados fictícios (`--render-notch`) e bateria da autonomia (137 testes).
 - **Não conferido:** a aba com dados reais de produção e um pedido real do Confirmar abrindo nela.
 
+
+## Aviso "Histórico de mudanças em 90% do teto" (registro escrito às 2026-11-12 14:28:47 UTC por `date -u`)
+
+- Pedido do dono, com a captura do aviso: "resolve isso".
+- **Medido na central real (revisão lida às 14:12 UTC de 12/11):**
+  - 26.990 mudanças carregadas, contra o teto de 30.000 (`historyLearningPolicy.maximumChanges`); nenhum grupo frio.
+  - 25.132 são edições que não são orçamento nem status de campanha: status, lance, público, criativo e criação de conjuntos e anúncios. 1.858 são orçamento ou status de campanha.
+  - O registro cobre 26 dias (desde 18/10). Entre 06/11 e 12/11 entraram de 1.800 a 5.400 por dia.
+  - 414 campanhas no registro; 142 têm alguma mudança de orçamento ou status. 16.022 edições são de campanhas sem nenhuma.
+  - A leitura do histórico por campanha está atrasada: metade das campanhas foi relida há mais de 52 h, e 10% há mais de 5,7 dias. Há edições ainda não importadas.
+  - Os 318 desfechos medidos estão todos como "Inconclusivo", cada um com pelo menos uma outra mudança na janela (mediana de 24).
+- **Por que o teto existe:** ele protege a memória do executor, que carrega o registro inteiro a cada leitura completa.
+- **O que foi feito (sem mudar nenhum resultado):**
+  - `lib/history-storage.mjs`: a leitura passa a guardar uma única cópia de cada texto repetido de uma mudança (`sharedChangeText`: conta, campanha, objeto, nível, categoria, fonte, horário, campo, antes e depois). Mesmos valores, mesma ordem, mesmas chaves.
+  - Medido com a função real sobre o registro real: de 507 para 357 bytes por mudança carregada (de 13,7 para 9,6 MB por cópia). A lista devolvida pela leitura nova é idêntica, byte a byte, à da leitura anterior, e regravar o que foi lido não escreve nenhum registro.
+  - `lib/cloud-history-learning.mjs`: teto de 30.000 para 42.000. É o equivalente em memória: 30.000 x 507 / 357 = 42.600. O teto novo cheio ocupa o que o antigo cheio ocupava.
+  - Testes em `tests/history-storage.test.mjs` (conteúdo idêntico, tipos, regravação sem escrita, teto x memória).
+- **O que isto não resolve:** o crescimento. No ritmo atual, o aviso de 85% (35.700) volta em cerca de 3 dias e o teto em cerca de 4 a 5. O arquivamento de 35 dias não vai aliviar: um grupo de projeto e dia fica carregado inteiro enquanto um desfecho citar uma mudança dele, e quase todo grupo tem mudança citada.
+- **Correção definitiva, ainda não feita (depende do dono):**
+  - Arquivar por mudança, e não por grupo: edição sem orçamento/pausa da mesma campanha a até 3 dias de distância e não citada por desfecho fica guardada e listada, sem ser carregada. A classificação dos desfechos não muda: uma janela que toca mudança arquivada já recebe a limitação "arquivada" (`archivedWindow`) e fica "Inconclusivo", como ficaria com a mudança carregada.
+  - Simulado no registro real com corte de 5 dias: 24.430 carregadas hoje. Em regime, com 30 dias de reconferência (`externalLearningPolicy.maximumAgeDays`), a estimativa é de 48 a 64 mil; com 14 dias, perto de 34 mil.
+  - Cuidados já vistos: o índice dos arquivados (`changesArchive`, com a lista de campanhas) fica dentro da central, que está em 77% do limite, e precisa de forma compacta ou de registro próprio; o corte por dia precisa de folga, porque a leitura por campanha atrasa.
+  - Alternativas de maior porte: carregar o registro só do projeto em uso, ou dar ao executor um Worker próprio.

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {packHistoryState,hydrateHistoryState,historyKeys,historyView,storagePressure,historyStorageLimits} from '../lib/history-storage.mjs';
+import {packHistoryState,hydrateHistoryState,historyKeys,historyView,storagePressure,historyStorageLimits,sharedChangeText} from '../lib/history-storage.mjs';
+import {historyLearningPolicy} from '../lib/cloud-history-learning.mjs';
 import {commitPersistedState,readPersistedState} from '../lib/persistence.mjs';
 import {database} from './helpers/e2e-scenario.mjs';
 
@@ -104,4 +105,36 @@ test('Review fixes: an older writer\'s inline changes merge back; archived windo
  assert.equal(archivedWindow(hl,P,'acc','c1',d.slice(0,10)+'T00:00:00-03:00',d),true);
  assert.equal(archivedWindow(hl,P,'acc','other',d,d),false,'another campaign of the project is not limited');
  assert.equal(archivedWindow(hl,P,'acc','c1',day(2),day(1)),false);
+});
+
+test('The loaded ledger shares its repeated text: same content, same order, same types', async () => {
+ // Owner report of 2026-11-12 ("Histórico de mudanças em 90% do teto"): only the memory of a read changes.
+ assert.deepEqual([...sharedChangeText],['adAccountId','campaignExternalId','objectExternalId','level','category','source','at','field','before','after']);
+ for(const identity of ['key','eventId','project'])assert.equal(sharedChangeText.includes(identity),false,identity+' stays one per change');
+ const at=day(1),status=(i,project,from,to)=>change(i,project,1,false,{level:'campaign',category:'status',at,field:'status',before:from,after:to});
+ const changes=[];
+ for(let i=0;i<40;i++)changes.push(change(i,i%2?P:Q,1+i%3,false,{campaignExternalId:'c'+i%4,objectExternalId:'o'+i%5,category:['status','bid','targeting'][i%3]}));
+ for(let i=40;i<50;i++)changes.push(status(i,P,i%2?'ACTIVE':'PAUSED',i%2?'PAUSED':'ACTIVE'));
+ for(let i=50;i<60;i++)changes.push(change(i,Q,2,true,{before:100,after:100+i}));
+ changes.push(change(60,P,1,false,{key:'custom-key',objectExternalId:null,note:{nested:'kept'}}));
+ const logical={historyLearning:{version:1,scopes:{},changes}},db=store(),packed=await packHistoryState(logical,now);db.put(packed.archives);
+ const back=await hydrateHistoryState(packed.state,db.fetch),{historyStorage,...rest}=back;
+ assert.equal(JSON.stringify(rest),JSON.stringify(canon(logical)),'byte-identical to the logical ledger');
+ for(const c of back.historyLearning.changes){
+  assert.deepEqual(Object.keys(c).slice(0,2),['key','project'],'key order of a loaded change');
+  if(c.field==='dailyBudget'){assert.equal(typeof c.before,'number');assert.equal(typeof c.after,'number');}
+ }
+ assert.equal(back.historyLearning.changes.find(c=>c.key==='custom-key').objectExternalId,null,'a non-text value passes through untouched');
+ // A second commit of what was read writes nothing: the shared text is the same text.
+ const again=await packHistoryState(back,now);
+ assert.equal(again.archives.length,0);assert.deepEqual(again.state.historyLearning.changesStorage,packed.state.historyLearning.changesStorage);
+});
+
+test('The hot ledger ceiling follows the measured memory of one loaded change', () => {
+ // 507 bytes per change before the shared text, 357 after (real ledger of 26,990 changes, 2026-11-12).
+ const before=507,after=357,previous=30000;
+ assert.equal(historyLearningPolicy.maximumChanges,42000);
+ assert.ok(historyLearningPolicy.maximumChanges*after<=previous*before,'the new ceiling holds no more memory than the old one');
+ assert.equal(storagePressure({storedBytes:0,limitBytes:1,hotChanges:26990,maximumChanges:historyLearningPolicy.maximumChanges}).warning,false,'the ledger of the report is below the warning');
+ assert.equal(storagePressure({storedBytes:0,limitBytes:1,hotChanges:35700,maximumChanges:historyLearningPolicy.maximumChanges}).warning,true,'the warning returns at 85% of the new ceiling');
 });
