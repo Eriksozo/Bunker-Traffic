@@ -1176,3 +1176,9 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Simulado no registro real com corte de 5 dias: 24.430 carregadas hoje. Em regime, com 30 dias de reconferência (`externalLearningPolicy.maximumAgeDays`), a estimativa é de 48 a 64 mil; com 14 dias, perto de 34 mil.
   - Cuidados já vistos: o índice dos arquivados (`changesArchive`, com a lista de campanhas) fica dentro da central, que está em 77% do limite, e precisa de forma compacta ou de registro próprio; o corte por dia precisa de folga, porque a leitura por campanha atrasa.
   - Alternativas de maior porte: carregar o registro só do projeto em uso, ou dar ao executor um Worker próprio.
+
+## Conta nas mudanças dos gestores (registro escrito às 2026-11-12 14:48:36 UTC por `date -u`)
+
+- Pedido do dono em 12/11: nas linhas "Fora da Malva Dash pausou" (aba Gestores do notch) deve aparecer a conta da campanha.
+- O resumo já trazia `account` em cada mudança (`lib/companion-summary.mjs`, `activityItems`), mas o notch não mostrava. Agora cada linha tem a etiqueta da conta antes do nome da campanha, e o aviso de mudança de gestor inclui a conta. Sem conta, não aparece etiqueta vazia.
+- Autoteste ok; app reinstalado. Só no Mac: servidor e web não mudaram.

@@ -424,6 +424,9 @@ enum SelfTest {
         let main = CGRect(x: 0, y: 0, width: 1920, height: 1080), size = CGSize(width: 700, height: 560)
         let expected = CGRect(origin: NotchGeometry.panelOrigin(screen: main, panel: size), size: size)
         check(expected.origin == CGPoint(x: 610, y: 520), #line)
+        // Manager changes show the ad account of the campaign; a blank account adds no empty pill.
+        check(Format.queueTag(project: nil, account: "Conta Exemplo 01") == "Conta Exemplo 01", #line)
+        check(Format.queueTag(project: nil, account: "  ") == nil && Format.queueTag(project: nil, account: nil) == nil, #line)
         check(NotchGeometry.drifted(panel: CGRect(origin: CGPoint(x: 0, y: 520), size: size), expected: expected), #line)
         check(!NotchGeometry.drifted(panel: expected, expected: expected), #line)
         check(!NotchGeometry.drifted(panel: expected.offsetBy(dx: 0.3, dy: -0.3), expected: expected), #line)

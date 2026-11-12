@@ -871,6 +871,8 @@ struct ManagersTab: View {
                 ForEach(list) { e in
                     ListRow(id: "a:" + e.id, symbol: symbols[e.action] ?? "clock", tone: tones[e.action] ?? .neutral,
                             title: Format.who(e), subtitle: (e.campaign ?? "Campanha") + " · " + Format.change(e),
+                            // The ad account the campaign belongs to (names repeat across accounts).
+                            tag: Format.queueTag(project: nil, account: e.account),
                             value: Format.relative(e.at), valueCaption: e.origin == "observed" ? "intervalo da leitura" : Format.stamp(e.at))
                 }
             }

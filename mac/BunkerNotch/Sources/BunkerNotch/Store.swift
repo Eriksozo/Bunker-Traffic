@@ -310,7 +310,7 @@ final class Store: ObservableObject {
             let again = seen.contains(k) && AdjustSound.repeats(lastAt: changeAt[k], at: at)
             if let at { changeAt[k] = max(changeAt[k] ?? at, at) }
             guard !seen.contains(k) || again else { continue }
-            seen.insert(k); fresh.append((again ? k + "@" + (e.at ?? "") : k, Format.who(e), (e.campaign ?? "Campanha") + " · " + Format.change(e), .manager))
+            seen.insert(k); fresh.append((again ? k + "@" + (e.at ?? "") : k, Format.who(e), (e.campaign ?? "Campanha") + (Format.queueTag(project: nil, account: e.account).map { " · " + $0 } ?? "") + " · " + Format.change(e), .manager))
         }
         let step = AdjustSound.counterStep(last: lastCounts, project: s.project, activity: s.activity, alreadyNew: Set(fresh.compactMap { AdjustSound.action(fromKey: $0.0) }))
         let rise = step.rise; lastCounts = step.last
