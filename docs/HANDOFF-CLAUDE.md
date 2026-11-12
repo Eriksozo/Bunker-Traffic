@@ -1120,7 +1120,7 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Cache antigo:** registros gravados antes desta mudança continuam válidos, mostram as colunas novas como N/D e se completam na próxima leitura (até 1 por minuto com o detalhe aberto).
 - **Escopo:** só exibição. Nada disso entra em análise, proposta, aprovação ou conferência de ordem. A aba "Dias" do projeto (`lib/daily-series.mjs`) não mudou e o gráfico do web segue com Investimento, Fat. líquido e Lucro.
 
-## Autonomia: Confirmar avisa, tela de permissões refeita e bateria de 130 testes (registro escrito às 2026-11-12 por `date -u`, ver commit)
+## Autonomia: Confirmar avisa, tela de permissões refeita e bateria de 130 testes (registro escrito às 2026-11-12 05:57:43 UTC por `date -u`)
 
 - **Pedido do dono (12/11/2026):** a aba Autonomia estava confusa (nível do projeto × nível por campanha); as campanhas em Confirmar de 11/11 não o chamaram; as subidas novas e programadas não apareciam na lista; campanha pausada devia sair da lista; e pediu uma bateria de testes de todos os fluxos, sem depender dele.
 - **Causa do 11/11:** o nível Confirmar nunca avisou ninguém. O executor só gravava uma linha em `autonomyLog`; não existia alerta, som nem item no notch. Com o interruptor geral desligado, a decisão nem virava pedido. Não li o estado de produção (sem sessão e sem acesso ao D1 nesta sessão), então não sei se o interruptor estava ligado naquele dia.
