@@ -21,7 +21,7 @@ Leia primeiro `docs/HANDOFF-CLAUDE.md`, `AGENT-RUNBOOK.md`, `docs/connections.md
 
 Trabalhe no checkout confirmado, confira `git status` e preserve alterações alheias. Rode os testes pertinentes, `npm run typecheck` e `npm run build` antes de publicar mudanças de código. Commit/push não comprovam deploy: confirme a versão Cloudflare, `/health`, autenticação e o resultado funcional. Preserve o Site privado e sua compatibilidade MCP; não altere audiência ou segredos para contornar uma falha de conexão.
 
-As fontes v3 foram separadas da central. Não faça rollback para um leitor incompatível com `bunker-snapshot-reference`. Histórico, fontes congeladas e selos financeiros devem permanecer íntegros.
+As fontes v3 foram separadas da central. Não faça rollback para um leitor incompatível com `bunker-snapshot-reference` nem com `changesArchiveStorage` (índice das mudanças arquivadas: um leitor antigo mediria sem a limitação "arquivada"). Histórico, fontes congeladas e selos financeiros devem permanecer íntegros.
 
 ## Coordenação
 

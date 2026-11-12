@@ -40,12 +40,13 @@ test('Old non-financial groups go cold (kept, listed, not loaded); budget/status
  const old=historyStorageLimits.hotDays+2,cited=change(7,P,old+1);
  const logical={historyLearning:{changes:[change(1,P,old),change(2,P,old,true),change(3,P,1),cited]},decisionHistoryOutcomes:[outcome('o1',[cited.key])]};
  const db=store(),packed=await packHistoryState(logical,now);db.put(packed.archives);
- assert.equal(packed.stats.coldGroups,1);assert.equal(packed.state.historyLearning.changesArchive.length,1);
- const coldKey=packed.state.historyLearning.changesArchive[0].key;assert.ok(db.rows.has(coldKey),'cold group is stored, never dropped');
+ assert.equal(packed.stats.coldGroups,1);assert.equal(packed.state.historyLearning.changesArchive,undefined,'the archive index left the central state');
+ assert.deepEqual(packed.state.historyLearning.changesArchiveStorage.segments.map(e=>e.count),[1]);
  const back=await hydrateHistoryState(packed.state,db.fetch);
+ const coldKey=back.historyLearning.changesArchive[0].key;assert.ok(db.rows.has(coldKey),'cold group is stored, never dropped');
  assert.deepEqual(back.historyLearning.changes.map(c=>c.eventId).sort(),['e2','e3','e7']);
- assert.equal(back.historyLearning.changesArchive[0].key,coldKey,'archive index survives the read');
- const again=await packHistoryState(back,now);assert.equal(again.state.historyLearning.changesArchive.length,1,'no duplicate archive entry');
+ assert.equal(back.historyLearning.changesArchive.length,1,'archive index survives the read');
+ const again=await packHistoryState(back,now);assert.deepEqual(again.state.historyLearning.changesArchiveStorage,packed.state.historyLearning.changesArchiveStorage,'no duplicate archive entry');
  assert.equal(again.archives.length,0);
 });
 
@@ -100,9 +101,12 @@ test('Review fixes: an older writer\'s inline changes merge back; archived windo
  const back=await hydrateHistoryState(mixed,db.fetch);
  assert.deepEqual(back.historyLearning.changes.map(c=>c.eventId).sort(),['e1','e2'],'nothing hidden, no duplicate');
  await assert.rejects(packHistoryState({historyLearning:{changesStorage:{},changes:[]}},now),e=>e.code==='STORAGE_INTEGRITY');
- const old=historyStorageLimits.hotDays+3,coldPack=await packHistoryState({historyLearning:{changes:[change(5,P,old)]}},now),hl=coldPack.state.historyLearning,d=day(old);
+ const old=historyStorageLimits.hotDays+3,coldDb=store(),coldPack=await packHistoryState({historyLearning:{changes:[change(5,P,old)]}},now);coldDb.put(coldPack.archives);
+ const hl=(await hydrateHistoryState(coldPack.state,coldDb.fetch)).historyLearning,d=day(old);
  assert.deepEqual(hl.changesArchive[0].campaigns,['acc|c1']);
- assert.equal(archivedWindow(hl,P,'acc','c1',d.slice(0,10)+'T00:00:00-03:00',d),true);
+ assert.equal(archivedWindow(hl,P,'acc','c1',d.slice(0,10)+'T00:00:00-03:00',new Date(Date.parse(d)+1).toISOString()),true);
+ assert.equal(archivedWindow(hl,P,'acc','c1',d.slice(0,10)+'T00:00:00-03:00',d),false,'the window ends before the archived change');
+ assert.equal(archivedWindow({changesArchive:hl.changesArchive.map(({spans,...e})=>e)},P,'acc','c1',d.slice(0,10)+'T00:00:00-03:00',d),true,'without a time span the UTC day decides');
  assert.equal(archivedWindow(hl,P,'acc','other',d,d),false,'another campaign of the project is not limited');
  assert.equal(archivedWindow(hl,P,'acc','c1',day(2),day(1)),false);
 });
@@ -137,4 +141,140 @@ test('The hot ledger ceiling follows the measured memory of one loaded change', 
  assert.ok(historyLearningPolicy.maximumChanges*after<=previous*before,'the new ceiling holds no more memory than the old one');
  assert.equal(storagePressure({storedBytes:0,limitBytes:1,hotChanges:26990,maximumChanges:historyLearningPolicy.maximumChanges}).warning,false,'the ledger of the report is below the warning');
  assert.equal(storagePressure({storedBytes:0,limitBytes:1,hotChanges:35700,maximumChanges:historyLearningPolicy.maximumChanges}).warning,true,'the warning returns at 85% of the new ceiling');
+});
+
+// Cold by change (owner, 2026-11-12: "Sim, arquivar"). Synthetic fixtures only.
+const H=3600000,at=(ago,hours=0)=>new Date(now-ago*86400000+hours*H).toISOString();
+const edit=(i,ago,extra={})=>change(i,P,ago,false,{campaignExternalId:'quiet',...extra});
+const budget=(i,ago,extra={})=>change(i,P,ago,true,{campaignExternalId:'moved',...extra});
+const coldItems=async(db,state)=>{const out=[];for(const e of state.historyLearning.changesArchive||[]){const row=JSON.parse(db.rows.get(e.key)),raw=await new Response(new Blob([Uint8Array.from(atob(row.data),c=>c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('gzip'))).text();for(const item of JSON.parse(raw).items)out.push(item.eventId);}return out.sort();};
+const cycle=async(logical,when=now,db=store())=>{const packed=await packHistoryState(logical,when);db.put(packed.archives);return {db,packed,back:await hydrateHistoryState(packed.state,db.fetch)};};
+
+test('An edit with no budget/status event of its campaign nearby goes cold after the quiet days; everything else stays loaded', async () => {
+ const q=historyStorageLimits.quietDays,r=historyStorageLimits.reachDays;
+ assert.equal(q,5);assert.equal(r,3);assert.ok(q>r,'an event up to reachDays after an edit is seen before the edit is archived');
+ const changes=[
+  edit(1,q+2),                                              // old enough, campaign never had an event: cold
+  edit(2,q-1),                                              // younger than the quiet days: loaded
+  edit(3,q+2,{campaignExternalId:'moved'}),                 // same day, campaign with an event 1 day later: loaded
+  budget(4,q+1),
+  edit(5,q+2,{campaignExternalId:'moved',at:at(q+1+r,-1)}), // 3 days and 1 hour before the event: cold
+  edit(6,q+2,{campaignExternalId:'moved',at:at(q+1+r,0)}),  // exactly 3 days before the event: loaded
+  edit(7,q+3,{campaignExternalId:'cited'}),                 // cited by a measured result: loaded
+  edit(8,q+3,{campaignExternalId:'cited'}),                 // its neighbour of the same campaign and day, not cited: cold
+  edit(9,q+2,{at:'2026-11-01'}),                            // a day without a time still parses: no event nearby, cold
+  edit(10,q+2,{campaignExternalId:'journal'}),              // event known only from the decision journal: loaded
+  edit(11,q+2,{campaignExternalId:'journal',adAccountId:'other'}), // same campaign id on another account: not that event, cold
+ ];
+ const logical={historyLearning:{version:1,scopes:{},changes},decisionHistoryOutcomes:[outcome('o1',[changes[6].key])],decisionHistory:[{id:'d1',project:P,adAccountId:'acc',objectId:'journal',occurredAt:at(q+2,5)}]};
+ const {db,packed,back}=await cycle(logical);
+ assert.deepEqual(back.historyLearning.changes.map(c=>c.eventId).sort(),['e10','e2','e3','e4','e6','e7']);
+ assert.deepEqual(await coldItems(db,back),['e1','e11','e5','e8','e9']);
+ assert.equal(packed.stats.hotChanges,6);
+ // Nothing is lost: loaded plus archived is the whole ledger.
+ assert.deepEqual([...back.historyLearning.changes.map(c=>c.eventId),...await coldItems(db,back)].sort(),changes.map(c=>c.eventId).sort());
+ for(const e of back.historyLearning.changesArchive)assert.ok(Array.isArray(e.campaigns)&&e.campaigns.every(c=>/^[^|]+\|[^|]+$/.test(c)),'every archived group lists its campaigns');
+});
+
+test('A group half loaded, half cold reads back exactly, and a second commit writes nothing', async () => {
+ const q=historyStorageLimits.quietDays;
+ const changes=[edit(1,q+2),edit(2,q+2,{campaignExternalId:'moved'}),budget(3,q+2),edit(4,q+2,{campaignExternalId:'moved',at:at(q+2,2)}),edit(5,1)];
+ const {db,packed,back}=await cycle({historyLearning:{version:1,scopes:{},changes}});
+ const group=packed.state.historyLearning.changesStorage.entries.filter(e=>e.day===at(q+2).slice(0,10)&&e.cls==='o');
+ assert.deepEqual(group.map(e=>e.count),[2],'the loaded part of the split group');
+ assert.deepEqual(back.historyLearning.changesArchive.map(e=>[e.day,e.cls,e.count,e.campaigns,e.spans]),[[at(q+2).slice(0,10),'o',1,['acc|quiet'],[[Date.parse(at(q+2)),Date.parse(at(q+2))]]]]);
+ const again=await packHistoryState(back,now);
+ assert.equal(again.archives.length,0,'the loaded part and the archive index are already stored');
+ assert.deepEqual(again.state.historyLearning,packed.state.historyLearning);
+ // A stale copy that still holds the archived change packs to the same records: no duplicate entry.
+ const stale=await packHistoryState({historyLearning:{version:1,scopes:{},changes,changesArchive:back.historyLearning.changesArchive}},now);
+ assert.deepEqual(stale.state.historyLearning.changesArchiveStorage,packed.state.historyLearning.changesArchiveStorage);
+ assert.equal(stale.archives.filter(a=>!db.rows.has(a.key)).length,0);
+});
+
+test('After the hot days only what a measured result cites stays loaded, change by change', async () => {
+ const old=historyStorageLimits.hotDays+2;
+ const changes=[edit(1,old,{campaignExternalId:'moved'}),edit(2,old,{campaignExternalId:'moved'}),budget(3,old),edit(4,1)];
+ const {db,back}=await cycle({historyLearning:{version:1,scopes:{},changes},decisionHistoryOutcomes:[outcome('o1',[changes[0].key])]});
+ assert.deepEqual(back.historyLearning.changes.map(c=>c.eventId).sort(),['e1','e3','e4'],'cited and budget stay; the uncited neighbour of an old event does not');
+ assert.deepEqual(await coldItems(db,back),['e2']);
+ // A measured result older than the hot days no longer holds what it cited; one without a date still does.
+ const aged=(observedAt)=>cycle({historyLearning:{version:1,scopes:{},changes},decisionHistoryOutcomes:[{...outcome('o1',[changes[0].key]),observedAt}]}).then(x=>x.back.historyLearning.changes.map(c=>c.eventId).sort());
+ assert.deepEqual(await aged(day(historyStorageLimits.hotDays+1)),['e3','e4']);
+ assert.deepEqual(await aged(day(historyStorageLimits.hotDays-1)),['e1','e3','e4']);
+ assert.deepEqual(await aged('sem data'),['e1','e3','e4']);
+ assert.ok(historyStorageLimits.hotDays>=30+historyStorageLimits.reachDays,'covers the 30 days a measured result is recalled and an event is re-measured');
+});
+
+test('A measurement window that touches an archived edit of its campaign is limited; a known event never is', async () => {
+ const {archivedWindow}=await import('../lib/history-storage.mjs');
+ const q=historyStorageLimits.quietDays,r=historyStorageLimits.reachDays;
+ // The farthest the measurement of an event reaches is 2 days (the day before and the day after, in the project's zone).
+ for(const hours of [0,7,13,23]){
+  const event=budget(1,q+2,{at:at(q+2,hours)}),t=Date.parse(event.at);
+  const before=edit(2,0,{campaignExternalId:'moved',at:new Date(t-r*86400000-60000).toISOString()}),after=edit(3,0,{campaignExternalId:'moved',at:new Date(t+r*86400000+60000).toISOString()});
+  const {db,back}=await cycle({historyLearning:{version:1,scopes:{},changes:[event,before,after]}},now+4*86400000);
+  assert.deepEqual(await coldItems(db,back),['e2','e3'],'one minute beyond the reach, on both sides');
+  const from=new Date(t-2*86400000).toISOString(),to=new Date(t+2*86400000).toISOString();
+  assert.equal(archivedWindow(back.historyLearning,P,'acc','moved',from,to),false,'the widest window of the known event, at '+hours+'h');
+  assert.equal(archivedWindow(back.historyLearning,P,'acc','moved',new Date(Date.parse(before.at)-1).toISOString(),event.at),true,'a wider window says what it could not check');
+  assert.equal(archivedWindow(back.historyLearning,P,'acc','moved',before.at,event.at),false,'the window is open at both ends, like the measurement');
+  // Same UTC day as the archived edit, but the window starts after it: by time, not by day.
+  const sameDay=before.at.slice(0,10)+'T23:59:59.999Z';
+  if(Date.parse(sameDay)>Date.parse(before.at))assert.equal(archivedWindow(back.historyLearning,P,'acc','moved',before.at,sameDay),false);
+  assert.equal(archivedWindow({changesArchive:back.historyLearning.changesArchive.map(({spans,...e})=>e)},P,'acc','moved',before.at,sameDay),true,'an entry without spans still answers by day');
+ }
+ // An event found late, next to edits already archived: the window is limited instead of reading as "no other change".
+ const lone=edit(9,q+2),{back}=await cycle({historyLearning:{version:1,scopes:{},changes:[lone,edit(10,0)]}});
+ assert.equal(archivedWindow(back.historyLearning,P,'acc','quiet',at(q+3),at(q+1)),true);
+ assert.equal(archivedWindow(back.historyLearning,P,'acc','moved',at(q+3),at(q+1)),false,'another campaign of the same day is not limited');
+});
+
+test('The archive index is append-only segments outside the central: old segments are never resent', async () => {
+ const per=historyStorageLimits.archivePer,q=historyStorageLimits.quietDays,db=store();
+ const first=Array.from({length:per},(_,i)=>edit(i,q+2+i)),a=await packHistoryState({historyLearning:{version:1,scopes:{},changes:first}},now);db.put(a.archives);
+ assert.deepEqual(a.state.historyLearning.changesArchiveStorage.segments.map(e=>e.count),[per]);
+ const read=await hydrateHistoryState(a.state,db.fetch);assert.equal(read.historyLearning.changes.length,0);assert.equal(read.historyLearning.changesArchive.length,per);
+ read.historyLearning.changes=[edit(900,q+60),edit(901,q+61)];
+ const b=await packHistoryState(read,now);db.put(b.archives);
+ const segs=b.state.historyLearning.changesArchiveStorage.segments;
+ assert.deepEqual(segs.map(e=>e.count),[per,2]);assert.equal(segs[0].key,a.state.historyLearning.changesArchiveStorage.segments[0].key);
+ assert.deepEqual(b.archives.map(x=>x.key.split(':')[0]).sort(),['history-changes','history-changes','history-journal'],'two cold groups and only the new last segment');
+ assert.ok(historyKeys(b.state).includes(segs[1].key),'the segments are among the records a read loads');
+ const back=await hydrateHistoryState(b.state,db.fetch);assert.equal(back.historyLearning.changesArchive.length,per+2);
+ assert.ok(JSON.stringify(b.state).length<1500,'the central keeps two segment keys, not the list of campaigns');
+ // Fails closed: a missing or foreign segment is never read as an empty archive.
+ const missing=store();missing.put(a.archives.filter(x=>!x.key.startsWith('history-journal')));
+ await assert.rejects(hydrateHistoryState(a.state,missing.fetch),e=>e.code==='STORAGE_INTEGRITY');
+ const foreign=structuredClone(b.state);foreign.historyLearning.changesArchiveStorage.segments.reverse();
+ await assert.rejects(hydrateHistoryState(foreign,db.fetch),e=>e.code==='STORAGE_INTEGRITY');
+ const orphan=structuredClone(a.state);delete orphan.historyLearning.changesStorage;
+ await assert.rejects(hydrateHistoryState(orphan,db.fetch),e=>e.code==='STORAGE_INTEGRITY');
+ await assert.rejects(packHistoryState({historyLearning:{changes:[],changesArchiveStorage:{}}},now),e=>e.code==='STORAGE_INTEGRITY');
+});
+
+test('An older writer\'s inline archive entries merge with the segments, none hidden, none twice', async () => {
+ const q=historyStorageLimits.quietDays,{db,packed,back}=await cycle({historyLearning:{version:1,scopes:{},changes:[edit(1,q+2),edit(2,0)]}});
+ const mixed=structuredClone(packed.state),known=back.historyLearning.changesArchive[0];
+ mixed.historyLearning.changesArchive=[known,{key:'history-changes:'+'a'.repeat(64),project:P,day:'2026-10-01',cls:'o',part:0,count:1,campaigns:['acc|old']}];
+ const merged=await hydrateHistoryState(mixed,db.fetch);
+ assert.deepEqual(merged.historyLearning.changesArchive.map(e=>e.day),[known.day,'2026-10-01']);
+ const repacked=await packHistoryState(merged,now);
+ assert.equal(repacked.state.historyLearning.changesArchive,undefined);assert.deepEqual(repacked.state.historyLearning.changesArchiveStorage.segments.map(e=>e.count),[2]);
+});
+
+test('Through the real persistence path with split groups: the commit returns what the next read returns', async () => {
+ const q=historyStorageLimits.quietDays,db=database();
+ const changes=Array.from({length:600},(_,i)=>change(i,i%2?P:Q,i%12,i%40===0,{campaignExternalId:'c'+i%7,at:at(i%12,i%24)}));
+ const state={config:{},snapshots:[],jobs:[],agents:{},reports:[],historyLearning:{version:1,scopes:{},changes},decisionHistoryOutcomes:[outcome('o1',[changes[11].key,changes[23].key])],decisionHistory:[{id:'d1',project:P,adAccountId:'acc',objectId:'c3',occurredAt:at(q+4)}]};
+ const saved=await commitPersistedState(db.api,state,0),read=await readPersistedState(db.api,()=>({}));
+ assert.deepEqual(read.state,saved.state,'half-cold groups included');
+ const loaded=read.state.historyLearning.changes.length,cold=read.storage.history.coldGroups;
+ assert.ok(loaded>0&&loaded<600,'some edits went cold: '+loaded);assert.ok(cold>0);assert.equal(read.storage.history.hotChanges,loaded);
+ assert.equal(read.state.historyLearning.changesArchive.reduce((n,e)=>n+e.count,0)+loaded,600,'loaded plus archived is everything');
+ for(const key of [changes[11].key,changes[23].key])assert.ok(read.state.historyLearning.changes.some(c=>c.key===key),'cited changes stay loaded');
+ const lean=await readPersistedState(db.api,()=>({}),{lean:true});
+ assert.equal(lean.storage.history.coldGroups,cold,'a lean read counts the archive from its index');assert.equal(lean.storage.history.hotChanges,loaded);
+ const second=await commitPersistedState(db.api,read.state,read.revision);
+ assert.deepEqual((await readPersistedState(db.api,()=>({}))).state,second.state);assert.equal(second.state.historyLearning.changes.length,loaded,'nothing else moves on the next commit');
 });

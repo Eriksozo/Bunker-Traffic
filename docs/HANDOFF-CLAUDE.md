@@ -1182,3 +1182,28 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - Pedido do dono em 12/11: nas linhas "Fora da Malva Dash pausou" (aba Gestores do notch) deve aparecer a conta da campanha.
 - O resumo já trazia `account` em cada mudança (`lib/companion-summary.mjs`, `activityItems`), mas o notch não mostrava. Agora cada linha tem a etiqueta da conta antes do nome da campanha, e o aviso de mudança de gestor inclui a conta. Sem conta, não aparece etiqueta vazia.
 - Autoteste ok; app reinstalado. Só no Mac: servidor e web não mudaram.
+
+## Histórico de mudanças: arquivamento por mudança (registro escrito às 2026-11-12 14:56:44 UTC por `date -u`)
+
+- Decisão do dono, na interface desta conversa, depois da medição acima: "Sim, arquivar".
+- **Regra nova (`lib/history-storage.mjs`, `packHistoryState`):** uma mudança que não é orçamento nem status de campanha fica carregada quando:
+  - um desfecho medido, observado há até 35 dias (`hotDays`), cita essa mudança; ou
+  - ela tem menos de 35 dias e, além disso, menos de 5 dias (`quietDays`) ou um evento de orçamento/status da mesma campanha a até 3 dias (`reachDays`). Os eventos vêm das mudanças financeiras do próprio registro e de `decisionHistory`.
+  - Qualquer outra fica fria: guardada no seu registro, listada por campanha, dia e intervalo de horário, e não carregada. Orçamento/status e mudança sem data continuam sempre carregados.
+- **Por que estes números:** a versão da evidência de um evento (`version()` em `lib/external-learning.mjs`) lê mudanças da mesma campanha a menos de 3 dias; a medição do evento lê o dia anterior e o seguinte, dentro desses 3 dias; a lembrança lê o que desfechos de até 30 dias citam. Nenhum outro leitor alcança essas mudanças.
+- **O que mudou de comportamento:**
+  - Antes, um grupo de projeto e dia ficava inteiro carregado enquanto um desfecho citasse uma mudança dele, sem prazo. Agora a decisão é por mudança, e a citação vale por 35 dias a partir da observação do desfecho.
+  - `archivedWindow` responde por horário quando a entrada traz o intervalo (`spans`); entrada sem intervalo continua respondendo por dia UTC, que só limita mais.
+  - Leitura sob demanda de um desfecho com mais de 35 dias: as mudanças que ele citou podem estar arquivadas; a sequência mostra `unavailableOtherChanges` e a janela recebe a limitação "arquivada". A prova do desfecho (`request`, `before`, `after`) não muda.
+  - Evento descoberto com mais de 2 dias de atraso (campanha fora do foco da coleta): edições vizinhas já arquivadas não são citadas; a medição recebe a limitação "arquivada" e fica "Inconclusivo", como ficaria com elas carregadas.
+- **Índice dos arquivados fora da central:** `historyLearning.changesArchive` (estado lógico) é gravado em segmentos de 40 entradas (`changesArchiveStorage`, registros `history-journal:<sha256>` com `name:'changesArchive'`), só acrescentados; a central guarda uma chave por segmento. Entradas inline de um Worker antigo são fundidas na leitura. Um leitor anterior a este commit ignora o índice: não fazer rollback para ele (linha acrescentada no `CLAUDE.md`).
+- **Ensaio com a central real** (revisão 11091 e todos os registros `history-*`, num SQLite em memória, pelo caminho real `readPersistedState` → `commitPersistedState` → `readPersistedState`):
+  - 26.990 carregadas → 24.430; 2.560 arquivadas em 17 grupos; central em 75,9% antes e depois; gravação em ~0,6 s; segunda gravação sem nenhum registro novo.
+  - O que a gravação devolve é igual ao que a leitura seguinte devolve. Nenhuma mudança financeira, citada, recente ou vizinha de evento foi arquivada; toda mudança carregada é idêntica à original.
+  - 628 candidatos à medição com a mesma versão de evidência antes e depois; os casos relembrados dos 6 projetos idênticos; nenhuma janela dos 318 desfechos toca o arquivo.
+  - Com o relógio adiantado sobre o mesmo registro: 10.719 carregadas em 20/11 e 10.025 em 05/12, com versões e casos relembrados iguais e nenhuma janela tocando o arquivo; em 25/12 restam as 1.858 de orçamento/status.
+- **Projeção, não medida:** no ritmo de ~3 mil edições por dia, a carga tende a ~16 dias de volume (5 dias inteiros mais ~37% de 30 dias), perto de 48 mil, acima do teto de 42.000. Com 14 dias de reconferência no lugar de 30 ficaria perto de 31 mil. Mudar `externalLearningPolicy.maximumAgeDays` ou o teto é decisão do dono e não foi feito.
+- **Pendências:**
+  - O índice dos arquivados é carregado inteiro nas leituras completas e só cresce; importações atrasadas criam entradas pequenas por dia. Se pesar, compactar ou carregar sob demanda.
+  - As mudanças de orçamento/status nunca ficam frias (cerca de 70 por dia hoje).
+  - Uma cópia completa da central ocupa ~50 MB de heap no ensaio local.
