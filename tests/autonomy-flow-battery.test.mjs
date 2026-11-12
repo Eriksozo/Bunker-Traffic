@@ -432,7 +432,9 @@ test('98 the notch decodes the requests, alerts once per request, counts them an
  assert.match(store,/for a in s\.autonomy\?\.asks \?\? \[\] where !seen\.contains\("ask:" \+ a\.id\)/);assert.match(store,/"Bunk pede sua confirmação"/);
  assert.match(store,/\(s\.autonomy\?\.asks \?\? \[\]\)\.map \{ "ask:" \+ \$0\.id \}/,'kept when the alert memory is trimmed: no second ring');
  assert.match(store,/s\.autonomy\?\.asksTotal \?\? s\.autonomy\?\.asks\.count \?\? 0/,'counted on the collapsed notch');
- assert.match(views,/SectionHeader\(title: "Bunk pede a você"/);assert.match(views,/AdjustTarget\(project: a\.projectId, adAccountId: a\.adAccountId, campaignId: a\.objectId, name: a\.campaign, preset: preset\)/);
+ const tab=read('mac/BunkerNotch/Sources/BunkerNotch/AutonomyTab.swift');
+ assert.match(tab,/SectionHeader\(title: "Bunk pede a você"/);assert.match(tab,/AdjustTarget\(project: a\.projectId, adAccountId: a\.adAccountId, campaignId: a\.objectId, name: a\.campaign, preset: preset\)/);
+ assert.match(views,/ListRow\(id: "ask:pointer"[\s\S]{0,400}notch\.tab = \.autonomy/,'Agora keeps one line that leads to the requests');
  assert.match(model,/guard action == "increase" \|\| action == "reduce", let percent, OwnerAdjust\.validPercent\(action, percent\) else \{ return nil \}/,'an activation or a percent out of range opens nothing');
 });
 test('99 the executor keeps the request list in the Confirmar branch and never creates an order there',()=>{
@@ -621,4 +623,50 @@ test('130 the only owner writes of the whole tab are still the permissions save 
  const all=['app/autonomy-panel.tsx',...fs.readdirSync(new URL('../app/autonomy/',import.meta.url)).filter(f=>f.endsWith('.tsx')).map(f=>'app/autonomy/'+f)].map(read).join('\n');
  assert.deepEqual([...new Set([...all.matchAll(/op:'([^']+)'/g)].map(m=>m[1]))].sort(),['autonomyConfig','autonomyKill']);assert.doesNotMatch(all,/method\s*:/);
  for(const m of all.matchAll(/fetch\(([^,)]+)/g))assert.match(m[1],/^[`'"]\/api\/autonomy/);
+});
+
+// ── Notch: everything about the autonomy in its own tab (owner request of 12/11/2026) ──────────────────────────────
+const swift=name=>read('mac/BunkerNotch/Sources/BunkerNotch/'+name);
+const structBody=(src,name)=>{const a=src.indexOf('struct '+name+': View {');assert.ok(a>=0,name);const b=src.indexOf('\nstruct ',a+10);return src.slice(a,b<0?undefined:b);};
+test('131 the notch has an Autonomia tab right after Agora, reachable by key 2',()=>{
+ const ctl=swift('NotchController.swift'),views=swift('NotchViews.swift');
+ assert.match(ctl,/enum NotchTab: String, CaseIterable \{ case now = "Agora", autonomy = "Autonomia", projects = "Projetos"/);
+ assert.match(views,/case \.autonomy: AutonomyTab\(s: s\)/);
+ assert.match(swift('SelfTest.swift'),/NotchKeys\.tab\(for: "2", keyCode: 0, current: \.now\) == \.autonomy/);
+});
+test('132 the Autonomia tab gathers requests, status, the Bunk orders, the Sombra and what it learned',()=>{
+ const tab=swift('AutonomyTab.swift');
+ const order=['SectionHeader(title: "Bunk pede a você"','SectionHeader(title: "Status"','SectionHeader(title: "Ordens do Bunk · 24h"','SectionHeader(title: "Sombra do Bunk · hoje"','SectionHeader(title: "O que o Bunk aprendeu com vocês"','ManagerPlays(autonomy: a'].map(x=>tab.indexOf(x));
+ assert.ok(order.every(i=>i>=0),'every section is there');assert.deepEqual([...order].sort((a,b)=>a-b),order,'what waits for the owner comes first');
+ assert.match(tab,/AutonomyIslandRow\(autonomy: a\)/);assert.match(tab,/\(s\.orders \?\? \[\]\)\.filter\(\\\.isBunk\)/);
+});
+test('133 Agora and Gestores no longer carry the autonomy sections',()=>{
+ const views=swift('NotchViews.swift'),now=structBody(views,'NowTab'),managers=structBody(views,'ManagersTab');
+ for(const gone of ['AutonomyIslandRow(','Sombra do Bunk','ShadowActionButton(','ForEach(asks)'])assert.ok(!now.includes(gone),'Agora without '+gone);
+ assert.match(now,/s\.orders\?\.filter\(\{ !\$0\.isBunk \}\)/,'Agora lists only the owner orders');
+ for(const gone of ['ManagerPlays(','O que o Bunk aprendeu com vocês'])assert.ok(!managers.includes(gone),'Gestores without '+gone);
+ assert.match(now,/"O que fazer agora"/);assert.match(now,/"Aguardando você"/);assert.match(managers,/"Mais recentes"/);
+});
+test('134 the tab is reading only: no write route, no approval, no level change from the notch',()=>{
+ const tab=swift('AutonomyTab.swift');
+ assert.doesNotMatch(tab,/URLSession|URLRequest|companion\/owner|autonomyConfig|autonomyKill|approve|httpMethod/i);
+ assert.match(tab,/store\.open\("#autonomy"\)/,'switch, levels and limits change only on the web panel');
+ assert.match(read('app/bunker.tsx'),/\['office','cards','reviews','accounts','autonomy'\]\.includes\(hash\)/,'the link opens the Autonomia view');
+});
+test('135 the badge of the tab counts the open requests and an alert of a request opens on it',()=>{
+ const views=swift('NotchViews.swift'),ctl=swift('NotchController.swift');
+ assert.match(views,/case \.autonomy:[\s\S]{0,200}s\.autonomy\.map\(AutonomyText\.asksCount\) \?\? 0[\s\S]{0,80}\.warn/);
+ assert.match(ctl,/static func tab\(forAlert id: String\) -> NotchTab\? \{ id\.hasPrefix\("ask:"\) \? \.autonomy : nil \}/);
+ assert.match(ctl,/if case \.alert\(let a\) = before, case \.open = after, let tab = NotchKeys\.tab\(forAlert: a\.id\) \{ state\.tab = tab \}/);
+});
+test('136 a level that needs the switch says it is stopped when the switch is off',()=>{
+ const tab=swift('AutonomyTab.swift');
+ assert.match(tab,/case "confirm": return enabled \? "pede a você antes de agir" : "parado: interruptor geral desligado"/);
+ assert.match(tab,/case "auto": return enabled \? "age sozinho dentro dos limites salvos" : "parado: interruptor geral desligado"/);
+ assert.match(tab,/static func asksCount\(_ a: Summary\.Autonomy\) -> Int \{ max\(a\.asksTotal \?\? 0, a\.asks\.count\) \}/);
+});
+test('137 eight tabs stay on one line: tighter densities first, neutral badges before the text',()=>{
+ const views=swift('NotchViews.swift');
+ assert.match(views,/ViewThatFits\(in: \.horizontal\)/);assert.match(views,/func shows\(_ tone: Tone\) -> Bool \{ neutralBadges \|\| tone != \.neutral \}/);
+ assert.match(views,/\.lineLimit\(1\)\.minimumScaleFactor\(d\.shrink \? 0\.8 : 1\)\.fixedSize\(horizontal: !d\.shrink, vertical: false\)/);
 });

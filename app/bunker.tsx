@@ -64,7 +64,7 @@ export default function Bunker(){
  const [navOpen,setNavOpen]=useState(false),[cardsSearch,setCardsSearch]=useState(''),[cardsTab,setCardsTab]=useState<'cards'|'history'|'learning'>('cards');
  const file=useRef<HTMLInputElement>(null),acceptedRevision=useRef(0),writeLock=useRef(false);
  function acceptState(data:any){if(!isValidCentralResponse(data)||data.revision<acceptedRevision.current)return;acceptedRevision.current=data.revision;setState(data.state);setRevision(data.revision);setStoragePressure(data.storage?.pressure??null);}
- useEffect(()=>{const open=()=>{const [hash,query='']=globalThis.window.location.hash.slice(1).split('?');if(['office','cards','reviews','accounts'].includes(hash))setView(hash);
+ useEffect(()=>{const open=()=>{const [hash,query='']=globalThis.window.location.hash.slice(1).split('?');if(['office','cards','reviews','accounts','autonomy'].includes(hash))setView(hash);
   // Deep link from the Mac companion: #cards?project=<id>&q=<campaign id> opens that campaign's card.
   if(hash==='cards'&&query){const params=new URLSearchParams(query),target=params.get('project'),q=params.get('q');if(target)setProject(target);if(q){setCardsSearch(q.slice(0,120));setCardsTab('cards');}}};open();globalThis.window.addEventListener('hashchange',open);return()=>globalThis.window.removeEventListener('hashchange',open);},[]);
  const [officeDrafts,setOfficeDrafts]=useState<Record<string,string>>({});

@@ -2,14 +2,14 @@ import AppKit
 import Combine
 import SwiftUI
 
-enum NotchTab: String, CaseIterable { case now = "Agora", projects = "Projetos", accounts = "Contas", managers = "Gestores", agents = "Agentes", system = "Sistema", days = "Dias" }
+enum NotchTab: String, CaseIterable { case now = "Agora", autonomy = "Autonomia", projects = "Projetos", accounts = "Contas", managers = "Gestores", agents = "Agentes", system = "Sistema", days = "Dias" }
 
 /// Pointer pre-filter for the global mouse monitor: within 60 pt of the island panel.
 enum NotchHover {
     static func near(_ p: CGPoint, panel: CGRect) -> Bool { panel.insetBy(dx: -60, dy: -60).contains(p) }
 }
 
-/// Keyboard while the island is open: 1–7 pick a tab, ← → move between tabs (wrapping). Pure, for the self-test.
+/// Keyboard while the island is open: 1–8 pick a tab, ← → move between tabs (wrapping). Pure, for the self-test.
 enum NotchKeys {
     static func tab(for chars: String?, keyCode: UInt16, current: NotchTab) -> NotchTab? {
         let all = NotchTab.allCases, i = all.firstIndex(of: current) ?? 0
@@ -18,6 +18,8 @@ enum NotchKeys {
         if let chars, let n = Int(chars), (1...all.count).contains(n) { return all[n - 1] }
         return nil
     }
+    /// The tab an alert opens on when the owner clicks it: a request of the level Confirmar goes to Autonomia.
+    static func tab(forAlert id: String) -> NotchTab? { id.hasPrefix("ask:") ? .autonomy : nil }
 }
 
 /// Island geometry for a screen: the real notch when there is one, otherwise a slim bar under the menu bar centre.
@@ -245,6 +247,7 @@ final class NotchController {
         guard after != before else { return }
         // Growing springs open, shrinking settles firmly (DS.Motion.island).
         let size = { (m: IslandFSM.State) -> Int in switch m { case .compact: return 0; case .peek: return 1; case .alert: return 2; case .open: return 3 } }
+        if case .alert(let a) = before, case .open = after, let tab = NotchKeys.tab(forAlert: a.id) { state.tab = tab }
         withAnimation(DS.Motion.island(opening: size(after) > size(before))) { state.mode = after }
         alertWork?.cancel(); idleWork?.cancel()
         switch after {

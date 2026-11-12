@@ -259,6 +259,7 @@ struct ExpandedView: View {
                     Group {
                         switch notch.tab {
                         case .now: NowTab(s: s)
+                        case .autonomy: AutonomyTab(s: s)
                         case .projects: ProjectsTab(s: s)
                         case .accounts: AccountsTab(s: s)
                         case .managers: ManagersTab(s: s)
@@ -469,27 +470,49 @@ struct DeltaText: View {
 
 // MARK: - Tabs
 
+/// How tight the tab bar is drawn. Eight tabs since the Autonomia tab: the roomiest density whose labels stay on one
+/// line wins (ViewThatFits); the last one may shrink the text instead of wrapping it.
+struct TabBarDensity: Equatable {
+    let inset: CGFloat; let spacing: CGFloat
+    /// Neutral count badges (Gestores, Agentes) give way first; the ones that ask for the owner always stay.
+    let neutralBadges: Bool
+    let shrink: Bool
+    static let all = [TabBarDensity(inset: 10, spacing: 4, neutralBadges: true, shrink: false), TabBarDensity(inset: 8, spacing: 3, neutralBadges: true, shrink: false),
+                      TabBarDensity(inset: 6, spacing: 2, neutralBadges: true, shrink: false), TabBarDensity(inset: 5, spacing: 1, neutralBadges: true, shrink: false),
+                      TabBarDensity(inset: 5, spacing: 1, neutralBadges: false, shrink: false),
+                      TabBarDensity(inset: 4, spacing: 0, neutralBadges: false, shrink: true)]
+    func shows(_ tone: Tone) -> Bool { neutralBadges || tone != .neutral }
+}
+
 struct TabBar: View {
     @EnvironmentObject var notch: NotchState
     @Namespace private var indicator
     let s: Summary
     var body: some View {
-        HStack(spacing: DS.Space.xs) {
+        ViewThatFits(in: .horizontal) {
+            ForEach(Array(TabBarDensity.all.enumerated()), id: \.offset) { i, d in bar(d, variant: i) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(3)
+        .background(DS.Color.surface, in: Capsule())
+    }
+    func bar(_ d: TabBarDensity, variant: Int) -> some View {
+        HStack(spacing: d.spacing) {
             ForEach(NotchTab.allCases, id: \.self) { tab in
                 let selected = notch.tab == tab
                 Button { withAnimation(DS.Motion.select) { notch.tab = tab } } label: {
                     HStack(spacing: 5) {
-                        Text(tab.rawValue).font(DS.Font.bodyStrong)
-                        if let badge = badge(tab) { Pill(text: badge.0, tone: badge.1) }
+                        Text(tab.rawValue).font(DS.Font.bodyStrong).lineLimit(1).minimumScaleFactor(d.shrink ? 0.8 : 1).fixedSize(horizontal: !d.shrink, vertical: false)
+                        if let badge = badge(tab), d.shows(badge.1) { Pill(text: badge.0, tone: badge.1).fixedSize() }
                     }
-                    .padding(DS.Inset.tab)
+                    .padding(EdgeInsets(top: DS.Inset.tab.top, leading: d.inset, bottom: DS.Inset.tab.bottom, trailing: d.inset))
                     .foregroundStyle(selected ? DS.Color.ink : notch.hovered == "tab:" + tab.rawValue ? DS.Color.inkSoft : DS.Color.inkMuted)
                     // One indicator that slides between tabs instead of blinking in and out.
                     .background {
                         if selected {
                             Capsule().fill(DS.Color.surfaceSelected)
                                 .overlay(Capsule().strokeBorder(LinearGradient(colors: [DS.Color.highlight, .clear], startPoint: .top, endPoint: .bottom)))
-                                .matchedGeometryEffect(id: "tab", in: indicator)
+                                .matchedGeometryEffect(id: "tab:\(variant)", in: indicator)
                         } else if notch.hovered == "tab:" + tab.rawValue {
                             Capsule().fill(DS.Color.surface)
                         }
@@ -500,16 +523,17 @@ struct TabBar: View {
                 .help("\(tab.rawValue) · tecla \((NotchTab.allCases.firstIndex(of: tab) ?? 0) + 1) (← → trocam de aba)")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
-            Spacer(minLength: 0)
         }
-        .padding(3)
-        .background(DS.Color.surface, in: Capsule())
     }
     func badge(_ tab: NotchTab) -> (String, Tone)? {
         switch tab {
         case .now:
             let n = s.approvals.count + s.queue.filter { $0.kind == "loss" }.count
             return n > 0 ? ("\(n)", s.approvals.count > 0 ? .warn : .bad) : nil
+        case .autonomy:
+            // Open requests of the level Confirmar: what waits for the owner in this tab.
+            let n = s.autonomy.map(AutonomyText.asksCount) ?? 0
+            return n > 0 ? ("\(n)", .warn) : nil
         case .managers:
             let n = s.activity.summary.values.reduce(0) { $0 + $1.count }
             return n > 0 ? ("\(n)", .neutral) : nil
@@ -625,19 +649,12 @@ struct NowTab: View {
     var showProject: Bool { s.project == "all" }
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-            if let asks = s.autonomy?.asks, !asks.isEmpty {
-                // Level Confirmar: the Bunk only asks. The row opens the owner's own order, already filled; Touch ID executes it.
-                SectionHeader(title: "Bunk pede a você", detail: Format.count(s.autonomy?.asksTotal ?? asks.count, "pedido", "pedidos") + " · nível Confirmar · você executa com Touch ID")
-                VStack(spacing: 2) {
-                    ForEach(asks) { a in
-                        ListRow(id: "ask:" + a.id, symbol: a.action == "pause" ? "pause.fill" : "dollarsign.circle", tone: .warn,
-                                title: a.campaign ?? "Campanha",
-                                subtitle: a.changeText + (a.ruleLabel.map { " · " + $0 } ?? ""),
-                                tag: showProject ? a.projectName : nil,
-                                value: a.at.map { Format.stamp($0) }, valueCaption: a.preset == nil ? "abrir no painel" : "Conferir",
-                                action: a.preset.map { preset in { withAnimation(DS.Motion.quick) { notch.adjust = AdjustTarget(project: a.projectId, adAccountId: a.adAccountId, campaignId: a.objectId, name: a.campaign, preset: preset) } } })
-                    }
-                }
+            if let a = s.autonomy, AutonomyText.asksCount(a) > 0 {
+                // The requests themselves live in the Autonomia tab (owner request of 12/11/2026); one line here so a request is never missed.
+                ListRow(id: "ask:pointer", symbol: "hand.raised.fill", tone: .warn, title: "Bunk pede a você",
+                        subtitle: Format.count(AutonomyText.asksCount(a), "pedido", "pedidos") + " no nível Confirmar · ver na aba Autonomia",
+                        value: "\(AutonomyText.asksCount(a))", valueCaption: "Autonomia",
+                        action: { withAnimation(DS.Motion.quick) { notch.tab = .autonomy } })
             }
             if s.approvals.count > 0 {
                 HStack(spacing: DS.Space.s) {
@@ -652,13 +669,13 @@ struct NowTab: View {
                     }
                 }
             }
-            if let orders = s.orders, !orders.isEmpty {
-                let bunk = orders.contains { $0.isBunk }
-                SectionHeader(title: bunk ? "Ordens · 24h" : "Suas ordens · 24h", detail: bunk ? "Suas (Touch ID) e do Bunk (autonomia) → executor → Malva → releitura" : "Touch ID → executor → Malva → releitura")
+            // The Bunk's own orders (level Automático) are listed in the Autonomia tab; here only the owner's.
+            if let orders = s.orders?.filter({ !$0.isBunk }), !orders.isEmpty {
+                SectionHeader(title: "Suas ordens · 24h", detail: "Touch ID → executor → Malva → releitura")
                 VStack(spacing: 2) {
                     ForEach(orders) { o in
                         ListRow(id: "or:" + o.id, symbol: Format.orderSymbols[o.stage] ?? "circle", tone: Format.orderTone(o.stage),
-                                title: (o.isBunk ? "Bunk · " : "") + (o.campaign ?? "Campanha"), subtitle: Format.orderChange(o) + (o.isBunk ? (o.rule.map { " · " + $0 } ?? " · autonomia") : "") + (o.reason.map { " · " + $0 } ?? ""),
+                                title: o.campaign ?? "Campanha", subtitle: Format.orderChange(o) + (o.reason.map { " · " + $0 } ?? ""),
                                 tag: Format.queueTag(project: showProject ? o.projectName : nil, account: o.account),
                                 value: o.label ?? o.stage, valueCaption: Format.relative(o.confirmedAt ?? o.sentAt ?? o.at))
                     }
@@ -699,38 +716,6 @@ struct NowTab: View {
                                 title: item.campaign ?? "Campanha",
                                 subtitle: "Programada · começa \(item.startsOn ?? "em breve")",
                                 tag: Format.queueTag(project: showProject ? item.project : nil, account: item.account))
-                    }
-                }
-            }
-            if let a = s.autonomy { AutonomyIslandRow(autonomy: a) }
-            // Also on a quiet day: the 7-day score and the memory stay visible when there is something to show.
-            if let sh = s.shadow, sh.total > 0 || (sh.learning.map { $0.graded > 0 || ($0.blindSpots ?? 0) > 0 } ?? false) {
-                let would = sh.byRule.values.reduce(0) { $0 + $1.wouldExecute }, first = sh.byRule.values.reduce(0) { $0 + $1.bunkerFirst }
-                SectionHeader(title: "Sombra do Bunk · hoje", detail: "\(would) executaria · \(first) antes do gestor · não executa nada")
-                if let sc = sh.scorecard, sc.graded > 0 {
-                    // Did the would-be action fit what happened the next day? (nothing was executed)
-                    Text(Format.shadowScore(sc)).font(DS.Font.caption).foregroundStyle(sc.right * 10 >= sc.graded * 6 ? DS.Color.good : DS.Color.warn)
-                        .help("Cada decisão da sombra é conferida pelo resultado real do dia seguinte: corte acerta se o dia seguinte deu prejuízo; aumento acerta se deu lucro. Campanha que parou não entra.")
-                }
-                if let l = sh.learning, l.graded > 0 || (l.blindSpots ?? 0) > 0 {
-                    // What the Bunk has learned beyond the 7 days: score with an honest range and its top lesson.
-                    Text(Format.shadowMemory(l)).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft)
-                        .help("Memória de até 90 dias: cada decisão conferida pelo dia seguinte, com a faixa provável de acerto (95%). Ponto cego: corte do gestor ou seu que a Sombra não tinha apontado.")
-                    if let lesson = l.lessons?.first {
-                        Text(lesson).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(2)
-                    }
-                }
-                VStack(spacing: 2) {
-                    ForEach(sh.recent.prefix(5)) { item in
-                        ListRow(id: "sh:" + item.id, symbol: item.action == "status" ? "pause.fill" : "dollarsign.circle", tone: item.manager != nil || item.owner != nil ? .good : (item.wouldExecute == true ? .warn : .neutral),
-                                title: item.campaign ?? "Campanha",
-                                subtitle: Format.shadowChange(item) + " · " + (item.ruleLabel ?? item.rule ?? ""),
-                                tag: Format.queueTag(project: showProject ? item.project : nil, account: item.account),
-                                value: Format.stamp(item.firstAt), valueCaption: Format.shadowOutcome(item),
-                                accessory: AdjustPreset.from(item).flatMap { preset in
-                                    // Desligado hides the quick action; Sombra/Confirmar/Automático: "Fazer eu mesmo" (contract b.3).
-                                    ShadowActionButton.label(mode: s.autonomy?.mode(for: item), preset: preset).map { AnyView(ShadowActionButton(item: item, preset: preset, label: $0)) }
-                                })
                     }
                 }
             }
@@ -879,20 +864,6 @@ struct ManagersTab: View {
             HStack(alignment: .top, spacing: DS.Space.s) {
                 ForEach(keys, id: \.self) { key in box(key) }
             }
-            if let l = s.shadow?.learning, !(l.team ?? []).isEmpty || !(l.proposals ?? []).isEmpty {
-                // What the Bunk learned from your moves and the managers' (lib/team-learning.mjs). Readings only.
-                SectionHeader(title: "O que o Bunk aprendeu com vocês", detail: "30 dias · só leitura, nada muda sozinho")
-                    .help("Cada pausa, aumento ou redução sua e dos gestores fica guardada com os números do momento e com o que a Sombra tinha apontado. Propostas de limiar só valem com o seu sim.")
-                VStack(alignment: .leading, spacing: 3) {
-                    ForEach(Array((l.team ?? []).prefix(3).enumerated()), id: \.offset) { _, line in
-                        Text(line).font(DS.Font.caption).foregroundStyle(DS.Color.inkSoft).lineLimit(2)
-                    }
-                    ForEach(Array((l.proposals ?? []).prefix(2).enumerated()), id: \.offset) { _, line in
-                        Text(line).font(DS.Font.caption).foregroundStyle(DS.Color.warn).lineLimit(3)
-                    }
-                }
-            }
-            if let a = s.autonomy, !a.projects.isEmpty { ManagerPlays(autonomy: a, showProject: s.project == "all") }
             let list = s.activity.recent.filter { notch.activityFilter == nil || $0.action == notch.activityFilter }
             SectionHeader(title: notch.activityFilter.map { (Format.actionLabels[$0] ?? $0) + " recentes" } ?? "Mais recentes", detail: Format.count(list.count, "registro", "registros") + " no resumo")
             if list.isEmpty { EmptyLine(text: "Nenhuma mudança neste filtro.", kind: .info) }

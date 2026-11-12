@@ -174,6 +174,7 @@ Pedido do dono em 12/11/2026 (aba Autonomia confusa; campanhas em Confirmar não
   - Agora o executor mantém a lista `autonomyAsks` (no próprio executor, fora da central): um pedido por decisão que executaria agora, com a mudança exata.
   - O pedido fecha sozinho quando a regra deixa de propor, o nível muda ou o interruptor geral é desligado.
   - A web mostra "Aguardando você" acima das abas. O notch mostra "Bunk pede a você", alerta uma vez por pedido e abre a ordem do dono já preenchida. Quem executa é o dono, com Touch ID (`recordDirectOrder`).
+  - No notch, tudo da autonomia fica na aba "Autonomia" (pedido do dono em 12/11/2026): pedidos, status, ordens do Bunk, Sombra e aprendizado. A aba "Agora" guarda só uma linha que leva aos pedidos. A aba é leitura: interruptor, níveis, ações e limites mudam só no painel web, pelo dono.
   - Confirmar continua exigindo o interruptor geral ligado. Desligado, o Bunk não envia nem pede, e a tela diz isso.
 - **Nível do projeto e nível da campanha.**
   - A campanha com nível próprio passa por cima do projeto; ações e limites são sempre os do projeto. A regra não mudou (`effectiveMode`), a tela passou a dizer.

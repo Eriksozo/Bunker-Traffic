@@ -1138,3 +1138,18 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - uma ordem real do Automático depois da mudança.
 - **Do dono, na interface:** salvar as permissões (o John aparecia como "Não salvo" na captura de 12/11) e conferir se o interruptor geral está ligado. Nenhum agente fez nem deve fazer isso por ele.
 
+## Notch: aba "Autonomia" separada (registro escrito às 2026-11-12 12:02:17 UTC por `date -u`)
+
+- **Pedido do dono (12/11/2026):** tudo o que for do modo autonomia do Bunk numa aba separada, para acompanhar andamento, status e o que há para aprovar. Entendi como aba do notch (a captura trazia uma linha da aba "Agora"); o web já tinha a tela "Autonomia do Bunk".
+- **Feito (só notch, mais um link no web):**
+  - aba "Autonomia" logo depois de "Agora" (tecla 2; as outras andaram uma casa, "Dias" virou 8), em `mac/BunkerNotch/Sources/BunkerNotch/AutonomyTab.swift`;
+  - ordem da aba: "Bunk pede a você" (pedidos do Confirmar), "Status" (interruptor geral, nível de cada projeto e o que ele faz agora, decisões de hoje), "Ordens do Bunk · 24h", "Sombra do Bunk · hoje", "O que o Bunk aprendeu com vocês" e as jogadas da equipe;
+  - "Agora" perdeu a linha da ilha, a Sombra e as ordens do Bunk; ficou com uma linha "Bunk pede a você" que leva à aba nova, as propostas exatas, as ordens do dono, a fila e as primeiras 24h;
+  - "Gestores" perdeu o aprendizado e as jogadas; ficou com as caixas e os registros recentes;
+  - selo da aba = pedidos abertos; clicar no alerta de um pedido abre o notch já na aba;
+  - botão "Painel" abre `#autonomy` no navegador (o web passou a aceitar esse atalho);
+  - com oito abas a barra aperta o espaçamento antes de esconder os selos neutros (Gestores, Agentes) e nunca quebra o texto.
+- **Não mudou:** servidor, executor, resumo do notch, regras de envio e de pedido. A aba só lê; interruptor, níveis, ações e limites continuam só do dono, no painel web.
+- **Conferido:** autoteste do notch, prévias renderizadas com dados fictícios (`--render-notch`) e bateria da autonomia (137 testes).
+- **Não conferido:** a aba com dados reais de produção e um pedido real do Confirmar abrindo nela.
+

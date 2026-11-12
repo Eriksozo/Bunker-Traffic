@@ -73,8 +73,16 @@ enum SelfTest {
         check(Format.accountLimit(noLimit) == "limite N/D" && Format.accountUse(noLimit) == "N/D", #line)
         check(Format.accountMatches(accRow, "ca 1") && Format.accountMatches(accRow, "") && !Format.accountMatches(accRow, "flix 9"), #line)
         check(Format.accountMatches(accRow, "act_1") && !Format.accountMatches(accRow, "act_"), #line)
-        check(NotchTab.allCases[2] == .accounts, #line)
-        check(NotchTab.allCases.last == .days && NotchKeys.tab(for: "7", keyCode: 0, current: .now) == .days, #line)
+        check(NotchTab.allCases[1] == .autonomy && NotchTab.allCases[3] == .accounts && NotchTab.allCases.count == 8, #line)
+        check(NotchTab.allCases.last == .days && NotchKeys.tab(for: "8", keyCode: 0, current: .now) == .days, #line)
+        check(NotchKeys.tab(for: "2", keyCode: 0, current: .now) == .autonomy && NotchKeys.tab(for: "9", keyCode: 0, current: .now) == nil, #line)
+        check(NotchKeys.tab(for: nil, keyCode: 124, current: .now) == .autonomy && NotchKeys.tab(for: nil, keyCode: 123, current: .autonomy) == .now, #line)
+        // Eight tabs on one line: each density is tighter than the one before, neutral badges give way before the text shrinks.
+        let dens = TabBarDensity.all
+        check(dens.count >= 3 && zip(dens, dens.dropFirst()).allSatisfy { $0.inset >= $1.inset && $0.spacing >= $1.spacing && $0 != $1 } && dens.first?.neutralBadges == true && dens.last?.shrink == true && dens.dropLast().allSatisfy { !$0.shrink }, #line)
+        check(dens.last?.shows(.warn) == true && dens.last?.shows(.bad) == true && dens.last?.shows(.neutral) == false && dens.first?.shows(.neutral) == true, #line)
+        // A request of the level Confirmar opens on the Autonomia tab; every other alert keeps the tab the owner was on.
+        check(NotchKeys.tab(forAlert: "ask:k1") == .autonomy && NotchKeys.tab(forAlert: "ap:1") == nil && NotchKeys.tab(forAlert: "or:1:confirmed") == nil, #line)
         let daysJSON = #"{"rows":[{"day":"2026-11-10","spend":32519.62,"orders":125,"cpa":260.16,"revenueNet":39794.25,"profit":5973.85,"roas":1.2237,"roi":1.18},{"day":"2026-11-09","spend":null,"orders":null,"cpa":null,"revenueNet":null,"profit":-5,"roas":null,"roi":0.9}],"currency":"BRL","today":"2026-11-10","at":"2026-11-10T13:00:00.000Z","stale":false,"missing":[],"failing":[],"error":null}"#
         let days = try? JSONDecoder().decode(Summary.Days.self, from: Data(daysJSON.utf8))
         check(days?.rows.count == 2 && days?.rows[1].spend == nil, #line)
@@ -182,6 +190,26 @@ enum SelfTest {
         check(Summary.AutonomyAsk(id: "x", projectId: "p", adAccountId: "a", objectId: "o", action: "increase", percent: nil).preset == nil, #line)
         if let a = asking { check(Store.presentKeys(a, day: "2026-11-12").filter { $0.hasPrefix("ask:") } == ["ask:k1", "ask:k2", "ask:k3"], #line) } else { check(false, #line) }
         check(summary(#","autonomy":{"enabled":true,"projects":[],"campaigns":[]}"#)?.autonomy?.asks.isEmpty == true, #line)
+        // Autonomia tab (owner request of 12/11/2026): the switch, each level and the requests in plain words.
+        if let q = asking?.autonomy {
+            check(AutonomyText.asksCount(q) == 3 && AutonomyText.asksDetail(q) == "3 pedidos · nível Confirmar · você executa com Touch ID" && AutonomyText.moreAsks(q) == nil, #line)
+            var more = q; more.asksTotal = 7
+            check(AutonomyText.asksCount(more) == 7 && AutonomyText.moreAsks(more) == "Mais 4 pedidos no painel Autonomia do Bunk.", #line)
+            var fewer = q; fewer.asksTotal = 1   // a total below the rows sent never hides a row from the count
+            check(AutonomyText.asksCount(fewer) == 3 && AutonomyText.moreAsks(fewer) == nil, #line)
+        } else { check(false, #line) }
+        check(AutonomyText.asksCount(a) == 0 && AutonomyText.asksDetail(a) == "nível Confirmar" && AutonomyText.noAsks(a) == "Nenhum pedido aberto agora.", #line)
+        check(AutonomyText.switchLine(a) == "interruptor geral ligado", #line)
+        var switchedOff = a; switchedOff.enabled = false
+        check(AutonomyText.switchLine(switchedOff) == "interruptor geral desligado · o Bunk não envia nem pede nada" && AutonomyText.noAsks(switchedOff) == "Interruptor geral desligado: o Bunk não pede nem envia nada.", #line)
+        check(["off", "shadow", "confirm", "auto", "x"].map { AutonomyText.level($0) } == ["Desligado", "Sombra", "Confirmar", "Automático", "N/D"] && AutonomyText.level(nil) == "N/D", #line)
+        check(AutonomyText.projectLine(a.projects[0], enabled: true) == "só observa e anota o que faria · 1 campanha com nível próprio", #line)
+        check(AutonomyText.projectLine(a.projects[1], enabled: true) == "não age, não pede e não sugere", #line)
+        // Confirmar and Automático only act with the general switch on: off, the row says it is stopped and loses its colour.
+        check(AutonomyText.levelEffect("confirm", enabled: true) == "pede a você antes de agir" && AutonomyText.levelEffect("auto", enabled: true) == "age sozinho dentro dos limites salvos", #line)
+        check(AutonomyText.levelEffect("confirm", enabled: false) == "parado: interruptor geral desligado" && AutonomyText.levelEffect("auto", enabled: false) == "parado: interruptor geral desligado", #line)
+        check(AutonomyText.levelTone("auto", enabled: true) == .good && AutonomyText.levelTone("auto", enabled: false) == .neutral && AutonomyText.levelTone("confirm", enabled: true) == .warn && AutonomyText.levelTone("confirm", enabled: false) == .neutral, #line)
+        check(AutonomyText.levelEffect(nil, enabled: true) == "nível N/D" && AutonomyText.levelSymbol("confirm") == "hand.raised.fill", #line)
         let pause = AdjustPreset(action: "pause", percent: nil)
         check(ShadowActionButton.label(mode: "off", preset: pause) == nil, #line)
         check(ShadowActionButton.label(mode: "shadow", preset: pause) == "Fazer eu mesmo", #line)
@@ -241,8 +269,8 @@ enum SelfTest {
         check(Format.compactMoney(9_960) == "R$ 10 mil", #line)
         check(Format.compactMoney(-1_500, currency: "USD") == "−US$ 1,5 mil", #line)
         check(Format.count(1, "perda", "perdas") == "1 perda" && Format.count(0, "perda", "perdas") == "0 perdas" && Format.count(3, "perda", "perdas") == "3 perdas", #line)
-        check(NotchKeys.tab(for: "3", keyCode: 20, current: .now) == .accounts && NotchKeys.tab(for: nil, keyCode: 123, current: .now) == .days && NotchKeys.tab(for: nil, keyCode: 124, current: .system) == .days && NotchKeys.tab(for: nil, keyCode: 124, current: .days) == .now, #line)
-        check(NotchKeys.tab(for: "8", keyCode: 28, current: .now) == nil && NotchKeys.tab(for: "a", keyCode: 0, current: .now) == nil, #line)
+        check(NotchKeys.tab(for: "4", keyCode: 21, current: .now) == .accounts && NotchKeys.tab(for: nil, keyCode: 123, current: .now) == .days && NotchKeys.tab(for: nil, keyCode: 124, current: .system) == .days && NotchKeys.tab(for: nil, keyCode: 124, current: .days) == .now, #line)
+        check(NotchKeys.tab(for: "9", keyCode: 25, current: .now) == nil && NotchKeys.tab(for: "a", keyCode: 0, current: .now) == nil, #line)
         check(OwnerAdjust.parsePercent(" 20% ") == 20 && OwnerAdjust.parsePercent("12,5") == 12.5 && OwnerAdjust.parsePercent("1e2") == nil && OwnerAdjust.parsePercent("") == nil && OwnerAdjust.parsePercent("1.2.3") == nil, #line)
         check(OwnerAdjust.percentProblem("reduce", 0.001, current: 100) != nil && OwnerAdjust.percentProblem("reduce", 100, current: 100) != nil && OwnerAdjust.percentProblem("increase", 1001, current: 100) != nil, #line)
         check(OwnerAdjust.percentProblem("reduce", 20, current: 100) == nil && OwnerAdjust.percentProblem("pause", nil, current: 100) == nil && OwnerAdjust.percentProblem("increase", nil, current: 100) != nil, #line)
