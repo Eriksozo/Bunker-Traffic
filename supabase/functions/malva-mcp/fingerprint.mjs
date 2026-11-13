@@ -1,0 +1,4 @@
+/** Canonical JSON and its short fingerprint. Dependency-free: shared by the Bunker journal (lib/collaboration.mjs) and
+ * the provider fence of the Edge Function (byte-identical copy in supabase/functions/malva-mcp). */
+export function canonical(value){if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().filter(k=>value[k]!==undefined).map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';return JSON.stringify(value);}
+export function fingerprint(value){const s=canonical(value);let a=2166136261,b=3335557771;for(let i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),16777619);b=Math.imul(b^s.charCodeAt(i),2246822519);}return 'v1-'+(a>>>0).toString(16).padStart(8,'0')+(b>>>0).toString(16).padStart(8,'0');}

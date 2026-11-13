@@ -161,6 +161,38 @@ test('dispatch fence (Worker and Edge Function copies): a Bunk order needs the g
  }
 });
 
+test('dispatch fence revalidates the whole grant after submit: mode off/confirm, action removed or ceiling lowered → refused, no resend',()=>{
+ // Curadoria of 13/11/2026 (P1): the Worker and Edge Function copies must reject a +30% Bunk order (100 → 130 BRL)
+ // when the owner revokes any part of the permission between submit and the provider. Synthetic data, no provider.
+ const revoke={'mode-off':c=>{c.projects[project].mode='off';},'mode-confirm':c=>{c.projects[project].mode='confirm';},
+  'increase-removed':c=>{c.projects[project].actions.increase=false;},'ceiling-110':c=>{c.projects[project].limits.budgetCap=110;}};
+ for(const guard of [authorizeCloudDispatch,edgeDispatch])for(const [name,change] of Object.entries(revoke)){
+  const s=withConfig(),p=recordAutonomyOrder(s,increase(),{live:live(),now}).proposal,t=now+2000;
+  assert.ok(p,name);
+  const e=claimExecution(s,{proposalId:p.id,version:1,signature:p.signature,clientId:'c',executionRef:'cf'},t),lease={id:e.id,claimId:e.claimId,executionRef:'cf'};
+  const prepared=prepareExecution(s,{...lease,clientId:'p',observation:observation(row(),t+500)},t+1000);
+  assert.equal(submitExecution(s,{...lease,clientId:'s'},t+2000).dispatchGranted,true);
+  const input={tool:prepared.command.tool,args:prepared.command.arguments,execution:{id:e.id,submitClientId:'s'}};
+  assert.equal(guard(s,input,t+3000).proposalId,p.id,name+': in force before the change');
+  const next=structuredClone(allow());change(next);setAutonomyConfig(s,next,'web:owner',t+2500);
+  assert.throws(()=>guard(s,input,t+3000),/MCP_APPROVAL_REQUIRED/,name+': refused at the provider fence');
+  assert.equal(submitExecution(s,{...lease,clientId:'s'},t+3500).dispatchGranted,false,name+': never a second submit');
+  assert.equal(s.executions[0].status,'Enviada',name+': stays submitted, for verification only');
+ }
+ // A forged autonomy flag without a grant is refused; an owner-approved order does not depend on the autonomy settings.
+ for(const guard of [authorizeCloudDispatch,edgeDispatch]){
+  const s=withConfig(),out=recordDirectOrder(s,{op:'ownerDirectOrder',clientId:'notch-y',project,adAccountId:acct,objectId:obj,action:'pause',expected:{status:'ACTIVE',dailyBudget:100,currency:'BRL'}},'mac-touchid:owner',{live:live(),now});
+  const p=out.proposal||s.proposals.at(-1),t=now+2000;assert.equal(isAutonomyOrder(p),false);
+  const e=claimExecution(s,{proposalId:p.id,version:p.version,signature:p.signature,clientId:'c2',executionRef:'cf'},t),lease={id:e.id,claimId:e.claimId,executionRef:'cf'};
+  const prepared=prepareExecution(s,{...lease,clientId:'p2',observation:observation(row(),t+500)},t+1000);submitExecution(s,{...lease,clientId:'s2'},t+2000);
+  const input={tool:prepared.command.tool,args:prepared.command.arguments,execution:{id:e.id,submitClientId:'s2'}};
+  killAutonomy(s,'web:owner',t+2500);
+  assert.equal(guard(s,input,t+3000).proposalId,p.id,'owner order: autonomy off does not block it');
+  p.autonomyOrder=true;
+  assert.throws(()=>guard(s,input,t+3000),/MCP_APPROVAL_REQUIRED/,'flag without a grant');
+ }
+});
+
 test('phone and notch alerts say when the order is the Bunk',()=>{
  assert.equal(orderAlertTitle({stage:'confirmed'}),'Ordem confirmada na Meta');
  assert.equal(orderAlertTitle({stage:'confirmed',by:'bunk'}),'Bunk (autonomia): ordem confirmada na Meta');

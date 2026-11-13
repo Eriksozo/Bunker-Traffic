@@ -14,11 +14,15 @@ Deno.serve(async(req:Request)=>{
   const rpc=async(operation:string,input:unknown)=>{const r=await fetch(Deno.env.get('SUPABASE_URL')+'/rest/v1/rpc/bunker_store',{method:'POST',headers:{apikey:service,'Content-Type':'application/json'},body:JSON.stringify({operation,input}),signal:AbortSignal.timeout(20000)});if(!r.ok)throw new CloudError('MCP_JOURNAL_FAILED');return r.json();};
   if(cloudWriteTools.includes(tool)){
    // A second independent fence in front of the provider: verify the persisted
-   // exact owner approval and submitted command, then atomically burn a receipt.
+   // exact owner approval, the autonomy permission still in force and the submitted
+   // command, then burn a receipt tied to the central revision that was verified:
+   // the RPC locks the central at that revision and inserts the receipt in one
+   // transaction, so a pause or revocation committed after this read refuses it.
+   // A refused receipt is never retried here: the order goes to verification.
    const proof=input.execution;if(!proof?.id||!proof?.submitClientId)throw new CloudError('MCP_APPROVAL_REQUIRED');
-   const rows=await rpc('get',{keys:['central']}),stored=JSON.parse(rows.rows?.[0]?.payload||'null');if(!stored)throw new CloudError('MCP_APPROVAL_REQUIRED');delete stored._commitToken;
+   const rows=await rpc('get',{keys:['central']}),row=rows.rows?.[0],stored=JSON.parse(row?.payload||'null'),centralRevision=Number(row?.revision);if(!stored||!Number.isSafeInteger(centralRevision)||centralRevision<1)throw new CloudError('MCP_APPROVAL_REQUIRED');delete stored._commitToken;
    const state=await hydrateCoreState(stored),authorized=authorizeCloudDispatch(state,input),e=state.executions.find((e:any)=>e.id===authorized.executionId),p=state.proposals.find((p:any)=>p.id===authorized.proposalId);
-   const key='dispatch:'+e.id,at=new Date().toISOString(),receipt=await rpc('cas',{key,payload:JSON.stringify({executionId:e.id,proposalId:p.id,command:e.command,at,dispatchConsumed:true}),expected:0,updated_at:at});
+   const key='dispatch:'+e.id,at=new Date().toISOString(),receipt=await rpc('cas',{key,payload:JSON.stringify({executionId:e.id,proposalId:p.id,command:e.command,at,dispatchConsumed:true,centralRevision}),expected:0,updated_at:at,centralRevision});
    if(receipt.changes!==1)return result({dispatchGranted:false,verificationOnly:true});
   }
   const key=Deno.env.get('MALVA_MCP')||Deno.env.get('MALVA_API');

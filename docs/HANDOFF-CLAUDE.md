@@ -1269,3 +1269,31 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Servidor antigo (sem os blocos novos): o notch não afirma nada; mostra "Nada listado…" com ícone de informação.
 - **Testes:** `tests/companion-summary.test.mjs` com casos de fila sem análise, tudo lido, ROI com lacuna e `from` inválido ou futuro. `tests/funnel-watch.test.mjs` com tom, linhas e singular. Autoteste Swift `testNowText` com estados mistos, sem leitura, tudo lido, servidor antigo, carregando e sem leitura. Bateria completa 1706 ok, typecheck e build ok. Prévia `16-fila-sem-analise` adicionada.
 - **Fora deste trabalho, para o dono e o Codex:** as coletas falhando (`CLOUD_COLLECTION_FAILED` na fase `persist`, registradas na seção do VIGIA) são o que mantém a análise de ontem. O notch agora mostra isso; a causa da coleta não foi tratada aqui.
+
+## Curadoria de 13/11, P1 de envio único: concessão revalidada e recibo atado à central (registro escrito às 2026-11-13 18:45 UTC por `date -u`)
+
+- **Pedido:** Erik, curadoria profunda consolidada pelo Codex (`/tmp/bunker-curadoria-profunda-20261113.md`). Os achados foram reproduzidos sem provedor real; o verificador do Codex passava 3 de 12 casos.
+- **Falha 1, concessão:**
+  - **Problema:** `authorizeCloudDispatch` (Worker e a cópia da Edge) só olhava `autonomy.enabled`.
+  - **Correção:** agora roda a mesma `assertAutonomyGrant` do claim, do prepare e do submit, ou seja, a impressão da configuração inteira mais o modo Automático. Mudar o modo para off ou confirm, retirar a ação ou baixar o teto depois do submit passa a recusar a ordem com `MCP_APPROVAL_REQUIRED`. A semântica continua a de "Verificação necessária", sem reenvio.
+  - **Refatoração, sem mudança de comportamento:** a checagem foi para `lib/autonomy-fence.mjs`. A impressão foi para `lib/fingerprint.mjs`, mesmo algoritmo, então as ordens existentes mantêm a impressão. `lib/autonomy-grant.mjs` e `lib/collaboration.mjs` reexportam. Os dois módulos novos têm cópias byte-idênticas na Edge.
+  - **Ordem do dono:** proposta aprovada pelo dono não depende da autonomia; está coberta por teste.
+- **Falha 2, janela entre a leitura da central e o recibo:**
+  - **Correção na Edge:** a Edge lê `revision` da central, valida contra essa revisão e manda `centralRevision` no `cas` do recibo `dispatch:`.
+  - **Migração `20261113183051_dispatch_receipt_central_fence`:**
+    - criada com `supabase migration new` e renomeada para a versão registrada;
+    - parte da definição em produção, conferida idêntica a `snapshot_retention`;
+    - só o ramo `cas` muda: com `centralRevision`, trava a linha `central` naquela revisão (`for update`) e insere o recibo na mesma transação. Se a revisão mudou, devolve `changes 0` e `conflict central`, e o provedor não é chamado;
+    - nenhuma chamada HTTP dentro da transação; permissões continuam só para `service_role`.
+  - **Mudança depois do recibo:** é tratada como ordem já em trânsito.
+  - **Sem nova tentativa:** um conflito vira `verificationOnly`, e não há segunda leitura.
+- **Limite conhecido:** se a central mudar por outro motivo nos milissegundos entre a leitura e o recibo, a ordem cai em verificação em vez de ser enviada. O pedido foi bloquear sem nova tentativa. Acompanhar com que frequência isso acontece.
+- **Testes:**
+  - `tests/autonomy-grant.test.mjs`: 4 revogações depois do submit, nas duas cópias, sem segundo submit; ordem do dono passa; marca de autonomia forjada é recusada.
+  - `tests/malva-mcp-dispatch-fence.test.mjs` (novo): roda o handler real da Edge transpilado em memória, com o contrato do RPC modelado. Um despacho válido chama o provedor uma vez. Pausa, interruptor desligado ou permissão mudada entre a leitura e o recibo chamam zero vezes. Repetição e timeout não reenviam. Central sem revisão é recusada. O texto da migração tem lock antes do insert e as permissões.
+  - Verificador do Codex: 12/12. Bateria completa 1711 ok, typecheck ok.
+- **Publicado:**
+  - migração aplicada no projeto Bunker Traffic (`enehgnotumknjlmwfcta`);
+  - sonda no banco real dentro de um bloco revertido: revisão antiga dá `changes 0` e `conflict central`; revisão atual dá `changes 1`. Nada ficou gravado (conferido: 0 linhas da chave de sonda);
+  - Edge `malva-mcp` v15 por `supabase functions deploy --use-api`, `verify_jwt` mantido;
+  - avisos de segurança do Supabase: só os dois que já existiam (RLS sem política nas tabelas só de `service_role` e proteção de senha vazada).
