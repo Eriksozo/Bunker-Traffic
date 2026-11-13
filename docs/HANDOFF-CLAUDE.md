@@ -1238,3 +1238,34 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Testes:** `tests/funnel-watch.test.mjs` (13), bateria completa 1705 ok, typecheck e build ok; `mac/build.sh` com autoteste ok.
 - **Deploy e conferência:** `687de0e` → versão Cloudflare `0513d49f-f52a-4b05-868c-0914ac79c1bd` (15:08:46 UTC), `/health` 200; app do Mac reinstalado (`687de0e`, autoteste ok) e reaberto à mão porque o `open` do script falhou com -600. Leitura das 15:21:31 UTC no código novo: 6 projetos sem erro, dois sinais, ambos do Gabe: "as vendas não batem" (vTurb 16 × 9 pedidos, 1 aprovado; eram 11 × 9 às 14:10, sem pedido novo desde então, último aviso do checkout às 14:34 UTC) e "sem venda há 9h" (checkout abrindo ✗). Não conferi a tela do notch recebendo esses alertas.
 - **Pendente de decisão (continua):** piso de gasto na última hora para contar como "tráfego rodando".
+
+## Revisão do notch pela foto do dono (registro escrito às 2026-11-13 18:25:29 UTC por `date -u`)
+
+- **Pedido:** Erik, repassado pelo Codex (rodada delimitada, Codex valida depois). Foto do notch aberto com: "Atualizado agora", ROI hoje N/D, "0 de 97 na fila" com check verde "Nada pedindo ação agora" e, no Gabe, "vendas não batem" junto de "sem venda há 12h".
+- **Causas confirmadas:**
+  - **Fila:** `queueSize` conta as campanhas ativas. Já `withoutStaleToday` tira da fila todas as campanhas de um projeto cujo corte "hoje" ainda é a análise do dia anterior. Na leitura de 18:12 UTC, 5 dos 6 projetos estavam assim (corte "hoje" de 12/11; status "Coleta em andamento" e John "aguardando nova tentativa após falha"). Resultado: a fila ficava vazia e aparecia o check verde.
+  - **Cabeçalho:** o texto media só a chegada do resumo (`store.lastFetch`).
+  - **ROI hoje:** fica N/D quando qualquer campanha de hoje não tem um componente (`sum` exige todos).
+  - **VIGIA:** o texto afirmava "Confira o webhook" mesmo com aviso recente do checkout. O sinal "sem venda" conta só venda aprovada, e o vTurb conta conversões de qualquer tipo.
+- **Mudança (só apresentação; nenhum critério, limiar, id ou política mudou):**
+  - `lib/companion-summary.mjs`:
+    - `queueInfo`: ativas, lidas, quantas e de quais projetos estão sem análise de hoje, testes protegidos;
+    - `analysis`: por projeto, hora da análise e `current`. Um `from` inválido ou futuro nunca conta como atual;
+    - `todayGaps.roi`: o componente que falta e em quantas campanhas.
+  - `lib/daily-brief.mjs`: `todayRoiGaps`.
+  - `lib/funnel-watch.mjs`:
+    - "sem venda aprovada";
+    - "vendas não batem" em três linhas: o que foi observado, a suspeita e o próximo passo. Tom `warn` quando o checkout avisou dentro de 3 h, `bad` sem aviso recente;
+    - o "Funil de pé" foi trocado por uma frase que não é prova de funcionamento;
+    - plural e singular de "conversão" corrigidos.
+  - Notch, `NowText.swift` (novo) e views:
+    - cabeçalho "Recebido agora · análise parcial", com tom de aviso e tooltip com o horário de cada fonte;
+    - fila "X listadas de Y ativas · N sem análise de hoje";
+    - linha de aviso com os projetos e atalho para a aba Sistema. O check verde só aparece com tudo lido ("Nenhuma perda nem oportunidade clara entre as N ativas lidas hoje");
+    - ROI N/D com "falta …";
+    - linha de período sob os cards (hoje parcial até HH:MM; ontem inteiro; 7 dias fechados; razões, não totais);
+    - VIGIA com "leitura atrasada" e tom vindo do servidor, também no alerta da ilha;
+    - o aviso do detalhe que saiu da fila ficou neutro e cita "sem análise de hoje".
+  - Servidor antigo (sem os blocos novos): o notch não afirma nada; mostra "Nada listado…" com ícone de informação.
+- **Testes:** `tests/companion-summary.test.mjs` com casos de fila sem análise, tudo lido, ROI com lacuna e `from` inválido ou futuro. `tests/funnel-watch.test.mjs` com tom, linhas e singular. Autoteste Swift `testNowText` com estados mistos, sem leitura, tudo lido, servidor antigo, carregando e sem leitura. Bateria completa 1706 ok, typecheck e build ok. Prévia `16-fila-sem-analise` adicionada.
+- **Fora deste trabalho, para o dono e o Codex:** as coletas falhando (`CLOUD_COLLECTION_FAILED` na fase `persist`, registradas na seção do VIGIA) são o que mantém a análise de ontem. O notch agora mostra isso; a causa da coleta não foi tratada aqui.

@@ -194,7 +194,7 @@ struct AlertView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
     let alert: IslandAlert
-    var tone: Tone { alert.kind == .funnel ? VigiaUI.tone(alertId: alert.id) : alert.kind == .sale ? .good : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? .good : .bad) : alert.kind == .approval ? .warn : alert.kind == .loss ? .bad : .accent }
+    var tone: Tone { alert.kind == .funnel ? VigiaUI.tone(kind: VigiaUI.kind(alertId: alert.id), tone: store.summary?.vigia?.signals.first { "vg:" + $0.id == alert.id }?.tone) : alert.kind == .sale ? .good : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? .good : .bad) : alert.kind == .approval ? .warn : alert.kind == .loss ? .bad : .accent }
     var symbol: String { alert.kind == .funnel ? VigiaUI.symbol(alertId: alert.id) : alert.kind == .sale ? "dollarsign.circle.fill" : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? "checkmark.seal.fill" : "exclamationmark.triangle.fill") : alert.kind == .approval ? "checkmark.seal.fill" : alert.kind == .loss ? "arrow.down.right" : "person.crop.circle.badge.exclamationmark" }
     var body: some View {
         VStack(spacing: 0) {
@@ -246,7 +246,7 @@ struct ExpandedView: View {
                 // The detail follows each new reading (status, budget, changes); a campaign that left the queue (paused
                 // from the notch, or no longer losing) says so instead of showing the old copy as current.
                 let current = s.queue.first { $0.id == item.id }
-                if current == nil { Banner(text: "Saiu de \"O que fazer agora\" na última leitura (pausada ou sem perda). Os números abaixo são de antes. Esc volta à lista.", tone: .good) }
+                if current == nil { Banner(text: "Saiu de \"O que fazer agora\" na última leitura (pausada, sem perda ou sem análise de hoje). Os números abaixo são de antes. Esc volta à lista.", tone: .neutral) }
                 CampaignDetailView(s: s, item: current ?? item)
             } else if let s = store.summary {
                 // Switching projects: the numbers on screen still belong to the previous one until the new reading lands.
@@ -334,7 +334,7 @@ struct Header: View {
                 StatusDot(tone: freshnessTone, size: DS.Size.dotSmall, pulse: freshnessTone == .bad || freshnessTone == .warn)
                 Text(freshness).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted).lineLimit(1)
             }
-            .help(Format.dataSources(store.summary))
+            .help(NowText.sources(lastFetch: store.lastFetch, summary: store.summary))
             IconButton(symbol: "arrow.clockwise", help: "Atualizar agora", spinning: store.loading) { Task { await store.refresh() } }
             // Quiet on purpose: each screen keeps a single accent action (e.g. "Ajustar aqui").
             ActionButton(title: "Abrir Bunker", icon: "arrow.up.right", help: "Abrir os cards de decisão no navegador") { store.open("#cards") }
@@ -349,13 +349,10 @@ struct Header: View {
         if store.error != nil { return .bad }
         if store.summary?.paused == true || store.summary?.executor?.paused == true { return .warn }
         guard let at = store.lastFetch else { return .neutral }
-        return Date().timeIntervalSince(at) > 600 ? .warn : .good
+        // A fresh receipt does not make every source fresh: a project still on yesterday's analysis warns too.
+        return Date().timeIntervalSince(at) > 600 || !NowText.staleAnalysis(store.summary).isEmpty ? .warn : .good
     }
-    var freshness: String {
-        if store.loading && store.summary == nil { return "Atualizando…" }
-        guard let at = store.lastFetch else { return "Sem leitura" }
-        return "Atualizado " + Format.relative(at)
-    }
+    var freshness: String { NowText.freshness(lastFetch: store.lastFetch, summary: store.summary, loading: store.loading) }
 }
 
 struct ProjectMenu: View {
@@ -391,14 +388,20 @@ struct ProjectMenu: View {
 struct KPIStrip: View {
     let s: Summary
     var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
         HStack(spacing: DS.Space.s) {
             StatTile(label: "ROAS hoje", value: Format.ratio(s.today.today?.roas), yesterday: Format.ratio(s.today.yesterday?.roas), week: Format.ratio(s.today.week?.roas), delta: s.today.deltas["roas"], higherIsBetter: true, spark: s.today.roasTrend)
-            StatTile(label: "ROI hoje", value: Format.ratio(s.today.today?.roi), yesterday: Format.ratio(s.today.yesterday?.roi), week: Format.ratio(s.today.week?.roi), delta: s.today.deltas["roi"], higherIsBetter: true)
+            StatTile(label: "ROI hoje", value: Format.ratio(s.today.today?.roi), yesterday: Format.ratio(s.today.yesterday?.roi), week: Format.ratio(s.today.week?.roi), delta: s.today.deltas["roi"], higherIsBetter: true,
+                     note: NowText.roiNote(s), noteHelp: NowText.roiNoteHelp(s))
             StatTile(label: "CPA front hoje", value: Format.money(s.today.today?.cpaFront), yesterday: Format.money(s.today.yesterday?.cpaFront), week: Format.money(s.today.week?.cpaFront), delta: s.today.deltas["cpaFront"], higherIsBetter: false)
             PaceTile(pace: s.pace)
         }
         // Same height for the four tiles, whatever wraps inside one of them.
         .fixedSize(horizontal: false, vertical: true)
+        // What "hoje", "ontem" and "7d" are: a partial day is compared by ratios, never as a full day.
+        Text(NowText.periodLine(s)).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(1).truncationMode(.tail)
+            .help(NowText.periodLine(s))
+        }
     }
 }
 
@@ -423,6 +426,8 @@ struct PaceTile: View {
 struct StatTile: View {
     let label: String; let value: String; let yesterday: String; let week: String; let delta: Summary.Delta?; let higherIsBetter: Bool
     var spark: [Double?]? = nil
+    /// Why the value is N/D ("falta custo do produto"), right under it; the tooltip gives the counts.
+    var note: String? = nil; var noteHelp: String? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
             HStack(alignment: .bottom, spacing: DS.Space.xs) {
@@ -430,7 +435,13 @@ struct StatTile: View {
                 Spacer(minLength: 0)
                 if let spark { MiniBars(values: spark, height: 12, barWidth: 3.5) }
             }
-            Text(value).font(DS.Font.stat).lineLimit(1).minimumScaleFactor(0.8).numericTransition(value)
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
+                Text(value).font(DS.Font.stat).lineLimit(1).minimumScaleFactor(0.8).numericTransition(value)
+                if let note {
+                    Text(note).font(DS.Font.micro).foregroundStyle(DS.Color.inkMuted).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                        .help(noteHelp ?? note)
+                }
+            }
             VStack(alignment: .leading, spacing: 2) {
                 compare("ontem", yesterday, delta?.yesterday)
                 compare("7d", week, delta?.week)
@@ -644,7 +655,10 @@ struct BalanceStrip: View {
 
 /// VIGIA (lib/funnel-watch.mjs, owner's slide "o funil vigiado 24 horas"): tone and symbol of a signal.
 enum VigiaUI {
-    static func tone(kind: String, tone: String?) -> Tone { tone == "bad" || kind == "page" || kind == "mismatch" ? .bad : .warn }
+    /// The server's tone leads (a mismatch with a recent checkout notice is a warning, not a failure); without it, the kind.
+    static func tone(kind: String, tone: String?) -> Tone {
+        switch tone { case "bad": return .bad; case "warn": return .warn; default: return kind == "page" || kind == "mismatch" ? .bad : .warn }
+    }
     /// Alert ids are "vg:" + the server id, whose prefix says the kind: ns (sem venda), pg (página), mm (vendas não batem).
     static func kind(alertId: String) -> String { alertId.hasPrefix("vg:pg:") ? "page" : alertId.hasPrefix("vg:mm:") ? "mismatch" : "nosale" }
     static func tone(alertId: String) -> Tone { tone(kind: kind(alertId: alertId), tone: nil) }
@@ -657,7 +671,7 @@ enum VigiaUI {
 struct VigiaSection: View {
     let vigia: Summary.Vigia
     var body: some View {
-        SectionHeader(title: "Funil · VIGIA", detail: (vigia.at.map { "lido " + Format.relative($0) } ?? "leitura N/D") + " · só aviso, nenhuma ação")
+        SectionHeader(title: "Funil · VIGIA", detail: NowText.vigiaDetail(vigia))
         VStack(spacing: 2) {
             ForEach(vigia.signals) { v in
                 let rest = Array(v.lines.dropFirst())
@@ -710,8 +724,18 @@ struct NowTab: View {
                     }
                 }
             }
-            SectionHeader(title: "O que fazer agora", detail: "\(s.queue.count) de \(s.queueSize) na fila · ordenado por dinheiro em jogo")
-            if s.queue.isEmpty { EmptyLine(text: "Nada pedindo ação agora.") }
+            SectionHeader(title: "O que fazer agora", detail: NowText.queueDetail(s))
+            // Never "nothing to do" while active campaigns are unread: say why the list is short and where to look.
+            switch NowText.queueState(s) {
+            case .waiting(let title, let detail, let count)?:
+                ListRow(id: "q:stale", symbol: "clock.badge.exclamationmark", tone: .warn, title: title, subtitle: detail,
+                        value: "\(count)", valueCaption: "ver Sistema",
+                        action: { withAnimation(DS.Motion.quick) { notch.tab = .system } })
+                    .help("A fila usa a análise do dia. Estas campanhas ainda estão na análise de ontem e voltam quando a nova chegar. A aba Sistema mostra a coleta.")
+            case .clear(let text)?: EmptyLine(text: text)
+            case .unknown(let text)?: EmptyLine(text: text, kind: .info)
+            case nil: EmptyView()
+            }
             VStack(spacing: 2) {
                 ForEach(s.queue) { q in
                     let loss = q.kind == "loss", quiet = store.isQuiet(q)

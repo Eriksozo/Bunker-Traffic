@@ -52,10 +52,14 @@ test('"sem venda há 4h" only with the traffic running, with the slide\'s three 
  const orders={lastSaleAt:iso(NOW-4*H-5*60000),approvedToday:13,searched:'today'};
  const e=evaluateProject({project,sample,history,orders,checkout:{integrations:1,lastEventAt:iso(NOW-10*60000)},video:{vturbConversions:12},pages:ok,now:NOW});
  const s=e.signals.find(x=>x.kind==='nosale');
- assert.equal(s.title,'Murilo: sem venda há 4h');
+ assert.equal(s.title,'Murilo: sem venda aprovada há 4h');
  assert.equal(s.lines[0],'Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓');
  assert.match(s.lines[1],/Última venda às 10:55 · R\$\s?40,00 gastos na última hora/);
- assert.match(s.lines.at(-1),/Funil de pé/);
+ // Passing checks are stated, never presented as proof that the funnel is fine.
+ assert.match(s.lines.at(-1),/Página e checkout responderam, mas isso não explica a falta de venda aprovada/);
+ assert.doesNotMatch(s.lines.join(' '),/Funil de pé/);
+ const unknown=evaluateProject({project,sample,history,orders,checkout:{integrations:1,lastEventAt:iso(NOW-10*60000)},video:null,pages:[],now:NOW}).signals[0];
+ assert.match(unknown.lines[0],/Página no ar \?/);assert.match(unknown.lines.at(-1),/Parte dos checks ficou sem leitura/);
  // Same outage, no spend in the last hour: quiet.
  const idle=evaluateProject({project,sample:{...sample,spend:280},history,orders,checkout:null,video:null,pages:ok,now:NOW});
  assert.equal(idle.signals.some(x=>x.kind==='nosale'),false);
@@ -64,7 +68,7 @@ test('"sem venda há 4h" only with the traffic running, with the slide\'s three 
  assert.equal(evaluateProject({project,sample,history,orders:null,pages:ok,now:NOW}).signals.length,0);
  // No sale in the 3-day lookup.
  const none=evaluateProject({project,sample,history,orders:{lastSaleAt:null,approvedToday:0,searched:'3d'},pages:ok,now:NOW});
- assert.equal(none.signals[0].title,'Murilo: sem venda nos últimos 3 dias');
+ assert.equal(none.signals[0].title,'Murilo: sem venda aprovada nos últimos 3 dias');
 });
 
 test('the first failed check leads the hint: page, then a silent webhook, then nobody at the checkout', ()=>{
@@ -92,7 +96,21 @@ test('"as vendas não batem" from 3 more vTurb conversions than checkout orders 
  assert.equal(two.signals.length,0);
  const three=evaluateProject({project,sample,history,orders,checkout:{integrations:1,lastEventAt:iso(NOW-2*H)},video:{vturbConversions:6},pages:ok,now:NOW}).signals[0];
  assert.equal(three.title,'Murilo: as vendas não batem');
- assert.equal(three.lines[0],'O vTurb marcou 6 vendas hoje e o checkout registrou 3 pedidos (3 aprovados). Confira o webhook.');
+ // Observed, suspicion, next step: a webhook that sent a notice within 3 h is receiving, so this is a warning.
+ assert.deepEqual(three.lines,['O vTurb contou 6 conversões hoje e o checkout registrou 3 pedidos (3 aprovados).',
+  'O checkout avisou às 13:00, então o webhook está recebendo: a diferença pode ser Pix não pago, atraso do vTurb ou pedido que não chegou.',
+  'Próximo passo: compare as vendas do vTurb com os pedidos no painel do checkout.']);
+ assert.equal(three.tone,'warn');
+ // Without a recent notice the webhook is a suspect (red), never a certainty.
+ const quiet=evaluateProject({project,sample,history,orders,checkout:{integrations:1,lastEventAt:iso(NOW-5*H)},video:{vturbConversions:6},pages:ok,now:NOW}).signals[0];
+ assert.equal(quiet.tone,'bad');assert.equal(quiet.lines[1],'Último aviso do checkout: 10:00. Pode ser falha no webhook.');
+ assert.match(quiet.lines[2],/e confira o webhook\.$/);
+ const never=evaluateProject({project,sample,history,orders,video:{vturbConversions:6},pages:ok,now:NOW}).signals[0];
+ // Singular: one conversion is "1 conversão" (never a glued suffix).
+ const one=evaluateProject({project,sample,history,orders:{...orders,ordersToday:0,approvedToday:0},video:{vturbConversions:4},pages:ok,now:NOW}).signals.find(x=>x.kind==='mismatch');
+ assert.match(one.lines[0],/contou 4 conversões hoje e o checkout registrou 0 pedidos/);
+ assert.equal(evaluateProject({project,sample,history,orders:{...orders,ordersToday:-2,approvedToday:0},video:{vturbConversions:1},pages:ok,now:NOW}).signals.find(x=>x.kind==='mismatch').lines[0].startsWith('O vTurb contou 1 conversão hoje'),true);
+ assert.equal(never.tone,'bad');assert.equal(never.lines[1],'Nenhum aviso do checkout registrado. Pode ser falha no webhook.');
  const six=evaluateProject({project,sample,history,orders,video:{vturbConversions:9},pages:ok,now:NOW}).signals[0];
  assert.notEqual(three.id,six.id);assert.ok(three.id);
  // Real case of 13/11 (Gabe): 11 vTurb, 9 orders (Pix expired or pending), 1 approved, webhook receiving: not a mismatch.
@@ -114,7 +132,7 @@ test('signals for the notch: page down first, then mismatch, then the longest wi
  const nico={id:'c5780078-fa3a-4564-88b6-fe7255889a93',name:'Nico'};
  const n=evaluateProject({project:nico,sample,history,orders:{...orders,lastSaleAt:iso(NOW-H),ordersToday:3},video:{vturbConversions:8},pages:ok,now:NOW});
  const list=vigiaSignals([{project,...murilo},{project:nico,...n}]);
- assert.deepEqual(list.map(x=>x.title),['Nico: as vendas não batem','Murilo: sem venda há 4h']);
+ assert.deepEqual(list.map(x=>x.title),['Nico: as vendas não batem','Murilo: sem venda aprovada há 4h']);
  const ns=list[1];
  assert.deepEqual(ns.checks,{page:true,checkout:true,traffic:true});
  assert.equal(ns.projectId,project.id);assert.equal(ns.project,'Murilo');assert.equal(ns.tone,'warn');assert.equal(list[0].tone,'bad');
@@ -150,11 +168,11 @@ test('one VIGIA read: only allowlisted reads, the current signals stored, nothin
  const r=await runVigia({projects:[project],read:malva.read,fetchFn,liveItems:[snapshot(370)],prior,now:NOW});
  assert.equal(posts.length,0);
  for(const [tool] of malva.calls){assert.ok(cloudReadTools.includes(tool));assert.ok(!cloudWriteTools.includes(tool));}
- assert.deepEqual(r.state.signals.map(x=>x.title),['Murilo: sem venda há 4h']);
+ assert.deepEqual(r.state.signals.map(x=>x.title),['Murilo: sem venda aprovada há 4h']);
  // Leftovers of the Discord version are dropped from the stored state.
  for(const k of ['ledger','preview','configured'])assert.equal(k in r.state,false,k);
  const st=vigiaStatus(r.state);assert.equal(st.projects[0].name,'Murilo');assert.equal(st.signals.length,1);
- assert.equal(vigiaView(r.state,{project:project.id,now:NOW}).signals[0].title,'Murilo: sem venda há 4h');
+ assert.equal(vigiaView(r.state,{project:project.id,now:NOW}).signals[0].title,'Murilo: sem venda aprovada há 4h');
 });
 
 test('a failed read is reported per project and never becomes "sem venda"', async()=>{

@@ -14,8 +14,8 @@ import SwiftUI
             ("01-compact", { $0.mode = .compact }),
             ("02-peek", { $0.mode = .peek }),
             ("03-alert", { $0.mode = .alert(IslandAlert(id: "a", kind: .loss, title: "Perda acima do limite", detail: "TESTE 07 · Criativo C · −R$ 412 hoje")) }),
-            ("03b-alert-vigia", { $0.mode = .alert(IslandAlert(id: "vg:ns:p1:x:1", kind: .funnel, title: "Alfa: sem venda há 4h", detail: "Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓")) }),
-            ("03c-alert-vigia-vendas", { $0.mode = .alert(IslandAlert(id: "vg:mm:p2:2026-11-13:0", kind: .funnel, title: "Beta: as vendas não batem", detail: "O vTurb marcou 8 vendas hoje e o checkout registrou 3 pedidos (3 aprovados). Confira o webhook.")) }),
+            ("03b-alert-vigia", { $0.mode = .alert(IslandAlert(id: "vg:ns:p1:x:1", kind: .funnel, title: "Alfa: sem venda aprovada há 4h", detail: "Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓")) }),
+            ("03c-alert-vigia-vendas", { $0.mode = .alert(IslandAlert(id: "vg:mm:p2:2026-11-13:0", kind: .funnel, title: "Beta: as vendas não batem", detail: "O vTurb contou 8 conversões hoje e o checkout registrou 3 pedidos (3 aprovados).")) }),
             ("04-open-agora", { $0.mode = .open; $0.tab = .now }),
             ("04b-open-autonomia", { $0.mode = .open; $0.tab = .autonomy }),
             ("05-open-projetos", { $0.mode = .open; $0.tab = .projects }),
@@ -31,6 +31,8 @@ import SwiftUI
             ("14-fila", { $0.mode = .open; $0.tab = .now }),
             // Direct order on a campaign outside the last analysis (live Malva value only).
             ("15-ordem-direta", { adjust($0, cards: directOnly(), action: "pause") }),
+            // Review of 13/11 (owner's photo): two projects still on yesterday's analysis, empty queue, ROI N/D.
+            ("16-fila-sem-analise", { $0.mode = .open; $0.tab = .now }),
         ]
         let queueFocus: Summary? = {
             guard var json = (try? JSONSerialization.jsonObject(with: Data(fixtureJSON().utf8))) as? [String: Any] else { return nil }
@@ -38,10 +40,22 @@ import SwiftUI
             guard let data = try? JSONSerialization.data(withJSONObject: json) else { return nil }
             return try? JSONDecoder().decode(Summary.self, from: data)
         }()
+        // Mixed sources: fresh receipt, two projects on yesterday's analysis, no queue item, ROI without product cost.
+        let mixed: Summary? = {
+            guard var json = (try? JSONSerialization.jsonObject(with: Data(fixtureJSON().utf8))) as? [String: Any] else { return nil }
+            json["approvals"] = ["count": 0, "items": [Any]()]; json["orders"] = [Any](); json["queue"] = [Any](); json["queueSize"] = 97
+            json["queueInfo"] = ["active": 97, "stale": 80, "staleProjects": ["Alfa", "Beta"], "read": 17, "protectedTests": 2]
+            json["analysis"] = [["name": "Alfa", "at": ago(1300), "current": false], ["name": "Beta", "at": ago(1250), "current": false], ["name": "Gama", "at": ago(3), "current": true]]
+            json["todayGaps"] = ["roi": ["rows": 104, "missing": [["field": "productCost", "label": "custo do produto", "rows": 12]]]]
+            if var today = json["today"] as? [String: Any], var t = today["today"] as? [String: Any] { t["roi"] = NSNull(); today["today"] = t; today["deltas"] = [String: Any](); json["today"] = today }
+            json.removeValue(forKey: "autonomy")
+            guard let data = try? JSONSerialization.data(withJSONObject: json) else { return nil }
+            return try? JSONDecoder().decode(Summary.self, from: data)
+        }()
         var failures: Int32 = 0
         for (name, setup) in shots {
             let store = Store(), notch = NotchState(geometry: geometry)
-            store.showPreview(name == "14-fila" ? queueFocus ?? summary : summary)
+            store.showPreview(name == "14-fila" ? queueFocus ?? summary : name == "16-fila-sem-analise" ? mixed ?? summary : summary)
             setup(notch)
             let scene = ZStack(alignment: .top) {
                 LinearGradient(colors: [Color(red: 0.20, green: 0.24, blue: 0.33), Color(red: 0.36, green: 0.30, blue: 0.40)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -161,13 +175,14 @@ import SwiftUI
          "orders":[{"id":"o1","project":"p2","projectName":"Beta","campaign":"07/11 - [CBO] - [AVATAR] - Criativo 009","account":"Conta Exemplo 02","action":"budget","currency":"USD","before":{"dailyBudget":120,"status":null},"after":{"dailyBudget":90,"status":null},"stage":"confirmed","label":"Confirmada na Meta","reason":null,"source":"live","at":"\(ago(6))","sentAt":"\(ago(5))","confirmedAt":"\(ago(4))"},
                    {"id":"o2","project":"p1","projectName":"Alfa","campaign":"[CBO] - [TESTE] - Criativo C","account":"Conta Exemplo 01","action":"status","currency":"BRL","before":{"dailyBudget":null,"status":"ACTIVE"},"after":{"dailyBudget":null,"status":"PAUSED"},"stage":"sent","label":"Enviada à Meta · aguardando releitura","reason":null,"source":"analysis","at":"\(ago(1))","sentAt":"\(ago(0.5))","confirmedAt":null}],
          "sales":{"recent":[{"amount":297,"currency":"BRL","product":"Curso X","campaign":"07/11 - JOHN","project":"p1","at":"\(ago(1))"}],"lastHour":3},
-         "vigia":{"at":"\(ago(3))","fresh":true,"signals":[{"id":"mm:p2:2026-11-13:0","kind":"mismatch","project":"Beta","projectId":"p2","tone":"bad","title":"Beta: as vendas não batem","lines":["O vTurb marcou 8 vendas hoje e o checkout registrou 3 pedidos (3 aprovados). Confira o webhook.","Último aviso do checkout: 09:12."]},{"id":"ns:p1:x:1","kind":"nosale","project":"Alfa","projectId":"p1","tone":"warn","title":"Alfa: sem venda há 4h","lines":["Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓","Última venda às 10:55 · R$ 40,00 gastos na última hora · 6 checkouts iniciados desde 12:00","Funil de pé: confira as campanhas e a oferta no Bunker."],"checks":{"page":true,"checkout":true,"traffic":true}}]},
+         "vigia":{"at":"\(ago(3))","fresh":true,"signals":[{"id":"mm:p2:2026-11-13:0","kind":"mismatch","project":"Beta","projectId":"p2","tone":"warn","title":"Beta: as vendas não batem","lines":["O vTurb contou 8 conversões hoje e o checkout registrou 3 pedidos (3 aprovados).","O checkout avisou às 13:12, então o webhook está recebendo: a diferença pode ser Pix não pago, atraso do vTurb ou pedido que não chegou.","Próximo passo: compare as vendas do vTurb com os pedidos no painel do checkout."]},{"id":"ns:p1:x:1","kind":"nosale","project":"Alfa","projectId":"p1","tone":"warn","title":"Alfa: sem venda aprovada há 4h","lines":["Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓","Última venda às 10:55 · R$ 40,00 gastos na última hora · 6 checkouts iniciados desde 12:00","Página e checkout responderam, mas isso não explica a falta de venda aprovada: confira campanhas e oferta no Bunker."],"checks":{"page":true,"checkout":true,"traffic":true}}]},
          "queue":[
           {"kind":"loss","balance":{"today":{"basis":"result","value":-1231},"yesterday":{"basis":"result","value":2800},"3d":{"basis":"result","value":10000},"7d":{"basis":"result","value":10000},"with7d":{"basis":"result","value":9200},"with3d":{"basis":"result","value":8800},"verdict":"recovers"},"campaign":"05/11 - [CBO] - [TESTE] - Criativo D","account":"Conta Exemplo 01","project":"Alfa","adAccountId":"a1","campaignId":"c4","decision":"Revisar perda","period":"today","basis":"result","amount":1083,"spend":1906,"roas":0.47,"roas7d":2.5,"balance":{"today":{"basis":"result","value":-1083},"yesterday":{"basis":"result","value":1500},"3d":{"basis":"result","value":3500},"7d":{"basis":"result","value":6600},"with7d":{"basis":"result","value":5517},"with3d":{"basis":"result","value":2417},"verdict":"recovers"},"detail":\(detail("Hoje abaixo do equilíbrio; 3 e 7 dias positivos.", false))},
           {"kind":"loss","campaign":"07/11 - [CBO] - [TESTE] - Criativo C","account":"Conta Exemplo 01","project":"Alfa","adAccountId":"a1","campaignId":"c1","decision":"Revisar teste novo sem vendas","period":"today","basis":"result","amount":412,"spend":412,"roas":0,"roas7d":null,"detail":\(detail("Teste novo com gasto e sem vendas hoje. Conferir início real, checkout e filhos antes de decidir.", true))},
           {"kind":"loss","balance":{"today":{"basis":"result","value":-640},"yesterday":{"basis":"result","value":-210},"3d":null,"7d":{"basis":"result","value":-1900},"with7d":{"basis":"result","value":-2540},"with3d":null,"verdict":"negative"},"campaign":"[ABO] - [ESCALA] - Criativo A - Público amplo","account":"Conta Exemplo 02","project":"Beta","adAccountId":"a2","campaignId":"c2","decision":"Revisar perda","period":"3d","basis":"result","amount":1860,"spend":5320,"roas":0.65,"roas7d":0.78,"balance":{"today":{"basis":"result","value":-240},"yesterday":{"basis":"result","value":-610},"3d":{"basis":"result","value":-1860},"7d":{"basis":"result","value":-2900},"with7d":{"basis":"result","value":-3140},"with3d":{"basis":"result","value":-2100},"verdict":"negative"},"detail":\(detail("Abaixo do equilíbrio em 3 e 7 dias.", false))},
           {"kind":"gain","campaign":"[CBO] - [ESCALA] - Criativo B","account":"Conta Exemplo 03","project":"Gama","adAccountId":"a3","campaignId":"c3","decision":"Candidato à escala","period":"3d","basis":"result","amount":3240,"spend":4100,"roas":1.79,"roas7d":1.92,"detail":\(detail("Retorno consistente em 3 e 7 dias.", false))}
-         ],"queueSize":27,
+         ],"queueSize":27,"queueInfo":{"active":27,"stale":0,"staleProjects":[],"read":27,"protectedTests":2,"losses":3,"opportunities":1},
+         "analysis":[{"name":"Alfa","at":"\(ago(3))","current":true},{"name":"Beta","at":"\(ago(3))","current":true},{"name":"Gama","at":"\(ago(3))","current":true}],
          "board":[
           {"id":"p1","name":"Alfa","spend":8200,"roas":1.62,"roi":1.4,"roasYesterday":1.38,"approvals":1,"losses":1,"changes":6},
           {"id":"p2","name":"Beta","spend":6400,"roas":0.94,"roi":0.81,"roasYesterday":1.21,"approvals":0,"losses":2,"changes":3},

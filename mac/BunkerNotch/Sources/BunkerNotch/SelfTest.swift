@@ -14,7 +14,7 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound(); testAlertPriorityAndCounters(); testAutonomyBlock(); testVigia()
+        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound(); testAlertPriorityAndCounters(); testAutonomyBlock(); testVigia(); testNowText()
         failures += bunkFailures
         failures += DSAudit.run()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
@@ -38,6 +38,47 @@ enum SelfTest {
         check(ranked.map(\.0) == ["o", "vg:ns:p1:x:1", "m"], #line)
         check(VigiaUI.kind(alertId: "vg:mm:p2:d:0") == "mismatch" && VigiaUI.kind(alertId: "vg:pg:p1:u:d") == "page" && VigiaUI.kind(alertId: "vg:ns:p1:x:1") == "nosale", #line)
         check(VigiaUI.tone(alertId: "vg:ns:p1:x:1") == .warn && VigiaUI.tone(alertId: "vg:mm:p2:d:0") == .bad, #line)
+    }
+
+    /// Review of 13/11/2026 (owner's photo): a fresh receipt never vouches for an old source, an empty queue with
+    /// unread campaigns is never "nothing to do", ROI N/D says what is missing. Synthetic fixtures only.
+    private static func testNowText() {
+        let head = #"{"generatedAt":"2026-11-13T15:00:00.000Z","project":"all","projectName":"Todos","projects":[],"paused":false,"analysisAt":"2026-11-13T14:00:00.000Z","liveAt":"2026-11-13T14:58:00.000Z","approvals":{"count":0,"items":[]},"activity":{"hours":24,"summary":{},"recent":[]},"agents":{"recent":[]},"executor":null,"notice":"","#
+        let noRoi = #""today":{"today":{"roas":0.64,"roi":null,"cpaFront":100,"spend":1},"yesterday":null,"week":null,"deltas":{}},"#
+        func decode(_ tail: String) -> Summary? { try? JSONDecoder().decode(Summary.self, from: Data((head + noRoi + tail).utf8)) }
+        // Mixed sources: one project still on yesterday's analysis, an empty queue, ROI without product cost.
+        guard let mixed = decode(#""queue":[],"queueSize":97,"queueInfo":{"active":97,"stale":80,"staleProjects":["Alfa","Beta"],"read":17,"protectedTests":2},"todayGaps":{"roi":{"rows":104,"missing":[{"field":"productCost","label":"custo do produto","rows":12}]}},"analysis":[{"name":"Alfa","at":"2026-11-12T15:10:00.000Z","current":false},{"name":"Gama","at":"2026-11-13T14:00:00.000Z","current":true}]}"#) else { check(false, #line); return }
+        let now = Format.date("2026-11-13T15:00:30.000Z")!
+        check(NowText.freshness(lastFetch: now, summary: mixed, loading: false, now: now) == "Recebido agora · análise parcial", #line)
+        check(NowText.sources(lastFetch: now, summary: mixed).contains("Ainda sem análise de hoje: Alfa"), #line)
+        check(NowText.queueDetail(mixed) == "0 listadas de 97 ativas · 80 sem análise de hoje", #line)
+        if case .waiting(let title, let detail, let count)? = NowText.queueState(mixed) {
+            check(title == "80 campanhas ativas sem análise de hoje" && count == 80, #line)
+            check(detail.hasPrefix("Alfa, Beta: fora desta lista") && detail.hasSuffix("entre as 17 lidas, nada listado."), #line)
+            check(!detail.contains("Nada pedindo"), #line)
+        } else { check(false, #line) }
+        check(NowText.roiNote(mixed) == "falta custo do produto", #line)
+        check(NowText.roiNoteHelp(mixed)?.contains("custo do produto em 12 de 104 campanhas") == true, #line)
+        check(NowText.periodLine(mixed).hasPrefix("Hoje parcial até ") && NowText.periodLine(mixed).contains("ontem: dia inteiro"), #line)
+        // Nothing read at all: no claim that nothing needs action.
+        guard let unread = decode(#""queue":[],"queueSize":5,"queueInfo":{"active":5,"stale":5,"staleProjects":["Alfa"],"read":0}}"#) else { check(false, #line); return }
+        if case .waiting(_, let detail, _)? = NowText.queueState(unread) { check(detail.contains("sem leitura não dá para dizer que nada pede ação"), #line) } else { check(false, #line) }
+        check(NowText.roiNote(unread) == nil, #line)
+        // Everything read, nothing qualifies: a stated absence with the count read; tests in maturation are named.
+        guard let calm = decode(#""queue":[],"queueSize":12,"queueInfo":{"active":12,"stale":0,"staleProjects":[],"read":12,"protectedTests":1},"analysis":[{"name":"Gama","at":"2026-11-13T14:00:00.000Z","current":true}]}"#) else { check(false, #line); return }
+        check(NowText.queueState(calm) == .clear("Nenhuma perda nem oportunidade clara entre as 12 ativas lidas hoje. 1 teste em maturação fica em Primeiras 24h."), #line)
+        check(NowText.freshness(lastFetch: now, summary: calm, loading: false, now: now) == "Recebido agora", #line)
+        // Older server (no queueInfo/analysis/todayGaps): no reason, no green claim, no ROI note.
+        guard let old = decode(#""queue":[],"queueSize":3}"#) else { check(false, #line); return }
+        if case .unknown? = NowText.queueState(old) {} else { check(false, #line) }
+        check(NowText.queueDetail(old) == "0 listadas de 3 ativas · ordenado por dinheiro em jogo", #line)
+        check(NowText.roiNote(old) == nil && NowText.freshness(lastFetch: now, summary: old, loading: false, now: now) == "Recebido agora", #line)
+        // Loading and error states keep their own words.
+        check(NowText.freshness(lastFetch: nil, summary: nil, loading: true) == "Atualizando…", #line)
+        check(NowText.freshness(lastFetch: nil, summary: nil, loading: false) == "Sem leitura", #line)
+        // VIGIA: the server's tone leads (a mismatch with a recent checkout notice is a warning); a late read says so.
+        check(VigiaUI.tone(kind: "mismatch", tone: "warn") == .warn && VigiaUI.tone(kind: "mismatch", tone: nil) == .bad, #line)
+        check(NowText.vigiaDetail(Summary.Vigia(at: "2026-11-13T14:00:00.000Z", fresh: false, signals: [])).contains("leitura atrasada"), #line)
     }
 
     private static func testDecodesCompanionSummaryWithMissingValues() throws {

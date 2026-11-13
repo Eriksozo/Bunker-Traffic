@@ -258,6 +258,21 @@ struct Summary: Decodable, Equatable {
     /// it never proposes, approves or sends an order. `lines[0]` of a "sem venda" signal is the slide's check line
     /// ("Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓"). Older servers omit it (nil).
     var vigia: Vigia? = nil
+    /// Why the queue lists what it lists (lib/companion-summary.mjs queueInfo): active campaigns, how many are still on the
+    /// previous day's analysis (`stale`, out of the queue until the new analysis) and from which projects. Counts only.
+    struct QueueInfo: Decodable, Equatable {
+        var active: Int? = nil; var stale: Int? = nil; var staleProjects: [String]? = nil; var read: Int? = nil
+        var protectedTests: Int? = nil; var losses: Int? = nil; var opportunities: Int? = nil
+    }
+    var queueInfo: QueueInfo? = nil
+    /// Why ROI hoje is N/D: the ROI components missing in today's rows (never a value).
+    struct GapField: Decodable, Equatable { let label: String; let rows: Int }
+    struct RoiGap: Decodable, Equatable { let rows: Int; let missing: [GapField] }
+    struct TodayGaps: Decodable, Equatable { var roi: RoiGap? = nil }
+    var todayGaps: TodayGaps? = nil
+    /// Each project's newest analysis of "today" and whether it still covers the current day.
+    struct AnalysisCut: Decodable, Equatable { let name: String; let at: String?; let current: Bool }
+    var analysis: [AnalysisCut]? = nil
     struct VigiaChecks: Decodable, Equatable { let page: Bool?; let checkout: Bool?; let traffic: Bool? }
     struct VigiaSignal: Decodable, Equatable, Identifiable {
         let id: String; let kind: String; let title: String; let lines: [String]

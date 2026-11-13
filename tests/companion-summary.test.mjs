@@ -45,3 +45,25 @@ test('closed windows absent from a verified complete cut show no spend; other ab
  const w2=companionSummary(s,{project:'p',now}).queue[0].detail.windows;
  assert.equal(w2.yesterday,null);assert.equal(w2['7d'],null);assert.equal(w2['3d'].noSpend,true);
 });
+test('queue info: an empty queue while today\'s analysis is still yesterday\'s says so (never "nothing to do"); ROI N/D names what is missing',()=>{
+ // Synthetic: project p read today; project q's newest "today" cut is the previous day (after midnight, before its new analysis).
+ const s=state(),old=(period,from,to)=>({...snap('q',period,[{...row('k1'),...m(300,100)}]),from,to,fetchedAt:'2026-11-06T18:00:00Z',lastSyncAt:'2026-11-06T18:00:00Z'});
+ s.snapshots.push(old('today','2026-11-06T00:00:00Z','2026-11-07T00:00:00Z'),old('3d','2026-11-03T00:00:00Z','2026-11-06T00:00:00Z'));
+ const out=companionSummary(s,{now});
+ assert.equal(out.queueSize,2);assert.equal(out.queueInfo.active,2);
+ assert.equal(out.queueInfo.stale,1);assert.deepEqual(out.queueInfo.staleProjects,['Projeto Q']);assert.equal(out.queueInfo.read,1);
+ assert.ok(out.queue.every(q=>q.project!=='Q'));
+ assert.deepEqual(out.analysis.map(a=>[a.name,a.current]),[['Projeto P',true],['Projeto Q',false]]);
+ // Everything read and nothing to list: stale 0, the notch can say "nenhuma perda nem oportunidade clara".
+ const only=state();only.snapshots=only.snapshots.map(x=>({...x,rows:x.rows.map(r=>({...r,...m(100,100)}))}));
+ const calm=companionSummary(only,{project:'p',now});
+ assert.equal(calm.queue.length,0);assert.equal(calm.queueInfo.stale,0);assert.equal(calm.queueInfo.read,1);
+ // ROI hoje: complete components → no gap; one row without product cost → named, ROI stays N/D (never 0).
+ assert.deepEqual(companionSummary(state(),{project:'p',now}).todayGaps.roi,{rows:1,missing:[]});
+ const gap=state();gap.snapshots[0]={...gap.snapshots[0],rows:[{...gap.snapshots[0].rows[0],productCost:null}]};
+ const g=companionSummary(gap,{project:'p',now});
+ assert.equal(g.today.today.roi,null);assert.deepEqual(g.todayGaps.roi,{rows:1,missing:[{field:'productCost',label:'custo do produto',rows:1}]});
+ // An invalid or future "from" never counts as today's analysis (no NaN comparison turning into current).
+ for(const from of ['nope',undefined,'2026-11-08T00:00:00Z']){const bad=state();bad.snapshots[0]={...bad.snapshots[0],from};
+  assert.equal(companionSummary(bad,{project:'p',now}).analysis[0].current,false,String(from));}
+});
