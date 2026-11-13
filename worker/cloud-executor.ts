@@ -599,9 +599,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   this.vigiaBusy=true;
   try{
    const source=cloudMalvaClient(this.db());
-   const live=overlayMetaItems(this.liveItems||[],await this.ctx.storage.get<any>('metaLive'),{now});
    const projects=Object.entries<any>(state.config||{}).map(([id,c])=>({id,name:typeof c?.projectName==='string'&&c.projectName?c.projectName:id}));
-   const r=await runVigia({projects,read:(tool:string,args:any)=>source.read(tool,args),fetchFn:fetch,liveItems:live as never[],prior,webhook:this.env.DISCORD_VIGIA_WEBHOOK||null,now});
+   const r=await runVigia({projects,read:(tool:string,args:any)=>source.read(tool,args),fetchFn:fetch,liveItems:(this.liveItems||[]) as never[],prior,webhook:this.env.DISCORD_VIGIA_WEBHOOK||null,now});
    await this.ctx.storage.put('vigia',r.state);
   }finally{this.vigiaBusy=false;}
  }

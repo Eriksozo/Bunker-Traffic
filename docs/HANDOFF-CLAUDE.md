@@ -1207,3 +1207,23 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - O índice dos arquivados é carregado inteiro nas leituras completas e só cresce; importações atrasadas criam entradas pequenas por dia. Se pesar, compactar ou carregar sob demanda.
   - As mudanças de orçamento/status nunca ficam frias (cerca de 70 por dia hoje).
   - Uma cópia completa da central ocupa ~50 MB de heap no ensaio local.
+
+## VIGIA: o funil vigiado 24 horas no Discord (registro escrito às 2026-11-13 14:01:45 UTC por `date -u`)
+
+- **Pedido do dono:** slide "VIGIA: o funil vigiado 24 horas" e "cria esse fluxo" (repassado por outra sessão). Decisões dele nesta sessão: 3 h sem venda para todos os projetos, sem horário de silêncio (sem preferência; fica 24 h, como o slide) e divergência vTurb × checkout a partir de 3 vendas.
+- **Mudança (commit `6a5dfc0`):**
+  - `lib/funnel-watch.mjs` (novo) e `syncVigia` em `worker/cloud-executor.ts`: dentro do pulso pesado que já existe, logo depois da leitura Meta ao vivo, a cada 10 min. Nenhum cron, daemon ou agendamento novo.
+  - Avisos: "sem venda há X h" (3 h sem venda aprovada e gasto subindo na última hora; linha "Página no ar · Checkout abrindo · Tráfego rodando" e a primeira falha), repetido a cada 3 h do mesmo período; "voltou a vender"; "página fora do ar" (duas leituras seguidas) e "página voltou"; "as vendas não batem" (vTurb com 3+ conversões a mais que as aprovadas hoje); e uma vez "VIGIA ligado", que serve de alerta de teste.
+  - Ponte Malva: `tracking_orders`, `tracking_checkout_integrations`, `tracking_videos` e `tracking_pages` entraram na lista de leitura (`lib/cloud-malva.mjs` e a cópia da Edge Function). `scrubRead` tira, ainda no Supabase, os dados do comprador das vendas e os endereços de webhook/postback das integrações. Edge Function `malva-mcp` publicada como v14 (`verify_jwt` mantido; só `cloud-malva.mjs` muda em relação à v13).
+  - Status: `vigia` no `status` do executor (`configured`, `lastRunAt`, `sent`, `lastError`, `pending`, `preview`, `errors`, `projects`), sem o endereço do webhook. Documentação e passo a passo em `docs/connections.md` ("VIGIA: o funil vigiado no Discord").
+  - `tracking_diagnose` ficou de fora: estourou o tempo na conferência manual de 13/11 e faz sondagens de rede limitadas pela Malva.
+- **Testes:** `tests/funnel-watch.test.mjs` (13). Bateria completa 1705 ok, typecheck e build ok.
+- **Deploy:** versão Cloudflare `b1a09027-ce1a-4b06-b718-0b72239ffbb5` (100%, 14:01:12 UTC, build automático da integração GitHub); `/health` 200; `/api/executor` sem sessão 401.
+- **Pendente (dono):** criar o webhook no canal `#alertas-funil` e cadastrar `DISCORD_VIGIA_WEBHOOK` pelo `wrangler secret put` (passo a passo em `docs/connections.md`). Sem ele nada é enviado; o `preview` do status mostra o que seria enviado.
+- **Acompanhar:** primeiras leituras com `vigia.errors` vazio nos 6 projetos; "VIGIA ligado" no canal depois do segredo; alarmes falsos de página (proteção contra robôs conta como N/D) e de divergência (o vTurb sincroniza com atraso e conta conversões de upsell).
+- **Primeira leitura em produção (14:10:06 UTC) e correção:** 6 projetos lidos, `errors` vazio, todas as páginas da frente com 200. Dois números conferidos direto na Malva:
+  - Gabe: o VIGIA teria avisado "as vendas não batem" (vTurb 11 × 1 aprovada), mas eram 9 pedidos com Pix expirado/pendente e o webhook recebendo às 14:10. Agora a comparação é com os pedidos de qualquer situação (`totals.orders`).
+  - Ronald: o gasto de hoje saía R$ 67.674 pela sobreposição Meta ao vivo; na Malva era R$ 0 (419 campanhas no recorte do projeto, incluindo campanha "[JOHN]" de conta compartilhada). Agora o VIGIA usa só o gasto da leitura Malva do projeto.
+  - Ronald, fato da Malva: nenhum pedido hoje e o último aviso do checkout (Kirvano) em 12/11 às 12:54 UTC; sem gasto hoje, então o VIGIA não avisa "sem venda".
+- **Fora deste trabalho, a conferir:** a sobreposição Meta ao vivo (`overlayMetaItems`) põe gasto de outras campanhas de contas compartilhadas em Ronald; isso pode aparecer no notch e no web.
+- **Fora deste trabalho, visto no status às 14:01 UTC:** coletas falhando com `CLOUD_COLLECTION_FAILED` na fase `persist` desde pelo menos 12:58 UTC (Gabe, John, Leandro, Murilo, Nico), antes deste deploy.

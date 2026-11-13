@@ -15,8 +15,8 @@ const snapshot=(spend,at=NOW,rows=null)=>({projectId:project.id,snapshot:{projec
 const response=(status,headers={})=>({ok:status>=200&&status<300,status,headers:new Headers(headers),body:null});
 
 test('facts: last approved sale, checkout webhook, vTurb and front pages; missing data stays N/D', ()=>{
- const o=ordersFacts({items:[{approvedAt:iso(NOW-4*H),status:'approved'}],totals:{approved:13}});
- assert.equal(o.lastSaleAt,iso(NOW-4*H));assert.equal(o.approvedToday,13);
+ const o=ordersFacts({items:[{approvedAt:iso(NOW-4*H),status:'approved'}],totals:{approved:13,orders:32}});
+ assert.equal(o.lastSaleAt,iso(NOW-4*H));assert.equal(o.approvedToday,13);assert.equal(o.ordersToday,32);
  assert.equal(ordersFacts({items:[],totals:{approved:0}},{items:[]}).lastSaleAt,null);
  assert.deepEqual(checkoutFacts({items:[{active:true,lastEventAt:iso(NOW-H)},{active:false,lastEventAt:iso(NOW)},{active:true,lastEventAt:null}]}),{integrations:2,lastEventAt:iso(NOW-H)});
  assert.deepEqual(videoFacts({sources:1,totals:{conversions:10}}),{vturbConversions:10,videoSources:1});
@@ -84,15 +84,18 @@ test('the first failed check leads the hint: page, then a silent webhook, then n
  assert.match(nobody.signals[0].lines[0],/Checkout abrindo ✗/);assert.match(nobody.signals[0].lines.at(-1),/ninguém iniciou checkout/);
 });
 
-test('"as vendas não batem" from 3 more vTurb conversions than approved sales; grows in steps of 3', ()=>{
- const orders={lastSaleAt:iso(NOW-H),approvedToday:3,searched:'today'};
+test('"as vendas não batem" from 3 more vTurb conversions than checkout orders of any status; grows in steps of 3', ()=>{
+ const orders={lastSaleAt:iso(NOW-H),approvedToday:3,ordersToday:3,searched:'today'};
  const two=evaluateProject({project,sample,history,orders,video:{vturbConversions:5},pages:ok,now:NOW});
  assert.equal(two.signals.length,0);
  const three=evaluateProject({project,sample,history,orders,checkout:{integrations:1,lastEventAt:iso(NOW-2*H)},video:{vturbConversions:6},pages:ok,now:NOW}).signals[0];
  assert.equal(three.title,'Murilo: as vendas não batem');
- assert.equal(three.lines[0],'O vTurb marcou 6 vendas hoje e o checkout aprovou 3. Confira o webhook.');
+ assert.equal(three.lines[0],'O vTurb marcou 6 vendas hoje e o checkout registrou 3 pedidos (3 aprovados). Confira o webhook.');
  const six=evaluateProject({project,sample,history,orders,video:{vturbConversions:9},pages:ok,now:NOW}).signals[0];
  assert.notEqual(three.key,six.key);
+ // Real case of 13/11 (Gabe): 11 vTurb, 9 orders (Pix expired or pending), 1 approved, webhook receiving: not a mismatch.
+ const pix=evaluateProject({project,sample,history,orders:{lastSaleAt:iso(NOW-H),approvedToday:1,ordersToday:9,searched:'today'},video:{vturbConversions:11},pages:ok,now:NOW});
+ assert.equal(pix.signals.some(x=>x.kind==='mismatch'),false);
 });
 
 test('traffic: a sample 20–60 min old proves "running"; without one, spend today is not a proof', ()=>{
