@@ -36,19 +36,29 @@ async function loadHandler(){
  return handler;
 }
 
-/** Runs one request. `onAcquire` runs right before the receipt transaction (an owner commit racing it). */
-async function run(f,{onAcquire=null,receipts=new Set(),provider=()=>Response.json({jsonrpc:'2.0',id:'x',result:{structuredContent:{ok:true}}}),omitRevision=false}={}){
- const h=await loadHandler(),original=globalThis.fetch;let revision=11,providerCalls=0;const trace=[];
+/** Runs one request. `onAcquire` runs right before the receipt transaction (an owner commit racing it). `lockWait`
+ * advances every clock while the receipt waits for the central lock. `legacySql` models the previous definition
+ * (20261113183051), which ignores the deadlines: only the handler's own check then stands between them and the provider. */
+async function run(f,{onAcquire=null,receipts=new Set(),provider=()=>Response.json({jsonrpc:'2.0',id:'x',result:{structuredContent:{ok:true}}}),omitRevision=false,lockWait=0,legacySql=false,inputs=[]}={}){
+ const h=await loadHandler(),original=globalThis.fetch,realNow=Date.now;let revision=11,providerCalls=0,offset=0;const trace=[];
+ Date.now=()=>realNow()+offset;
  globalThis.fetch=async(url,options={})=>{
   if(String(url)==='https://synthetic.invalid/rest/v1/rpc/bunker_store'){
-   const {operation,input}=JSON.parse(options.body);trace.push(operation);
+   const {operation,input}=JSON.parse(options.body);trace.push(operation);inputs.push({operation,input});
    if(operation==='get')return Response.json({rows:[{key:'central',payload:JSON.stringify(f.state),...(omitRevision?{}:{revision}),updated_at:iso(Date.now())}]});
    if(operation==='cas'){
     if(onAcquire){onAcquire(f.state);revision++;onAcquire=null;}
-    // The migration's contract: lock the central at the verified revision, then insert the receipt once.
+    offset+=lockWait;
+    // The migration's contract: lock the central at the verified revision, then, with the database clock after the
+    // lock, check both deadlines; then insert the receipt once.
     assert.ok(Number.isSafeInteger(input.centralRevision),'the receipt carries the verified central revision');
     assert.ok(input.key.startsWith('dispatch:')&&input.expected===0);
     if(input.centralRevision!==revision)return Response.json({changes:0,conflict:'central'});
+    if(!legacySql){
+     const payload=JSON.parse(input.payload),db=Date.now();
+     if(typeof input.authorizationValidUntil!=='string'||typeof input.preflightValidUntil!=='string'||payload.authorizationValidUntil!==input.authorizationValidUntil||payload.preflightValidUntil!==input.preflightValidUntil)return Response.json({changes:0,conflict:'deadline'});
+     if(db>=Date.parse(input.authorizationValidUntil)||db>Date.parse(input.preflightValidUntil))return Response.json({changes:0,conflict:'expired'});
+    }
     if(receipts.has(input.key))return Response.json({changes:0});
     receipts.add(input.key);return Response.json({changes:1});
    }
@@ -59,8 +69,8 @@ async function run(f,{onAcquire=null,receipts=new Set(),provider=()=>Response.js
  };
  try{
   const response=await h(new Request('https://synthetic.invalid/functions/v1/malva-mcp',{method:'POST',headers:{Authorization:'Bearer synthetic-service'},body:JSON.stringify(f.input)}));
-  return {status:response.status,body:await response.json(),providerCalls,trace};
- }finally{globalThis.fetch=original;}
+  return {status:response.status,body:await response.json(),providerCalls,trace,receipts};
+ }finally{globalThis.fetch=original;Date.now=realNow;}
 }
 
 test('Edge fence: a valid current order is dispatched once',async()=>{
@@ -87,6 +97,52 @@ test('Edge fence: replay and provider timeout never resend; a central without re
  assert.equal(slow.providerCalls,1,'one attempt, the executor verifies');assert.equal(slow.status,502);
  const bare=await run(fixture(),{omitRevision:true});
  assert.equal(bare.providerCalls,0);assert.equal(bare.body.error,'MCP_APPROVAL_REQUIRED');assert.deepEqual(bare.trace,['get']);
+});
+
+// Curadoria of 13/11/2026, residual 4: the authorization is checked at one instant, then the receipt may wait for the lock.
+test('Edge fence: the receipt carries both deadlines, the same in the RPC input and in the stored payload',async()=>{
+ const f=fixture(),inputs=[],r=await run(f,{inputs});
+ assert.equal(r.providerCalls,1);
+ const cas=inputs.find(i=>i.operation==='cas').input,payload=JSON.parse(cas.payload),p=f.state.proposals[0],e=f.state.executions[0];
+ assert.equal(cas.authorizationValidUntil,new Date(Date.parse(p.expiresAt)).toISOString());
+ assert.equal(cas.preflightValidUntil,new Date(Date.parse(e.preflight.fetchedAt)+120000).toISOString());
+ assert.equal(payload.authorizationValidUntil,cas.authorizationValidUntil);assert.equal(payload.preflightValidUntil,cas.preflightValidUntil);
+ assert.equal(payload.centralRevision,cas.centralRevision);
+});
+
+test('Edge fence: a lock wait that outlives the pre-check or the approval → no receipt, zero provider calls, no retry',async()=>{
+ const preflight=await run(fixture(),{lockWait:130000});
+ assert.equal(preflight.providerCalls,0);assert.deepEqual(preflight.body,{dispatchGranted:false,verificationOnly:true});
+ assert.deepEqual(preflight.trace,['get','cas']);assert.equal(preflight.receipts.size,0);
+ const f=fixture();f.state.proposals[0].expiresAt=iso(Date.now()+10000);
+ const approval=await run(f,{lockWait:20000});
+ assert.equal(approval.providerCalls,0);assert.deepEqual(approval.body,{dispatchGranted:false,verificationOnly:true});
+ assert.deepEqual(approval.trace,['get','cas']);assert.equal(approval.receipts.size,0);
+ const shortWait=await run(fixture(),{lockWait:5000});
+ assert.equal(shortWait.providerCalls,1,'a wait inside both deadlines still dispatches once');
+});
+
+test('Edge fence: under the previous SQL (no deadline check) the handler itself refuses an expired order after the receipt',async()=>{
+ const r=await run(fixture(),{lockWait:130000,legacySql:true});
+ assert.equal(r.receipts.size,1,'the receipt was burned: the order goes to verification');
+ assert.equal(r.providerCalls,0);assert.deepEqual(r.body,{dispatchGranted:false,verificationOnly:true});assert.deepEqual(r.trace,['get','cas']);
+});
+
+test('the deadline migration checks both deadlines with the database clock after the lock, before the insert; grants unchanged',async()=>{
+ const sql=await fs.readFile(new URL('supabase/migrations/20261113204326_dispatch_receipt_deadline_fence.sql',root),'utf8');
+ const lock=sql.indexOf("for update"),check=sql.indexOf("clock_timestamp()>=(input->>'authorizationValidUntil')::timestamptz"),insert=sql.indexOf("insert into public.bunker_records(key,payload,revision,updated_at)");
+ assert.ok(lock>0&&check>lock&&insert>check,'lock → deadline check → receipt insert');
+ assert.match(sql,/clock_timestamp\(\)>\(input->>'preflightValidUntil'\)::timestamptz/);
+ assert.match(sql,/return jsonb_build_object\('changes',0,'conflict','expired'\);/);
+ assert.match(sql,/return jsonb_build_object\('changes',0,'conflict','deadline'\);/);
+ assert.match(sql,/\(input->>'payload'\)::jsonb->>'authorizationValidUntil'\) is distinct from input->>'authorizationValidUntil'/);
+ assert.doesNotMatch(sql.slice(lock,insert),/\bnow\(\)/,'the transaction-start clock is not used for the deadline');
+ assert.doesNotMatch(sql.replace(/--.*$/gm,''),/\bhttp|net\.|pg_net/i,'no HTTP call inside the transaction');
+ assert.match(sql,/revoke all on function public\.bunker_store\(text,jsonb\) from public,anon,authenticated;\ngrant execute on function public\.bunker_store\(text,jsonb\) to service_role;/);
+ // Outside the fenced branch the definition is the previous one, byte for byte.
+ const previous=await fs.readFile(new URL('supabase/migrations/20261113183051_dispatch_receipt_central_fence.sql',root),'utf8');
+ const body=s=>s.slice(s.indexOf('CREATE OR REPLACE FUNCTION'));
+ assert.equal(body(sql).replace(/   -- Deadlines, after the lock[\s\S]*?'expired'\);\n   end if;\n/,''),body(previous));
 });
 
 test('the migration locks the central at the verified revision inside the receipt transaction; grants unchanged',async()=>{

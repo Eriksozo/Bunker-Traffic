@@ -19,11 +19,16 @@ Deno.serve(async(req:Request)=>{
    // the RPC locks the central at that revision and inserts the receipt in one
    // transaction, so a pause or revocation committed after this read refuses it.
    // A refused receipt is never retried here: the order goes to verification.
+   // The authorization was checked at one instant; waiting for the lock can outlive it (curadoria of 13/11/2026,
+   // residual 4). Its two deadlines (approval expiry, pre-check age) are part of the receipt contract: the RPC checks
+   // them with the database clock after the lock, inside the transaction, and this handler checks them again before
+   // the provider. Expired → verificationOnly, no call. A change after the receipt finds the order in transit.
    const proof=input.execution;if(!proof?.id||!proof?.submitClientId)throw new CloudError('MCP_APPROVAL_REQUIRED');
    const rows=await rpc('get',{keys:['central']}),row=rows.rows?.[0],stored=JSON.parse(row?.payload||'null'),centralRevision=Number(row?.revision);if(!stored||!Number.isSafeInteger(centralRevision)||centralRevision<1)throw new CloudError('MCP_APPROVAL_REQUIRED');delete stored._commitToken;
    const state=await hydrateCoreState(stored),authorized=authorizeCloudDispatch(state,input),e=state.executions.find((e:any)=>e.id===authorized.executionId),p=state.proposals.find((p:any)=>p.id===authorized.proposalId);
-   const key='dispatch:'+e.id,at=new Date().toISOString(),receipt=await rpc('cas',{key,payload:JSON.stringify({executionId:e.id,proposalId:p.id,command:e.command,at,dispatchConsumed:true,centralRevision}),expected:0,updated_at:at,centralRevision});
-   if(receipt.changes!==1)return result({dispatchGranted:false,verificationOnly:true});
+   const {authorizationValidUntil,preflightValidUntil}=authorized,inTime=()=>{const t=Date.now();return t<Date.parse(authorizationValidUntil)&&t<=Date.parse(preflightValidUntil);};
+   const key='dispatch:'+e.id,at=new Date().toISOString(),receipt=await rpc('cas',{key,payload:JSON.stringify({executionId:e.id,proposalId:p.id,command:e.command,at,dispatchConsumed:true,centralRevision,authorizationValidUntil,preflightValidUntil}),expected:0,updated_at:at,centralRevision,authorizationValidUntil,preflightValidUntil});
+   if(receipt.changes!==1||!inTime())return result({dispatchGranted:false,verificationOnly:true});
   }
   const key=Deno.env.get('MALVA_MCP')||Deno.env.get('MALVA_API');
   return result(await callRemoteMcp({key,tool,args,onRecovery:recovery=>console.info(JSON.stringify({event:'mcp_read_recovered',...recovery}))}));

@@ -1329,3 +1329,58 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - `tests/daily-series.test.mjs` com origem válida, ontem, ausente, inválida, futura e falha mantendo os dias.
   - Autoteste Swift de `daysStale`.
   - Verificador do Codex: 10/10.
+
+## Fechamento da curadoria de 13/11: resíduos de fonte, prazo do recibo e interface web (registro escrito às 2026-11-13 20:46:09 UTC por `date -u`)
+
+- **Pedido:** Erik, consolidado pelo Codex. Duas sessões escritoras (dados/segurança e web) e esta como único publicador. Relatórios privados em `outputs/curadoria-2026-11-13/` (`claude-reparos-residuais.md`, `claude-web-final.md`, `CURADORIA.md`, `claude-publicacao.md`).
+
+### Resíduos de fonte (`lib/cloud-collector.mjs`)
+
+- A sobreposição de ativas com campanhas com gasto escolhe pela hora da resposta que trouxe cada linha, e não mais pela hora mínima da janela. Selos e schema não mudam.
+- O fallback por conta e a busca `q` passam a levar o `lastSyncAt` de cada leitura que contribuiu. Ausente fica `null`, e entre vários vale o mais antigo.
+- O detalhe com linha exige um `accountId` no envelope igual ao da conta.
+
+### Prazo do recibo de envio
+
+- **Guarda (Worker e Edge, byte-idênticos):** devolve `authorizationValidUntil` e `preflightValidUntil`.
+- **Edge `malva-mcp` v16:** envia os dois prazos no `cas` do recibo e confere de novo, com o próprio relógio, antes de chamar o provedor. Se algum prazo venceu, a ordem vai para `verificationOnly`, sem chamada e sem nova tentativa.
+- **Migração `20261113204326_dispatch_receipt_deadline_fence`:**
+  - O arquivo manual `20261113203826`, nunca aplicado, foi recriado pela CLI com o mesmo conteúdo auditado e removido. O teste aponta para o nome novo.
+  - O ramo `cas` cercado confere os prazos depois do lock da central, com `clock_timestamp()`. Prazo ausente ou divergente do conteúdo do recibo dá `deadline`; prazo vencido dá `expired`.
+
+### Interface web
+
+- **Cards:** o contexto recomeça ao trocar de projeto.
+- **Pedidos Confirmar:**
+  - contrato de `/api/autonomy` validado: corpo malformado é falha e preserva a última leitura boa;
+  - sem `asks`, o número fica N/D, nunca zero;
+  - leitor com uma requisição por vez e tempo limite de 45 s com aborto: uma resposta válida de 31 s aparece e uma requisição travada é tentada de novo.
+- **Histórico de relatórios:** preserva as páginas antigas e o cursor.
+- **Campanhas:** foco visível no botão do nome.
+- **Escritório:** confirmação exata congelada na versão, usando o mesmo `review()`.
+
+### Testes
+
+- Validação integrada do Codex (`outputs/curadoria-2026-11-13/validacao-integrada.log`): 1743/1743, typecheck ok e build completo.
+- Depois de renomear a migração: testes focados da cerca, da autonomia, das ordens e das fronteiras de escrita, 42/42. A cópia do guarda é idêntica.
+
+### Publicação
+
+- Edge `malva-mcp` publicada antes da migração, como v16 (`verify_jwt` mantido).
+- Migração aplicada com `supabase db query --file` e registrada com `migration repair --status applied 20261113204326`.
+  - O `db push` está bloqueado por uma divergência antiga: quatro migrações antigas têm, no repositório, versões diferentes das remotas. Não reparei nem renomeei esse histórico.
+  - Corpo publicado conferido por `md5(prosrc)` igual ao do arquivo. Antes de aplicar, o corpo em produção era idêntico ao de `central_fence`.
+- ACL conferida: `postgres` e `service_role`; `anon` e `authenticated` sem execução.
+- Sonda sintética num bloco revertido: sem prazo dá `deadline`, prazo divergente dá `deadline`, prazo vencido dá `expired`, recibo válido dá `changes 1`. Zero linhas persistidas, sem chamada à Malva.
+- Avisos de segurança: só o que já existia (proteção contra senha vazada).
+- Worker: deploy automático pelo GitHub; versão e `/health` registrados em `claude-publicacao.md`.
+
+### Pendências (honestas)
+
+- **Persistência ao vivo:** antes desta publicação, Gabe, John e Nico seguiam falhando com `CLOUD_COLLECTION_FAILED` na fase `persist`.
+  - O reparo temporal faz a fixture do engine concluir a coleta, mas a causa ao vivo não está comprovada.
+  - Um codec acima de 16 MB é outra causa possível. Não elevar o limite.
+  - Próximo acompanhamento: confirmar uma rodada real concluída nesses projetos e aprimorar o discriminador sanitizado, separando falha de validação de estouro do codec, sem expor dados. Não declarar resolvido antes disso.
+- **Relógios da Edge e do banco:** se forem diferentes, um recibo gravado perto do prazo pode ir para verificação sem envio. É conservador; acompanhar.
+- **App do Mac:** o instalado era `eaac3c5`. Esta publicação reinstala com a frescura da origem na aba Dias, feita em `9de2511`.
+- **Navegador:** o painel Autonomia (aviso de leitura) e a confirmação do Escritório ainda não foram vistos num navegador.

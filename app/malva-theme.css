@@ -201,6 +201,7 @@ body .app .search input:focus-visible,body .app .dc-search input:focus-visible {
 body .app .campaign-open { display:block; min-width:0; width:100%; height:auto; padding:0; border:0; border-radius:var(--ds-radius-xs); background:transparent; color:var(--ds-ink); font:inherit; text-align:left; white-space:normal; overflow-wrap:anywhere; box-shadow:none; transition:color var(--ds-dur-hover) var(--ds-ease-out); }
 body .app .campaign-open:hover { color:var(--ds-accent); }
 body .app .campaign-open:active { transform:none; opacity:1; }
+body .app .campaign-open:focus-visible { outline:var(--ds-focus-width) solid var(--ds-focus); outline-offset:var(--ds-focus-offset); color:var(--ds-accent); }
 /* Hierarquia de superfícies e métricas compactas: card do notch (fio, luz no topo, sem sombra). */
 body .app .panel,body .app .kpi[data-slot=card],.workspace-dialog .kpi[data-slot=card] { background:var(--ds-surface); border-color:var(--ds-stroke); box-shadow:var(--ds-elevation-card); }
 body .app .panel-title>svg { color:var(--ds-ink-muted); }

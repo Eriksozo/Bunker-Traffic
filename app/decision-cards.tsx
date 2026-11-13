@@ -10,6 +10,7 @@ import {readChoiceResolution,readLiveChoiceResolution} from '../lib/decision-res
 import {decisionPercent as percentage,validDecisionPercent as validPercent,decisionBudgetAfter as nativeAfter,exactDecisionProposal as exactProposal,decisionDraftError,sameDecisionSession,decisionTimestamp,matchesDecisionTarget} from '../lib/decision-form.mjs';
 import {decisionQueue} from '../lib/decision-reconsider.mjs';
 import {decisionList} from '../lib/decision-list.mjs';
+import {cardsViewFor} from '../lib/decision-cards-view.mjs';
 import {decorateCampaignCard} from '../lib/campaign-live-context.mjs';
 import './decision-cards.css';
 import './decision-kanban.css';
@@ -227,7 +228,14 @@ function DecisionHistory({state,project,saving,onReopen,initialQuery=''}:{state:
 }
 
 export default function DecisionCards({state,project,write,saving,compact=false,initialSearch='',initialTab='cards',liveItems=[],presentationCards,inlineTarget}:Props){
- const [tab,setTab]=useState<'cards'|'history'|'learning'>(initialTab),[search,setSearch]=useState(initialSearch),[actionFilter,setActionFilter]=useState('all'),[statusFilter,setStatusFilter]=useState('all'),[clock,setNow]=useState(Date.now()),[drafts,setDrafts]=useState<Record<string,Draft>>({}),[noticeByProject,setNotices]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[approval,setApproval]=useState<Approval|null>(null),[confirmed,setConfirmed]=useState(false);
+ // Search, tab, filters and the history search belong to this project and entry point: a new project (or a new deep
+ // link) restarts them during render, before any card of the new project is filtered with the old search.
+ const viewContext={project,initialSearch,initialTab},[storedView,setView]=useState(()=>cardsViewFor(null,viewContext));
+ const view=cardsViewFor(storedView,viewContext);if(view!==storedView)setView(view);
+ const {tab,search,actionFilter,statusFilter}=view;
+ const setTab=(next:'cards'|'history'|'learning')=>setView(v=>({...cardsViewFor(v,viewContext),tab:next})),setSearch=(next:string)=>setView(v=>({...cardsViewFor(v,viewContext),search:next}));
+ const setActionFilter=(next:string)=>setView(v=>({...cardsViewFor(v,viewContext),actionFilter:next})),setStatusFilter=(next:string)=>setView(v=>({...cardsViewFor(v,viewContext),statusFilter:next}));
+ const [clock,setNow]=useState(Date.now()),[drafts,setDrafts]=useState<Record<string,Draft>>({}),[noticeByProject,setNotices]=useState<Record<string,string>>({}),[busy,setBusy]=useState(false),[approval,setApproval]=useState<Approval|null>(null),[confirmed,setConfirmed]=useState(false);
  const notice=noticeByProject[project]||'';
  const setNotice=useCallback((text:string)=>setNotices(previous=>({...previous,[project]:text})),[project]);
  const [receipt,setReceipt]=useState<{project:string;account:string;objectId:string}|null>(null);
@@ -326,7 +334,7 @@ export default function DecisionCards({state,project,write,saving,compact=false,
     <div className="dc-column-cards">{column.cards.slice(0,limit).map((card:any)=><KanbanTile state={state} projectName={project==='all'?state.config?.[card.project]?.projectName:undefined} key={keyOf(card)} card={card} stage={column.id} now={now} onOpen={openCard}/>)}{!column.cards.length&&<div className="dc-column-empty"><span aria-hidden="true">{column.id==='approval'?<ShieldCheck size={19}/>:column.id==='suggestions'?<MessageSquare size={19}/>:<Search size={19}/>}</span><strong>{column.id==='approval'?'Nenhuma aprovação pendente':column.id==='suggestions'?'Sem sugestões nesta etapa':'Nenhuma revisão pendente'}</strong><p>{column.id==='approval'?'As propostas revisadas aparecerão aqui.':column.id==='suggestions'?'As recomendações conjuntas ficam aqui.':'Campanhas sem sugestão atual aparecem aqui.'}</p></div>}</div>
     {column.cards.length>limit&&<Button type="button" variant="ghost" className="dc-column-more ds-btn ds-btn--ghost ds-btn--sm ds-btn--block" onClick={()=>setColumnLimits(previous=>({...previous,[column.id]:limit+size}))}>Mostrar mais {Math.min(size,column.cards.length-limit)}<ChevronDown size={14}/></Button>}
    </section>;})}</div>}
-  </TabsContent><TabsContent value="history" className="dc-tab-content"><DecisionHistory state={state} project={project} initialQuery={initialSearch} saving={saving||busy} onReopen={choice=>void reopen(choice)}/></TabsContent><TabsContent value="learning" className="dc-tab-content"><Learning plan={plan} state={state} project={project}/></TabsContent>
+  </TabsContent><TabsContent value="history" className="dc-tab-content"><DecisionHistory key={view.key} state={state} project={project} initialQuery={view.historyQuery} saving={saving||busy} onReopen={choice=>void reopen(choice)}/></TabsContent><TabsContent value="learning" className="dc-tab-content"><Learning plan={plan} state={state} project={project}/></TabsContent>
   {dialogs}
  </Tabs>;
 }

@@ -3,14 +3,29 @@
  * called him). Read-only: the Bunk never sends these; the owner executes each one himself on the notch, with Touch ID. */
 import {FingerprintPattern} from 'lucide-react';
 import {waitingText} from '../../lib/autonomy-ui.mjs';
-import {DiffRow,type CampaignRef} from './components';
+import {DiffRow,stamp,type CampaignRef} from './components';
 
 export type Ask={id:string;at:string|null;ageMinutes:number|null;project:string|null;projectName:string|null;adAccountId:string|null;objectId:string|null;campaign:string|null;account?:string|null;action:string|null;actionLabel:string;percent:number|null;before:any;after:any;ruleLabel:string|null;reason?:string|null};
 
-export function AsksCard({asks,showProject,onOpen}:{asks:Ask[];showProject:boolean;onOpen:(r:CampaignRef)=>void}){
- if(!asks.length)return null;
+/** What the card may say about the read behind it (lib/autonomy-remote-read.mjs asksView). The failure itself and the
+ * reread button live in the panel banner, which also covers the Registro; this card only never claims a count it does not
+ * have. Without `read` the list is taken as a confirmed reading. */
+export type AsksRead={status:'off'|'loading'|'unavailable'|'ok';stale:boolean;error:string|null;lastSuccessAt:number|null};
+const readStamp=(at:number|null)=>at===null?'N/D':stamp(new Date(at).toISOString());
+const title=<h2 id="aut-asks-title" className="ds-header__title"><FingerprintPattern size={15} aria-hidden="true"/> Aguardando você</h2>;
+
+export function AsksCard({asks,showProject,onOpen,read}:{asks:Ask[]|null;showProject:boolean;onOpen:(r:CampaignRef)=>void;read?:AsksRead}){
+ if(read?.status==='off')return null;
+ if(read?.status==='loading')return <p className="ds-caption aut-asks__how" role="status">Lendo os pedidos do nível Confirmar…</p>;
+ // A failed read with no good reading: the number of requests is unknown, never zero.
+ if(read?.status==='unavailable'||!asks)return <section className="ds-card aut-asks" aria-labelledby="aut-asks-title" role="status">
+  <header className="ds-header">{title}<span className="ds-header__detail">pedidos indisponíveis · nível Confirmar</span></header>
+  <p className="aut-asks__how">Não foi possível ler os pedidos do Bunk. Sem uma leitura confirmada, o número de pedidos é desconhecido: confira no notch em “Bunk pede a você” ou leia de novo.</p>
+ </section>;
+ const since=read?.stale?` · leitura de ${readStamp(read.lastSuccessAt)}`:'';
+ if(!asks.length)return read?.stale?<section className="ds-card aut-asks" aria-labelledby="aut-asks-title" role="status"><header className="ds-header">{title}<span className="ds-header__detail">nenhum pedido aberto na última leitura confirmada{since}</span></header></section>:null;
  return <section className="ds-card ds-card--accent aut-asks" aria-labelledby="aut-asks-title">
-  <header className="ds-header"><h2 id="aut-asks-title" className="ds-header__title"><FingerprintPattern size={15} aria-hidden="true"/> Aguardando você</h2><span className="ds-header__detail">{asks.length===1?'1 pedido do Bunk':`${asks.length} pedidos do Bunk`} · nível Confirmar</span></header>
+  <header className="ds-header">{title}<span className="ds-header__detail">{asks.length===1?'1 pedido do Bunk':`${asks.length} pedidos do Bunk`} · nível Confirmar{since}</span></header>
   <p className="aut-asks__how">O Bunk não envia estes pedidos. Para executar, abra o notch em “Bunk pede a você”, confira o valor ao vivo e confirme com Touch ID.</p>
   <ul className="aut-asks__list">{asks.map(a=><li key={a.id} className="aut-ask">
    <span className="aut-ask__main">
