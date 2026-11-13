@@ -76,7 +76,10 @@ enum Format {
     static func roiTone(_ value: Double?) -> Tone? { guard let value, value.isFinite else { return nil }; return value >= 1 ? .good : .bad }
     static func daysStale(_ d: Summary.Days) -> String {
         let who = (d.failing ?? []).joined(separator: ", ")
-        return who.isEmpty ? "Leitura atrasada: valores da última leitura confirmada." : "Última leitura de \(who) falhou: valores da leitura anterior."
+        if !who.isEmpty { return "Última leitura de \(who) falhou: valores da leitura anterior." }
+        // The consultation time never stands in for the source's own sync time (curadoria of 13/11/2026).
+        if d.sourceKnown == false { return "A Malva não informa quando sincronizou esta série; consultada " + relative(d.checkedAt) + "." }
+        return "Leitura atrasada: valores da última leitura confirmada."
     }
     static func ratio(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "N/D" }

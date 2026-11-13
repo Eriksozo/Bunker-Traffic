@@ -79,6 +79,10 @@ enum SelfTest {
         // VIGIA: the server's tone leads (a mismatch with a recent checkout notice is a warning); a late read says so.
         check(VigiaUI.tone(kind: "mismatch", tone: "warn") == .warn && VigiaUI.tone(kind: "mismatch", tone: nil) == .bad, #line)
         check(NowText.vigiaDetail(Summary.Vigia(at: "2026-11-13T14:00:00.000Z", fresh: false, signals: [])).contains("leitura atrasada"), #line)
+        // Dias: Malva's series has no sync time; the consultation is shown as such, never as the source's time.
+        let unknownDays = Summary.Days(rows: [], currency: "BRL", today: nil, at: nil, stale: true, missing: [], failing: [], error: nil, checkedAt: "2026-11-13T14:59:00.000Z", sourceKnown: false)
+        check(Format.daysStale(unknownDays).hasPrefix("A Malva não informa quando sincronizou esta série; consultada "), #line)
+        check(Format.daysStale(Summary.Days(rows: [], currency: nil, today: nil, at: nil, stale: true, missing: [], failing: ["Alfa"], error: nil)).contains("Alfa falhou"), #line)
     }
 
     private static func testDecodesCompanionSummaryWithMissingValues() throws {

@@ -71,3 +71,20 @@ test('days after today (another timezone) are not shown and junk points are drop
  const d=daysSummary(stored({g:{...p,at,error:null}}),{project:'g',config,now});
  assert.deepEqual(d.rows.map(r=>r.day),['2026-11-10']);
 });
+
+test('freshness follows the source time, never the consultation clock (curadoria of 13/11/2026)', () => {
+ const read=sync=>projectDays({...gabe,freshAt:new Date(now-30000).toISOString(),...(sync===undefined?{}:{lastSyncAt:sync})});
+ const block=(sync,extra={})=>daysSummary(stored({g:{...read(sync),at:new Date(now).toISOString(),error:null,...extra}}),{project:'g',config,now});
+ // Valid and recent: fresh, the time shown is the source's (the older of answer and sync), not the consultation's.
+ const fresh=block(new Date(now-120000).toISOString());
+ assert.equal(fresh.stale,false);assert.equal(fresh.sourceKnown,true);assert.equal(fresh.at,new Date(now-120000).toISOString());assert.equal(fresh.checkedAt,new Date(now).toISOString());
+ // Synced yesterday, consulted now: stale.
+ assert.equal(block(new Date(now-86400000).toISOString()).stale,true);
+ // Unknown (Malva's series carries no sync time today) or future: not fresh, no source time shown, consultation kept apart.
+ for(const sync of [undefined,'nope',new Date(now+3600000).toISOString()]){
+  const d=block(sync);assert.equal(d.stale,true);assert.equal(d.sourceKnown,false);assert.equal(d.at,null);assert.equal(d.checkedAt,new Date(now).toISOString());
+ }
+ // A failed refresh keeps the previous days and their source time; still stale.
+ const kept=block(new Date(now-120000).toISOString(),{error:'DAYS_FAILED'});
+ assert.equal(kept.stale,true);assert.deepEqual(kept.failing,['Gabe']);assert.equal(kept.rows.length,3);
+});

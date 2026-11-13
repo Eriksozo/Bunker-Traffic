@@ -1086,7 +1086,7 @@ struct DaysTab: View {
         }
     }
     var detail: String {
-        guard let at = s.days?.at else { return "últimos 7 dias · \(s.projectName)" }
+        guard let at = s.days?.at else { return "últimos 7 dias · \(s.projectName)" + (s.days?.checkedAt.map { " · consultado " + Format.relative($0) } ?? "") }
         return "últimos 7 dias · \(s.projectName) · lido " + Format.relative(at)
     }
 }

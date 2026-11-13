@@ -1270,7 +1270,7 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Testes:** `tests/companion-summary.test.mjs` com casos de fila sem análise, tudo lido, ROI com lacuna e `from` inválido ou futuro. `tests/funnel-watch.test.mjs` com tom, linhas e singular. Autoteste Swift `testNowText` com estados mistos, sem leitura, tudo lido, servidor antigo, carregando e sem leitura. Bateria completa 1706 ok, typecheck e build ok. Prévia `16-fila-sem-analise` adicionada.
 - **Fora deste trabalho, para o dono e o Codex:** as coletas falhando (`CLOUD_COLLECTION_FAILED` na fase `persist`, registradas na seção do VIGIA) são o que mantém a análise de ontem. O notch agora mostra isso; a causa da coleta não foi tratada aqui.
 
-## Curadoria de 13/11, P1 de envio único: concessão revalidada e recibo atado à central (registro escrito às 2026-11-13 18:45 UTC por `date -u`)
+## Curadoria de 13/11, P1 de envio único: concessão revalidada e recibo atado à central (registro escrito às 2026-11-13 18:32:49 UTC por `date -u`)
 
 - **Pedido:** Erik, curadoria profunda consolidada pelo Codex (`/tmp/bunker-curadoria-profunda-20261113.md`). Os achados foram reproduzidos sem provedor real; o verificador do Codex passava 3 de 12 casos.
 - **Falha 1, concessão:**
@@ -1297,3 +1297,35 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - sonda no banco real dentro de um bloco revertido: revisão antiga dá `changes 0` e `conflict central`; revisão atual dá `changes 1`. Nada ficou gravado (conferido: 0 linhas da chave de sonda);
   - Edge `malva-mcp` v15 por `supabase functions deploy --use-api`, `verify_jwt` mantido;
   - avisos de segurança do Supabase: só os dois que já existiam (RLS sem política nas tabelas só de `service_role` e proteção de senha vazada).
+
+## Curadoria de 13/11, dados: detalhe acompanhado, sobreposição ativas/com gasto e relógio de Dias (registro escrito às 2026-11-13 18:38:52 UTC por `date -u`)
+
+- **Formato real conferido antes de mudar (leituras GET na Malva, Ronald, sem gravar nada):** `tracking_ad_detail` traz `row.projectId/projectName`, `provider`, `level`, `externalId`, `accountId`, `currency` e `period` (from/to/timezone), **sem `freshAt` nem `lastSyncAt`**. `tracking_series` também **não** traz `freshAt`/`lastSyncAt`. Os fixtures do auditor tinham esses campos; o código respeita os dois casos.
+- **P1, fallback do detalhe (`lib/cloud-collector.mjs`):**
+  - **Validação antes da normalização:**
+    - identidade explícita: projeto, nome do projeto, conta, objeto, provedor e nível, na linha e no envelope;
+    - mesmo período "hoje" do recorte (from/to/timezone);
+    - divergência dá `SOURCE_TRACKED_IDENTITY` ou `SOURCE_STALE_OR_IDENTITY`, e a leitura anterior fica como estava.
+  - **`freshAt` próprio do detalhe:**
+    - quando vem, passa pela política da listagem: válido, não futuro, até 5 min e não anterior ao início da coleta;
+    - entra no horário mais antigo do recorte; `lastSyncAt` também entra (o recorte só fica com `lastSyncAt` se todas as partes tiverem);
+    - nenhum horário é emprestado da listagem.
+  - **Detalhe sem `freshAt`, que é o formato real:**
+    - a linha fica fora e o objeto é declarado `unavailableTracked` com motivo novo `no-freshness` (`lib/snapshot-schema.mjs` aceita os dois motivos);
+    - fica `trackedComplete:false`, sem falha permanente da coleta;
+    - a triagem `empty-round-review` continua exigindo `no-current-row`; com `no-freshness` ela pede releitura, o caminho conservador.
+- **P2, sobreposição ativas e com gasto:**
+  - `overlap()` compara campos estáveis: id, nome, status, effectiveStatus, orçamentos, moeda, conta, pais e accountStatus.
+  - Se divergirem, dá `SOURCE_CHANGED`: leitura híbrida recusada, sem reenvio.
+  - Se só as métricas diferirem, vale a linha inteira da leitura mais nova; em empate, a de gasto, como antes.
+- **P2, relógio de Dias (`lib/daily-series.mjs`, notch):**
+  - `projectDays` guarda `sourceAt`: o mais antigo entre `freshAt` e `lastSyncAt`. Fica nulo sem `lastSyncAt` e inválido se a sincronização vier depois da resposta.
+  - `daysSummary`: o `at` passa a ser o horário da origem; `checkedAt` é a consulta; `sourceKnown` diz se a origem é conhecida. Origem desconhecida, futura ou antiga sempre dá `stale:true`.
+  - Como a série da Malva não informa sincronização, o notch mostra "A Malva não informa quando sincronizou esta série; consultada há X" e, no cabeçalho, "consultado há X", sem rótulo de recente.
+  - O executor não mudou: já espalha `projectDays` no armazenamento.
+- **Testes:**
+  - `tests/cloud-collector-sources.test.mjs` (novo): detalhe válido; ontem, futuro, inválido, anterior à coleta, projeto estrangeiro ou ausente, outro período, provedor ou objeto; sem `freshAt`; sobreposição divergente e no mesmo relógio; só métricas nos dois sentidos; coerente.
+  - Fixture de `tests/cloud-executor.test.mjs` atualizado ao envelope real.
+  - `tests/daily-series.test.mjs` com origem válida, ontem, ausente, inválida, futura e falha mantendo os dias.
+  - Autoteste Swift de `daysStale`.
+  - Verificador do Codex: 10/10.

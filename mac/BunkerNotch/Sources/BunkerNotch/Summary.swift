@@ -252,6 +252,8 @@ struct Summary: Decodable, Equatable {
     struct Days: Decodable, Equatable {
         let rows: [DayRow]; let currency: String?; let today: String?; let at: String?
         let stale: Bool?; let missing: [String]?; let failing: [String]?; let error: String?
+        /// When the Bunker consulted Malva, and whether Malva said when the series itself was synced (`at`).
+        var checkedAt: String? = nil; var sourceKnown: Bool? = nil
     }
     var days: Days? = nil
     /// VIGIA (lib/funnel-watch.mjs): the funnel of each project read every 10 minutes by the executor. Signals only:
