@@ -14,11 +14,30 @@ enum SelfTest {
     static func run() -> Int32 {
         do { try testDecodesCompanionSummaryWithMissingValues() } catch { failures += 1; FileHandle.standardError.write(Data("decode: \(error)\n".utf8)) }
         testFormattingKeepsMissingAsND(); testCredentialShape(); testIslandSitsAtTheTopCentre()
-        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound(); testAlertPriorityAndCounters(); testAutonomyBlock()
+        testIslandStateMachine(); testDisplayChoice(); testStableChangeKey(); testCompactMoneyAndDetailDecode(); testWebScope(); testMalvaLink(); testOwnerAdjust(); testBunkRoam(); testAttention(); testOwnerOrder(); testAdjustSound(); testAlertPriorityAndCounters(); testAutonomyBlock(); testVigia()
         failures += bunkFailures
         failures += DSAudit.run()
         print(failures == 0 ? "self-test ok" : "self-test: \(failures) falha(s)")
         return failures == 0 ? 0 : 1
+    }
+
+    /// VIGIA (lib/funnel-watch.mjs): signals decode with a bad one skipped, alert keys are stable and ranked with losses.
+    private static func testVigia() {
+        let base = #"{"generatedAt":"2026-11-13T15:00:00.000Z","project":"all","projectName":"Todos","projects":[],"paused":false,"analysisAt":null,"today":{"today":null,"yesterday":null,"week":null,"deltas":{}},"queue":[],"queueSize":0,"approvals":{"count":0,"items":[]},"activity":{"hours":24,"summary":{},"recent":[]},"agents":{"recent":[]},"executor":null,"notice":"","#
+        let vigia = #""vigia":{"at":"2026-11-13T14:55:00.000Z","fresh":true,"signals":[{"id":"ns:p1:x:1","kind":"nosale","project":"Alfa","projectId":"p1","tone":"warn","title":"Alfa: sem venda há 4h","lines":["Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓"],"checks":{"page":true,"checkout":true,"traffic":true}},{"id":7},{"id":"mm:p2:d:0","kind":"mismatch","title":"Beta: as vendas não batem","lines":["O vTurb marcou 8 vendas hoje e o checkout registrou 3 pedidos. Confira o webhook."]}]}}"#
+        guard let s = try? JSONDecoder().decode(Summary.self, from: Data((base + vigia).utf8)) else { check(false, #line); return }
+        check(s.vigia?.signals.count == 2, #line)
+        check(s.vigia?.signals.first?.checks == Summary.VigiaChecks(page: true, checkout: true, traffic: true), #line)
+        check(s.vigia?.signals.first?.lines.first == "Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓", #line)
+        // A broken vigia block never costs the rest of the summary; an older server without it decodes to nil.
+        check((try? JSONDecoder().decode(Summary.self, from: Data((base + #""vigia":"x"}"#).utf8)))?.vigia == nil, #line)
+        check((try? JSONDecoder().decode(Summary.self, from: Data((base.dropLast() + "}").utf8)))?.vigia == nil, #line)
+        let keys = Store.presentKeys(s, day: "2026-11-13")
+        check(keys.contains("vg:ns:p1:x:1") && keys.contains("vg:mm:p2:d:0"), #line)
+        let ranked = Store.byPriority([("m", "x", "", IslandAlert.Kind.manager), ("vg:ns:p1:x:1", "x", "", .funnel), ("o", "x", "", .order)])
+        check(ranked.map(\.0) == ["o", "vg:ns:p1:x:1", "m"], #line)
+        check(VigiaUI.kind(alertId: "vg:mm:p2:d:0") == "mismatch" && VigiaUI.kind(alertId: "vg:pg:p1:u:d") == "page" && VigiaUI.kind(alertId: "vg:ns:p1:x:1") == "nosale", #line)
+        check(VigiaUI.tone(alertId: "vg:ns:p1:x:1") == .warn && VigiaUI.tone(alertId: "vg:mm:p2:d:0") == .bad, #line)
     }
 
     private static func testDecodesCompanionSummaryWithMissingValues() throws {

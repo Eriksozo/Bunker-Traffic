@@ -194,8 +194,8 @@ struct AlertView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
     let alert: IslandAlert
-    var tone: Tone { alert.kind == .sale ? .good : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? .good : .bad) : alert.kind == .approval ? .warn : alert.kind == .loss ? .bad : .accent }
-    var symbol: String { alert.kind == .sale ? "dollarsign.circle.fill" : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? "checkmark.seal.fill" : "exclamationmark.triangle.fill") : alert.kind == .approval ? "checkmark.seal.fill" : alert.kind == .loss ? "arrow.down.right" : "person.crop.circle.badge.exclamationmark" }
+    var tone: Tone { alert.kind == .funnel ? VigiaUI.tone(alertId: alert.id) : alert.kind == .sale ? .good : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? .good : .bad) : alert.kind == .approval ? .warn : alert.kind == .loss ? .bad : .accent }
+    var symbol: String { alert.kind == .funnel ? VigiaUI.symbol(alertId: alert.id) : alert.kind == .sale ? "dollarsign.circle.fill" : alert.kind == .order ? (alert.id.hasSuffix(":confirmed") ? "checkmark.seal.fill" : "exclamationmark.triangle.fill") : alert.kind == .approval ? "checkmark.seal.fill" : alert.kind == .loss ? "arrow.down.right" : "person.crop.circle.badge.exclamationmark" }
     var body: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: notch.geometry.height)
@@ -642,6 +642,34 @@ struct BalanceStrip: View {
     }
 }
 
+/// VIGIA (lib/funnel-watch.mjs, owner's slide "o funil vigiado 24 horas"): tone and symbol of a signal.
+enum VigiaUI {
+    static func tone(kind: String, tone: String?) -> Tone { tone == "bad" || kind == "page" || kind == "mismatch" ? .bad : .warn }
+    /// Alert ids are "vg:" + the server id, whose prefix says the kind: ns (sem venda), pg (página), mm (vendas não batem).
+    static func kind(alertId: String) -> String { alertId.hasPrefix("vg:pg:") ? "page" : alertId.hasPrefix("vg:mm:") ? "mismatch" : "nosale" }
+    static func tone(alertId: String) -> Tone { tone(kind: kind(alertId: alertId), tone: nil) }
+    static func symbol(kind: String) -> String { kind == "page" ? "globe.badge.chevron.backward" : kind == "mismatch" ? "arrow.left.arrow.right.circle.fill" : "cart.badge.questionmark" }
+    static func symbol(alertId: String) -> String { symbol(kind: kind(alertId: alertId)) }
+}
+
+/// "Funil · VIGIA" at the top of Agora: one row per current signal; a "sem venda" row carries the three checks under
+/// its title. Reading only: nothing here acts on a campaign.
+struct VigiaSection: View {
+    let vigia: Summary.Vigia
+    var body: some View {
+        SectionHeader(title: "Funil · VIGIA", detail: (vigia.at.map { "lido " + Format.relative($0) } ?? "leitura N/D") + " · só aviso, nenhuma ação")
+        VStack(spacing: 2) {
+            ForEach(vigia.signals) { v in
+                let rest = Array(v.lines.dropFirst())
+                ListRow(id: "vg:" + v.id, symbol: VigiaUI.symbol(kind: v.kind), tone: VigiaUI.tone(kind: v.kind, tone: v.tone),
+                        title: v.title, subtitle: v.lines.first ?? "",
+                        footer: rest.isEmpty ? nil : AnyView(Text(rest.joined(separator: "\n")).font(DS.Font.caption).foregroundStyle(DS.Color.inkMuted)
+                            .lineLimit(3).fixedSize(horizontal: false, vertical: true)))
+            }
+        }
+    }
+}
+
 struct NowTab: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var notch: NotchState
@@ -649,6 +677,7 @@ struct NowTab: View {
     var showProject: Bool { s.project == "all" }
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
+            if let v = s.vigia, !v.signals.isEmpty { VigiaSection(vigia: v) }
             if let a = s.autonomy, AutonomyText.asksCount(a) > 0 {
                 // The requests themselves live in the Autonomia tab (owner request of 12/11/2026); one line here so a request is never missed.
                 ListRow(id: "ask:pointer", symbol: "hand.raised.fill", tone: .warn, title: "Bunk pede a você",

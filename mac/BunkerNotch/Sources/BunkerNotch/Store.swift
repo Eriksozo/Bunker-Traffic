@@ -349,6 +349,12 @@ final class Store: ObservableObject {
             }
         }
         if newSales > 0 && primed && !muted { saleTick &+= newSales }
+        // VIGIA (owner's slide "o funil vigiado 24 horas"): one alert per signal; a "sem venda" that lasts 3 more hours
+        // comes back with a new id from the server. The check line ("Página no ar ✓ · …") is the detail.
+        for v in s.vigia?.signals ?? [] where !seen.contains("vg:" + v.id) {
+            seen.insert("vg:" + v.id)
+            fresh.append(("vg:" + v.id, v.title, v.lines.first ?? "", .funnel))
+        }
         // Receipts of the owner's direct orders and of Bunk autonomy orders: tell once when one ends (confirmed by the reread, failed or to verify).
         for o in s.orders ?? [] where ["confirmed", "failed", "verify"].contains(o.stage) {
             let key = "or:" + o.id + ":" + o.stage
@@ -376,7 +382,7 @@ final class Store: ObservableObject {
         s.approvals.items.map { "ap:" + $0.id } + s.activity.recent.map(changeKey) + s.queue.filter { $0.kind == "loss" }.map { "lo:" + $0.id }
             + (s.pace?.byProject ?? []).compactMap { p in p.alert.map { "pace:" + (p.project ?? "") + ":" + $0 + ":" + day } }
             + (s.sales?.recent ?? []).map { "sa:" + $0.at + ":" + String($0.amount) } + (s.orders ?? []).map { "or:" + $0.id + ":" + $0.stage }
-            + (s.autonomy?.asks ?? []).map { "ask:" + $0.id }
+            + (s.autonomy?.asks ?? []).map { "ask:" + $0.id } + (s.vigia?.signals ?? []).map { "vg:" + $0.id }
     }
     /// Seen alerts stay bounded over days of uptime: past the limit only what the summary still shows is kept
     /// (anything older cannot come back in the summary, so it cannot ring twice).
@@ -392,9 +398,9 @@ final class Store: ObservableObject {
         if !muted { deliver(items, soundsAlso: sounds) }
     }
 
-    /// Orders first, then approvals, losses, manager changes and sales; the same kind keeps its arrival order.
+    /// Orders first, then approvals, losses and VIGIA signals, manager changes and sales; the same kind keeps its arrival order.
     nonisolated static func byPriority<C: Sequence>(_ items: C) -> [(String, String, String, IslandAlert.Kind)] where C.Element == (String, String, String, IslandAlert.Kind) {
-        let order: [IslandAlert.Kind: Int] = [.order: 0, .approval: 1, .loss: 2, .manager: 3, .sale: 4]
+        let order: [IslandAlert.Kind: Int] = [.order: 0, .approval: 1, .loss: 2, .funnel: 2, .manager: 3, .sale: 4]
         return items.enumerated().sorted { (order[$0.1.3] ?? 9, $0.0) < (order[$1.1.3] ?? 9, $1.0) }.map(\.1)
     }
 

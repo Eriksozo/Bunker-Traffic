@@ -22,7 +22,7 @@ extension KeyedDecodingContainer {
 }
 
 extension Summary {
-    private enum Keys: String, CodingKey { case generatedAt, project, projectName, projects, paused, analysisAt, liveAt, metaLiveAt, today, pace, orders, sales, queue, queueSize, board, approvals, activity, agents, executor, notice, shadow, first24h, accounts, storage, days, autonomy }
+    private enum Keys: String, CodingKey { case generatedAt, project, projectName, projects, paused, analysisAt, liveAt, metaLiveAt, today, pace, orders, sales, queue, queueSize, board, approvals, activity, agents, executor, notice, shadow, first24h, accounts, storage, days, autonomy, vigia }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
         // Core: without these there is no reading to show.
@@ -54,6 +54,16 @@ extension Summary {
         days = c.optional(Days.self, forKey: .days)
         // Autonomia v2 (contract (b)): not an object → nil; a bad field inside → its default, never a failed summary.
         autonomy = c.optional(Autonomy.self, forKey: .autonomy)
+        vigia = c.optional(Vigia.self, forKey: .vigia)
+    }
+}
+
+/// VIGIA: a malformed signal is skipped, the others still alert.
+extension Summary.Vigia: Decodable {
+    private enum Keys: String, CodingKey { case at, fresh, signals }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        self.init(at: c.optional(String.self, forKey: .at), fresh: c.optional(Bool.self, forKey: .fresh), signals: c.lossyList(Summary.VigiaSignal.self, forKey: .signals) ?? [])
     }
 }
 

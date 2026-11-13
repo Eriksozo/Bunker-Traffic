@@ -38,7 +38,7 @@ import {liveOrderRow} from '../lib/owner-order-live.mjs';
 import {decisionContingency} from '../lib/decision-contingency.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
 import {deliverPhoneAlerts} from '../lib/phone-alerts.mjs';
-import {runVigia,vigiaPolicy,vigiaStatus} from '../lib/funnel-watch.mjs';
+import {runVigia,vigiaPolicy,vigiaStatus,vigiaView} from '../lib/funnel-watch.mjs';
 import {buildDeepBase,deepBaseSignature,buildDeepView,simRow,simRowsView,autonomyCompanion,deepViewPolicy} from '../lib/autonomy-deep-view.mjs';
 // Modo Gestor, Phase 1 (docs/AUTONOMIA-V2-CONTRATO-2026-11-10.md, c): the learned plays only observe. Every call into the
 // runner is guarded (exports checked, try/catch): a missing or failing runner never affects the Sombra, the autonomy or
@@ -588,8 +588,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
  }
  /**
   * VIGIA (lib/funnel-watch.mjs): every 10 minutes, inside this pulse (no cron or daemon of its own), reads each configured
-  * project's funnel and posts to Discord. Read-only. Without DISCORD_VIGIA_WEBHOOK it still reads and keeps a preview in
-  * the status, sending nothing. One run at a time, so nothing is posted twice.
+  * project's funnel and keeps the current signals here; the notch summary carries them (merged at read time) and the
+  * notch alerts once per signal. Read-only, nothing sent outside the Bunker. One run at a time.
   */
  private vigiaBusy=false;
  private async syncVigia(state:any){
@@ -600,7 +600,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   try{
    const source=cloudMalvaClient(this.db());
    const projects=Object.entries<any>(state.config||{}).map(([id,c])=>({id,name:typeof c?.projectName==='string'&&c.projectName?c.projectName:id}));
-   const r=await runVigia({projects,read:(tool:string,args:any)=>source.read(tool,args),fetchFn:fetch,liveItems:(this.liveItems||[]) as never[],prior,webhook:this.env.DISCORD_VIGIA_WEBHOOK||null,now});
+   const r=await runVigia({projects,read:(tool:string,args:any)=>source.read(tool,args),fetchFn:fetch,liveItems:(this.liveItems||[]) as never[],prior,now});
    await this.ctx.storage.put('vigia',r.state);
   }finally{this.vigiaBusy=false;}
  }
@@ -692,8 +692,8 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Read-only: the last Meta read while it is still fresh enough to show (lib/meta-display.mjs), for the web's live rows.
   if(input.action==='metaLive'){const meta=freshMeta(await this.ctx.storage.get<any>('metaLive'));return Response.json({meta:meta?{at:new Date(meta.at).toISOString(),items:meta.items}:null});}
   if(input.action==='companion'){const project=typeof input.project==='string'&&input.project?input.project:'all',key='companion:'+project;const summary:any=await this.ctx.storage.get(key);
-   // Sales arrive between pulses (webhook): merged at read time so the notch sees them at once.
-   return Response.json(summary?{summary:{...summary,sales:salesView(await this.ctx.storage.get<any[]>('salesFeed'),{project,now:Date.now()})}}:{summary:null});}
+   // Sales arrive between pulses (webhook) and VIGIA reads every 10 minutes: both merged at read time so the notch sees them at once.
+   return Response.json(summary?{summary:{...summary,sales:salesView(await this.ctx.storage.get<any[]>('salesFeed'),{project,now:Date.now()}),vigia:vigiaView(await this.ctx.storage.get<any>('vigia'),{project,now:Date.now()})}}:{summary:null});}
   if(input.action==='sale'){
    const v=input.sale,ok=v&&typeof v==='object'&&typeof v.amount==='number'&&Number.isFinite(v.amount)&&v.amount>0&&v.amount<=1e7&&typeof v.at==='string'&&Number.isFinite(Date.parse(v.at));
    if(!ok)return Response.json({error:'Venda inválida.'},{status:400});

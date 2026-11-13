@@ -6,8 +6,9 @@ struct IslandAlert: Equatable, Identifiable {
     let kind: Kind
     let title: String
     let detail: String
-    /// `order`: a receipt of the owner's direct order (confirmed, failed or to verify).
-    enum Kind: Equatable { case approval, manager, loss, order, sale }
+    /// `order`: a receipt of the owner's direct order (confirmed, failed or to verify). `funnel`: a VIGIA signal
+    /// (no sale for hours, page down, vTurb × checkout); its id starts with "vg:".
+    enum Kind: Equatable { case approval, manager, loss, order, sale, funnel }
 }
 
 /// Pure island behaviour, no AppKit: hover peeks, click/hotkey opens, Escape/outside click folds,

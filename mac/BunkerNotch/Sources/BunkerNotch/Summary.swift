@@ -254,6 +254,16 @@ struct Summary: Decodable, Equatable {
         let stale: Bool?; let missing: [String]?; let failing: [String]?; let error: String?
     }
     var days: Days? = nil
+    /// VIGIA (lib/funnel-watch.mjs): the funnel of each project read every 10 minutes by the executor. Signals only:
+    /// it never proposes, approves or sends an order. `lines[0]` of a "sem venda" signal is the slide's check line
+    /// ("Página no ar ✓ · Checkout abrindo ✓ · Tráfego rodando ✓"). Older servers omit it (nil).
+    var vigia: Vigia? = nil
+    struct VigiaChecks: Decodable, Equatable { let page: Bool?; let checkout: Bool?; let traffic: Bool? }
+    struct VigiaSignal: Decodable, Equatable, Identifiable {
+        let id: String; let kind: String; let title: String; let lines: [String]
+        var project: String? = nil; var projectId: String? = nil; var tone: String? = nil; var checks: VigiaChecks? = nil
+    }
+    struct Vigia: Equatable { var at: String? = nil; var fresh: Bool? = nil; var signals: [VigiaSignal] = [] }
     struct Accounts: Decodable, Equatable { let generatedAt: String?; let metaConnected: Bool; let metaError: String?; let counts: AccountCounts; let rows: [AccountRow] }
 }
 

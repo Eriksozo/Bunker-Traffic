@@ -1,13 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {vigiaPolicy,ordersFacts,checkoutFacts,videoFacts,pageFacts,liveSpend,probePage,evaluateProject,vigiaAlerts,rememberVigia,
- validDiscordWebhook,discordPayload,sendDiscord,runVigia,vigiaStatus,addSample,trafficState} from '../lib/funnel-watch.mjs';
+import {vigiaPolicy,ordersFacts,checkoutFacts,videoFacts,pageFacts,liveSpend,probePage,evaluateProject,vigiaSignals,vigiaView,
+ runVigia,vigiaStatus,addSample,trafficState} from '../lib/funnel-watch.mjs';
 import {scrubRead,cloudReadTools,cloudWriteTools} from '../lib/cloud-malva.mjs';
 
 const H=3600000,NOW=Date.parse('2026-11-13T18:00:00.000Z'); // 15:00 in São Paulo
 const iso=t=>new Date(t).toISOString();
-const WEBHOOK='https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz_ABCDEFG-123';
 const project={id:'e77d5763-1022-4e00-a3b0-330a30683b51',name:'Murilo'};
 const snapshot=(spend,at=NOW,rows=null)=>({projectId:project.id,snapshot:{projectId:project.id,projectName:'Murilo',source:'Malva MCP',period:'today',level:'campaign',complete:true,
  timezone:'America/Sao_Paulo',from:'2026-11-13T03:00:00.000Z',to:'2026-11-14T03:00:00.000Z',fetchedAt:iso(at-60000),lastSyncAt:null,
@@ -95,7 +94,7 @@ test('"as vendas não batem" from 3 more vTurb conversions than checkout orders 
  assert.equal(three.title,'Murilo: as vendas não batem');
  assert.equal(three.lines[0],'O vTurb marcou 6 vendas hoje e o checkout registrou 3 pedidos (3 aprovados). Confira o webhook.');
  const six=evaluateProject({project,sample,history,orders,video:{vturbConversions:9},pages:ok,now:NOW}).signals[0];
- assert.notEqual(three.key,six.key);
+ assert.notEqual(three.id,six.id);assert.ok(three.id);
  // Real case of 13/11 (Gabe): 11 vTurb, 9 orders (Pix expired or pending), 1 approved, webhook receiving: not a mismatch.
  const pix=evaluateProject({project,sample,history,orders:{lastSaleAt:iso(NOW-H),approvedToday:1,ordersToday:9,searched:'today'},video:{vturbConversions:11},pages:ok,now:NOW});
  assert.equal(pix.signals.some(x=>x.kind==='mismatch'),false);
@@ -109,30 +108,28 @@ test('traffic: a sample 20–60 min old proves "running"; without one, spend tod
  assert.equal(addSample(history,sample,{now:NOW+8*H}).length,1);
 });
 
-test('ledger: "VIGIA ligado" once, each alert once, repeat every 3 h of the same outage, "voltou a vender" after an alert', ()=>{
- const orders={lastSaleAt:iso(NOW-4*H),approvedToday:13,searched:'today'};
- const ev=(o,now=NOW)=>[{project,...evaluateProject({project,sample:{...sample,at:iso(now)},history:[{...history[1],at:iso(now-40*60000)}],orders:o,pages:ok,now})}];
- let r=vigiaAlerts(ev(orders),null,{now:NOW,projects:[project]});
- assert.deepEqual(r.fresh.map(a=>a.kind),['hello','nosale']);
- let ledger=rememberVigia(null,r.fresh,{now:NOW,keep:r.present});
- assert.equal(vigiaAlerts(ev(orders),ledger,{now:NOW}).fresh.length,0);
- // 6 h without a sale: the second 3-hour bucket rings again.
- assert.equal(vigiaAlerts(ev(orders,NOW+2*H),ledger,{now:NOW+2*H}).fresh[0].kind,'nosale');
- const back=vigiaAlerts(ev({...orders,lastSaleAt:iso(NOW+10*60000)},NOW+15*60000),ledger,{now:NOW+15*60000}).fresh;
- assert.equal(back[0].title,'Murilo: voltou a vender');assert.match(back[0].lines[0],/depois de 4h10 sem venda/);
- ledger=rememberVigia(ledger,back,{now:NOW});assert.equal(ledger.open[project.id],undefined);
+test('signals for the notch: page down first, then mismatch, then the longest without a sale; three checks on "sem venda"', ()=>{
+ const orders={lastSaleAt:iso(NOW-4*H),approvedToday:13,ordersToday:13,searched:'today'};
+ const murilo=evaluateProject({project,sample,history,orders,checkout:{integrations:1,lastEventAt:iso(NOW-10*60000)},pages:ok,now:NOW});
+ const nico={id:'c5780078-fa3a-4564-88b6-fe7255889a93',name:'Nico'};
+ const n=evaluateProject({project:nico,sample,history,orders:{...orders,lastSaleAt:iso(NOW-H),ordersToday:3},video:{vturbConversions:8},pages:ok,now:NOW});
+ const list=vigiaSignals([{project,...murilo},{project:nico,...n}]);
+ assert.deepEqual(list.map(x=>x.title),['Nico: as vendas não batem','Murilo: sem venda há 4h']);
+ const ns=list[1];
+ assert.deepEqual(ns.checks,{page:true,checkout:true,traffic:true});
+ assert.equal(ns.projectId,project.id);assert.equal(ns.project,'Murilo');assert.equal(ns.tone,'warn');assert.equal(list[0].tone,'bad');
+ // Same outage: the same id while it lasts; the next 3-hour bucket is a new id (the notch alerts again).
+ const later=evaluateProject({project,sample:{...sample,at:iso(NOW+3*H)},history:[{...history[1],at:iso(NOW+3*H-40*60000)}],orders,pages:ok,now:NOW+3*H});
+ assert.notEqual(later.signals[0].id,ns.id);
 });
 
-test('Discord: only webhook addresses, mentions disabled, 429/5xx retried and other 4xx not', async()=>{
- assert.equal(validDiscordWebhook(WEBHOOK),true);
- for(const bad of [null,'','http://discord.com/api/webhooks/1/abc','https://evil.com/api/webhooks/123456/abcdefghijklmnopqrstuv','https://discord.com/channels/1/2'])assert.equal(validDiscordWebhook(bad),false);
- const p=discordPayload({title:'Murilo: sem venda há 4h',lines:['a','@everyone b'],color:1});
- assert.deepEqual(p.allowed_mentions,{parse:[]});assert.equal(p.username,'VIGIA');assert.equal(p.embeds[0].description,'a\n@everyone b');
- assert.deepEqual(await sendDiscord(async()=>response(204),WEBHOOK,{title:'x'}),{ok:true});
- assert.equal((await sendDiscord(async()=>response(429),WEBHOOK,{title:'x'})).retry,true);
- assert.equal((await sendDiscord(async()=>response(404),WEBHOOK,{title:'x'})).retry,false);
- const net=await sendDiscord(async()=>{throw new Error(WEBHOOK);},WEBHOOK,{title:'x'});
- assert.equal(JSON.stringify(net).includes('webhooks'),false);
+test('notch view: signals of the project asked (or all), none when the read is stale', ()=>{
+ const state={lastRunAt:iso(NOW),signals:[{id:'a',projectId:'p1',title:'A'},{id:'b',projectId:'p2',title:'B'}]};
+ assert.deepEqual(vigiaView(state,{now:NOW}).signals.map(x=>x.id),['a','b']);
+ assert.deepEqual(vigiaView(state,{project:'p2',now:NOW}).signals.map(x=>x.id),['b']);
+ const stale=vigiaView(state,{now:NOW+vigiaPolicy.signalMaxAgeMs+1});
+ assert.equal(stale.fresh,false);assert.deepEqual(stale.signals,[]);
+ assert.equal(vigiaView(null,{now:NOW}),null);
 });
 
 function fakeMalva({lastSaleAt=iso(NOW-4*H),approved=13,vturb=10,fail={}}={}){
@@ -146,28 +143,24 @@ function fakeMalva({lastSaleAt=iso(NOW-4*H),approved=13,vturb=10,fail={}}={}){
  return {read,calls};
 }
 
-test('one VIGIA read: only allowlisted reads, a preview without the webhook, Discord once with it', async()=>{
- const malva=fakeMalva(),sent=[];
- const fetchFn=async(url,init)=>{if(init?.method==='POST'){sent.push(JSON.parse(init.body));return response(204);}return response(200);};
- const prior={version:vigiaPolicy.version,history:{[project.id]:history}};
- const off=await runVigia({projects:[project],read:malva.read,fetchFn,liveItems:[snapshot(370)],prior,webhook:null,now:NOW});
- assert.equal(sent.length,0);assert.equal(off.state.configured,false);assert.equal(off.state.preview[0].title,'Murilo: sem venda há 4h');
+test('one VIGIA read: only allowlisted reads, the current signals stored, nothing sent anywhere', async()=>{
+ const malva=fakeMalva(),posts=[];
+ const fetchFn=async(url,init)=>{if(init?.method&&init.method!=='GET')posts.push(url);return response(200);};
+ const prior={version:vigiaPolicy.version,history:{[project.id]:history},ledger:{hello:'x'},preview:[1],configured:false};
+ const r=await runVigia({projects:[project],read:malva.read,fetchFn,liveItems:[snapshot(370)],prior,now:NOW});
+ assert.equal(posts.length,0);
  for(const [tool] of malva.calls){assert.ok(cloudReadTools.includes(tool));assert.ok(!cloudWriteTools.includes(tool));}
- const on=await runVigia({projects:[project],read:malva.read,fetchFn,liveItems:[snapshot(370)],prior,webhook:WEBHOOK,now:NOW});
- assert.deepEqual(sent.map(p=>p.embeds[0].title),['VIGIA ligado','Murilo: sem venda há 4h']);
- assert.equal(on.state.sent,2);assert.equal(on.state.pending,0);
- const again=await runVigia({projects:[project],read:malva.read,fetchFn,liveItems:[snapshot(380)],prior:on.state,webhook:WEBHOOK,now:NOW+vigiaPolicy.readMs});
- assert.equal(again.sent,0);
- const st=vigiaStatus(on.state);assert.equal(st.configured,true);assert.equal(st.projects[0].name,'Murilo');
- assert.equal(JSON.stringify(on.state).includes('discord.com'),false);
+ assert.deepEqual(r.state.signals.map(x=>x.title),['Murilo: sem venda há 4h']);
+ // Leftovers of the Discord version are dropped from the stored state.
+ for(const k of ['ledger','preview','configured'])assert.equal(k in r.state,false,k);
+ const st=vigiaStatus(r.state);assert.equal(st.projects[0].name,'Murilo');assert.equal(st.signals.length,1);
+ assert.equal(vigiaView(r.state,{project:project.id,now:NOW}).signals[0].title,'Murilo: sem venda há 4h');
 });
 
-test('a failed read is reported per project and never becomes "sem venda"; a 429 stays pending for the next read', async()=>{
+test('a failed read is reported per project and never becomes "sem venda"', async()=>{
  const malva=fakeMalva({fail:{tracking_orders:'MCP_UNAVAILABLE'}});
- const r=await runVigia({projects:[project],read:malva.read,fetchFn:async()=>response(200),liveItems:[snapshot(370)],prior:{version:1,history:{[project.id]:history}},webhook:null,now:NOW});
- assert.equal(r.state.errors.Murilo.orders,'MCP_UNAVAILABLE');assert.equal(r.state.preview.length,0);
- const busy=await runVigia({projects:[project],read:fakeMalva().read,fetchFn:async(u,i)=>i?.method==='POST'?response(429):response(200),liveItems:[snapshot(370)],prior:{version:1,history:{[project.id]:history}},webhook:WEBHOOK,now:NOW});
- assert.equal(busy.sent,0);assert.equal(busy.state.lastError,'DISCORD_429');assert.equal(busy.state.ledger.hello,null);
+ const r=await runVigia({projects:[project],read:malva.read,fetchFn:async()=>response(200),liveItems:[snapshot(370)],prior:{version:1,history:{[project.id]:history}},now:NOW});
+ assert.equal(r.state.errors.Murilo.orders,'MCP_UNAVAILABLE');assert.equal(r.state.signals.length,0);
 });
 
 test('the Malva bridge strips buyer data from sales and addresses from checkout integrations', ()=>{
@@ -185,5 +178,5 @@ test('the Malva bridge strips buyer data from sales and addresses from checkout 
 
 test('VIGIA never writes: no Malva write tool, no central, no Meta in the module', ()=>{
  const src=readFileSync(new URL('../lib/funnel-watch.mjs',import.meta.url),'utf8');
- for(const w of ['tracking_set_ad_budget','tracking_set_ad_status','graph.facebook.com','commitPersistedState','bunker_store'])assert.equal(src.includes(w),false,w);
+ for(const w of ['tracking_set_ad_budget','tracking_set_ad_status','graph.facebook.com','commitPersistedState','bunker_store','discord.com','api/webhooks','api.pushover'])assert.equal(src.includes(w),false,w);
 });
