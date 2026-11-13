@@ -38,6 +38,7 @@ import {liveOrderRow} from '../lib/owner-order-live.mjs';
 import {decisionContingency} from '../lib/decision-contingency.mjs';
 import {addSale,salesView} from '../lib/sales-feed.mjs';
 import {deliverPhoneAlerts} from '../lib/phone-alerts.mjs';
+import {runVigia,vigiaPolicy,vigiaStatus} from '../lib/funnel-watch.mjs';
 import {buildDeepBase,deepBaseSignature,buildDeepView,simRow,simRowsView,autonomyCompanion,deepViewPolicy} from '../lib/autonomy-deep-view.mjs';
 // Modo Gestor, Phase 1 (docs/AUTONOMIA-V2-CONTRATO-2026-11-10.md, c): the learned plays only observe. Every call into the
 // runner is guarded (exports checked, try/catch): a missing or failing runner never affects the Sombra, the autonomy or
@@ -585,6 +586,25 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   await this.ctx.storage.put(out);
   await this.phoneAlerts(out['companion:all']).catch(()=>{});
  }
+ /**
+  * VIGIA (lib/funnel-watch.mjs): every 10 minutes, inside this pulse (no cron or daemon of its own), reads each configured
+  * project's funnel and posts to Discord. Read-only. Without DISCORD_VIGIA_WEBHOOK it still reads and keeps a preview in
+  * the status, sending nothing. One run at a time, so nothing is posted twice.
+  */
+ private vigiaBusy=false;
+ private async syncVigia(state:any){
+  if(!state||state.paused||this.vigiaBusy)return;
+  const prior=await this.ctx.storage.get<any>('vigia'),now=Date.now();
+  if(prior?.version===vigiaPolicy.version&&now-(Date.parse(prior.lastRunAt||'')||0)<vigiaPolicy.readMs)return;
+  this.vigiaBusy=true;
+  try{
+   const source=cloudMalvaClient(this.db());
+   const live=overlayMetaItems(this.liveItems||[],await this.ctx.storage.get<any>('metaLive'),{now});
+   const projects=Object.entries<any>(state.config||{}).map(([id,c])=>({id,name:typeof c?.projectName==='string'&&c.projectName?c.projectName:id}));
+   const r=await runVigia({projects,read:(tool:string,args:any)=>source.read(tool,args),fetchFn:fetch,liveItems:live as never[],prior,webhook:this.env.DISCORD_VIGIA_WEBHOOK||null,now});
+   await this.ctx.storage.put('vigia',r.state);
+  }finally{this.vigiaBusy=false;}
+ }
  /** iPhone alerts (lib/phone-alerts.mjs): off without both Pushover secrets; one run at a time so nothing rings twice. */
  private phoneBusy=false;
  private async phoneAlerts(summary:any){
@@ -711,7 +731,7 @@ export class BunkerCloudExecutor extends DurableObject<any>{
   // Read-only: what the autonomy module did or held back (lib/autonomy-grant.mjs). The permissions live in the central.
   if(input.action==='autonomy'){const shadow=await this.ctx.storage.get<any>('shadowStatus');return Response.json({shadowProjects:Array.isArray(shadow?.projects)?shadow.projects:null,shadowAt:shadow?.at||null,status:await this.ctx.storage.get<any>('autonomyStatus')||null,log:(await this.ctx.storage.get<any[]>('autonomyLog')||[]).slice(0,100),asks:(await this.ctx.storage.get<any[]>('autonomyAsks')||[]).slice(0,40)});}
   if(input.action==='attribution'){const list=await this.ctx.storage.list<any>({prefix:'attr:'}),status=await this.ctx.storage.get('attributionStatus');return Response.json({items:usableAttributions([...list.values()]).map(({actorInfo:_actorInfo,...item}:any)=>item),pending:[...list.values()].filter((v:any)=>!v.matched).length,status:status||null});}
-  if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse'),phone=await this.ctx.storage.get<any>('phoneAlerts');return Response.json({...runtime,phone:{configured:!!(this.env.PUSHOVER_TOKEN&&this.env.PUSHOVER_USER),primed:!!phone?.primed,sent:phone?.sent||0,lastSentAt:phone?.lastSentAt||null,lastError:phone?.lastError||null,lastErrorAt:phone?.lastErrorAt||null},attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true,
+  if(input.action==='status'){const attribution=await this.ctx.storage.get('attributionStatus'),watch=await this.ctx.storage.get<any>('watchStatus'),pulse=await this.ctx.storage.get<any>('syncPulse'),phone=await this.ctx.storage.get<any>('phoneAlerts'),vigia=vigiaStatus(await this.ctx.storage.get<any>('vigia'));return Response.json({...runtime,vigia,phone:{configured:!!(this.env.PUSHOVER_TOKEN&&this.env.PUSHOVER_USER),primed:!!phone?.primed,sent:phone?.sent||0,lastSentAt:phone?.lastSentAt||null,lastError:phone?.lastError||null,lastErrorAt:phone?.lastErrorAt||null},attribution:attribution||null,watch:watch?{...watch,pulseVersion:pulse?.version??0,pulseAt:pulse?.at??null}:null,running:this.running,host:'cloudflare',model:CLOUD_MODEL,modelLabel:cloudModelPolicy(cloudProductionModelPolicy).label,paused:this.centralView?.paused??null,cadence:this.centralView?.cadence??null,controlReadAt:this.centralView?.at||null,independentOfDesktop:true,
    // Which central format this running code reads and writes (two-step rollout of the journal segments, lib/history-storage.mjs).
    storageFormat:{journalReader:journalStorage.version,journalWriter:journalStorage.write}});}
   if(input.action==='check'){
@@ -792,6 +812,9 @@ export class BunkerCloudExecutor extends DurableObject<any>{
    await lane();
    // The live Meta read is optional: a failure keeps the last read and never affects the executor.
    if(liveState&&(await this.setting()).enabled)await this.syncMetaLive(liveState).catch(()=>{});
+   // VIGIA is optional: a failure keeps its last state and never affects the executor.
+   await lane();
+   if(liveState&&(await this.setting()).enabled)await this.syncVigia(liveState).catch(()=>{});
    // Shadow mode is observation only: a failure is recorded and never affects the executor or the notch.
    const shadow=liveState?await this.queueShadow(liveState).catch(async(e:any)=>{await this.ctx.storage.put('shadowStatus',{at:new Date().toISOString(),day:shadowLocalDay(Date.now()),failed:true,code:/^[A-Z][A-Z0-9_]{0,59}$/.test(e?.code||'')?e.code:'SHADOW_FAILED'});return [];}):[];
    // The first-24h board is a reading aid: a failure keeps the last board and never affects the executor.

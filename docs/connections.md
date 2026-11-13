@@ -128,3 +128,23 @@ Configuração, feita pelo dono (o valor só é digitado no prompt oculto do wra
 1. Instalar o app Pushover no iPhone e entrar; a "User Key" aparece na tela inicial de pushover.net.
 2. Em pushover.net › "Create an Application/API Token", criar a aplicação "Bunker" e copiar o "API Token".
 3. Na pasta do projeto: `npx wrangler secret put PUSHOVER_TOKEN --name bunker-traffic` e depois `npx wrangler secret put PUSHOVER_USER --name bunker-traffic`. Cada segredo cria uma versão nova do Worker: siga o protocolo de publicador único.
+
+## VIGIA: o funil vigiado no Discord (13/11/2026)
+
+Pedido do dono (slide "VIGIA: o funil vigiado 24 horas"): um bot no canal `#alertas-funil` que avisa quando um projeto fica sem venda e diz o que já conferiu. Decisões dele em 13/11: 3 h sem venda para todos os projetos, sem horário de silêncio e divergência vTurb × checkout a partir de 3 vendas. Código: `lib/funnel-watch.mjs`, testes em `tests/funnel-watch.test.mjs`.
+
+- Roda dentro do pulso que o executor já faz (`syncVigia`, logo depois da leitura Meta ao vivo), a cada 10 minutos. Não existe cron, daemon ou agendamento novo.
+- Para cada projeto configurado (Gabe, John, Leandro, Murilo, Nico, Ronald; Kwai fora), lê pela ponte `malva-mcp`: `tracking_orders` (última venda aprovada e aprovadas hoje), `tracking_checkout_integrations` (último aviso que o webhook de cada checkout ativo recebeu), `tracking_videos` (conversões do vTurb hoje) e `tracking_pages` (visitantes e checkouts iniciados hoje, e as páginas que mandam gente ao checkout). O gasto de hoje vem da leitura ao vivo que o executor já faz (campanhas de aquecimento e engajamento ficam fora).
+- **Sem venda há X h:** sem venda aprovada há 3 h ou mais **e** o gasto subiu na última hora. Mostra as três conferências do slide: página no ar (GET em até 3 páginas da frente do funil; 401/403/429 e desafio da Cloudflare contam como "não conferível", nunca como fora do ar), checkout abrindo (checkouts iniciados na janela) e tráfego rodando. A última linha aponta a primeira falha: página, webhook calado com checkout aberto, ninguém chegando ao checkout, ou "funil de pé". Repete a cada 3 h do mesmo período sem venda. Quando volta a vender, avisa "voltou a vender".
+- **Página fora do ar:** uma página da frente do funil falha (404, 410, 5xx, rede ou tempo esgotado) em duas leituras seguidas. Uma vez por página e dia; avisa quando volta.
+- **As vendas não batem:** o vTurb marcou hoje 3 ou mais conversões do que o checkout aprovou. Avisa de novo a cada 3 de diferença a mais no mesmo dia.
+- Leitura que falha fica no status do projeto e nunca vira "sem venda". Ausência continua N/D.
+- Só leitura e aviso: nunca pausa, ativa, mexe em orçamento, propõe ou aprova. Não lê a central para decidir nada nem toca na Meta.
+- Dados do comprador não saem do Supabase: a ponte (`scrubRead` em `lib/cloud-malva.mjs`, mesma cópia na Edge Function) devolve de cada venda só situação, horários, valor, moeda, checkout e produto, e tira origens e cursor. Das integrações de checkout tira os endereços de webhook e postback.
+- O texto (projeto, páginas, números) passa pelos servidores do Discord. As menções estão desligadas, então um nome de campanha nunca chama `@everyone`.
+- Sem o segredo `DISCORD_VIGIA_WEBHOOK` o VIGIA lê do mesmo jeito e mostra o que enviaria, mas não envia nada. Conferência: `GET /api/executor` (ou o status MCP) devolve `vigia` com `configured`, `lastRunAt`, `sent`, `lastSentAt`, `lastError`, `pending`, `preview` (o que enviaria agora), `errors` por projeto e `projects` (última venda, gasto de hoje, páginas), sem o endereço do webhook. Envia no máximo 6 mensagens por leitura; 429/5xx/rede ficam para a leitura seguinte; outra recusa 4xx (webhook apagado) não é repetida e fica em `lastError`.
+
+Configuração, feita pelo dono (o endereço só é colado no prompt oculto do wrangler, nunca no chat):
+1. No Discord, no canal `#alertas-funil`: Editar canal › Integrações › Webhooks › Novo webhook. Nome "VIGIA", copiar a URL do webhook.
+2. Na pasta do projeto: `npx wrangler secret put DISCORD_VIGIA_WEBHOOK --name bunker-traffic` e colar a URL quando ele pedir. Cadastrar o segredo cria uma versão nova do Worker: siga o protocolo de publicador único.
+3. Em até 10 minutos chega "VIGIA ligado" no canal. Esse é o alerta de teste; os avisos reais começam na mesma leitura.
