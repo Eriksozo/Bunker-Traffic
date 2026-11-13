@@ -82,6 +82,9 @@ test('the first failed check leads the hint: page, then a silent webhook, then n
  const flat=[{...history[0],checkouts:40},{...history[1],checkouts:40}];
  const nobody=evaluateProject({project,sample,history:flat,orders,checkout:{integrations:1,lastEventAt:iso(NOW-10*60000)},pages:ok,now:NOW});
  assert.match(nobody.signals[0].lines[0],/Checkout abrindo ✗/);assert.match(nobody.signals[0].lines.at(-1),/ninguém iniciou checkout/);
+ // 13/11, Gabe: the pages' counter flat, but the checkout delivered a Pix order in the window: the checkout opened.
+ const pix=evaluateProject({project,sample:{...sample,orders:10},history:flat.map(h=>({...h,orders:9})),orders,checkout:{integrations:1,lastEventAt:iso(NOW-10*60000)},pages:ok,now:NOW});
+ assert.match(pix.signals[0].lines[0],/Checkout abrindo ✓/);assert.match(pix.signals[0].lines[1],/1 pedido sem pagamento desde/);
 });
 
 test('"as vendas não batem" from 3 more vTurb conversions than checkout orders of any status; grows in steps of 3', ()=>{
