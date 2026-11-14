@@ -10,7 +10,7 @@ import {storage} from '@/lib/storage';
 import {campaignWatchPlan} from '@/lib/campaign-watch.mjs';
 import {contingencyObservation} from '@/lib/decision-contingency.mjs';
 import {updateCreativeState} from '@/lib/creative-state';
-import {agentAutonomy,collaborationRead} from '@/lib/autonomy';
+import {agentAutonomyWithArchive,collaborationRead} from '@/lib/autonomy';
 import {autonomyTools} from '@/lib/autonomy-tools';
 import {readDecisionExamples} from '@/lib/decision-learning-view.mjs';
 import {updateLiveState,assertCurrentExecutionContingency} from '@/lib/live-state';
@@ -79,7 +79,9 @@ export async function POST(req:Request){let id:any=null;const json=(x:any)=>Resp
    result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...await readSuggestionHistory(args.projectId,args.limit??10,args.cursor||null)})}]};
   }
   else if(args.action==='read'||args.action==='learningRead'||args.action==='decisionRead')result={content:[{type:'text',text:JSON.stringify({revision:cur.revision,...(args.action==='decisionRead'?readDecisionExamples(cur.state,args):collaborationRead(cur.state,args))})}]};
-  else{if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');await assertCurrentExecutionContingency(cur.state,args);const record=agentAutonomy(cur.state,args);const saved=await commit(cur.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({ok:true,revision:saved.revision,record})}]};}
+  else{if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');await assertCurrentExecutionContingency(cur.state,args);
+   // An outcome action may cite archived measurements: only those of its exact windows are read (lib/measurement-archive.mjs).
+   const record=await agentAutonomyWithArchive(cur.state,args,(keys:string[])=>keys.length?storage().prepare('SELECT key,payload FROM bunker_records WHERE key IN ('+keys.map(()=>'?').join(',')+')').bind(...keys).all<any>().then((r:any)=>r.results||[]):Promise.resolve([]));const saved=await commit(cur.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({ok:true,revision:saved.revision,record})}]};}
  }
  else if(name==='bunker_iniciar_rodada'||(name==='bunker_atualizar_rodada'&&a.status==='Em análise'&&(a.id?.startsWith('project:')||a.id==='projects:due'))){if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');const c=reserveRequest(cur.state,a);const saved=await commit(c.state,cur.revision);result={content:[{type:'text',text:JSON.stringify({revision:saved.revision,...('jobs' in c?{jobs:c.jobs}:{job:c.job})})}]};}
  else{if(a.revision!==cur.revision)throw new Error('CONFLICT: releia o estado.');const op=name==='bunker_importar_leituras'?'import':name==='bunker_atualizar_rodada'?'jobStatus':name==='bunker_responder'?'answer':null;if(!op)throw new Error('Ferramenta não permitida.');const s=await commit(apply(cur.state,{...a,op}),cur.revision);result={content:[{type:'text',text:JSON.stringify({ok:true,revision:s.revision,updatedAt:s.updatedAt})}]};}}

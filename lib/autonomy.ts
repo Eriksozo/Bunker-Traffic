@@ -1,4 +1,5 @@
 import {requestReviewBatch} from './review-pipeline.mjs';
+import {loadMeasurementsForAction,releaseLoadedMeasurements} from './measurement-archive.mjs';
 import {recordIncident} from './campaign-incidents.mjs';
 import {invalidateIncidentContext} from './campaign-reassessment.mjs';
 import {apply} from './state';
@@ -53,6 +54,18 @@ export function collaborationRead(state:any,args:any={}){
  }):undefined;
  const execution=executionPlan(state);
  return {workflow,execution,learning:learningCyclePlan(state,round?.project),autonomous:autonomousWorkPlan(state,{collaboration:workflow,execution}),decisions:decisionLearningSummary(state,round?.project),knowledge:Object.keys(state.config).map(project=>readKnowledgePlan(state,project)),...(blocked?{evidenceBlocked:blocked}:{}),...(evidence?{evidence}:{} )};
+}
+
+/**
+ * The MCP entry point of `agentAutonomy`. For an outcome action it first loads, from the cold archive of the same read,
+ * only the archived measurements of the action's exact windows (lib/measurement-archive.mjs); afterwards it keeps loaded
+ * only those a pin now needs. Every other action is unchanged. `fetch(keys)` → rows {key,payload}.
+ */
+export async function agentAutonomyWithArchive(state:any,args:any,fetch:(keys:string[])=>Promise<any[]>){
+ const added=await loadMeasurementsForAction(state,args,fetch);
+ const record=agentAutonomy(state,args);
+ releaseLoadedMeasurements(state,added);
+ return record;
 }
 
 export function agentAutonomy(state:any,args:any){

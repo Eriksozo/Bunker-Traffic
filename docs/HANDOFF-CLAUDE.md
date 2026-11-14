@@ -1459,3 +1459,21 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - confirmar a próxima coleta da agenda de Gabe, Murilo, Nico e John depois do deploy;
   - John e Leandro também falham por `SOURCE_STALE_OR_IDENTITY` (fonte), o que não é tratado aqui;
   - risco do mesmo tipo: `campaignChanges` tem teto de 2.000 (reprodução do Codex); a contagem real não foi lida nesta rodada.
+- **Publicado:** `0a3309c` → Cloudflare `ba23308c-9c82-467a-bbf1-87c439b57705` (16:23:14 UTC), `/health` 200.
+
+### Microetapa final de compatibilidade (registro escrito às 2026-11-14 16:27:31 UTC por `date -u`)
+
+- **Revisão do Codex antes de publicar, dois achados reproduzidos:**
+  1. Resultado já salvo a partir de snapshots não grava `measurementId`. Depois que os snapshots rolam e o arquivo frio leva as medições, `assessLearningOutcome` passava de verificado para "falta leitura". **Correção:** os lados de cada `knowledgeOutcome` ficam fixados de forma exata (projeto, objeto, conta, janela, a leitura citada por `measurementReadAt` e as métricas), sem fixação ampla por projeto. Com a reprodução do revisor (`/tmp/bunker-cold-outcome-repro.mjs`), o resultado fica verificado e nada dele é arquivado.
+  2. A ação real `outcome` (MCP → `agentAutonomy`) não lia o arquivo; só o teste injetava as medições. **Correção:** `agentAutonomyWithArchive` (`lib/autonomy.ts`), chamada pela rota `app/mcp/route.ts`:
+     - antes de `outcome` ou `decisionHistoryOutcome`, carrega do arquivo indexado na mesma leitura só as medições das janelas exatas (projeto, conta, objeto, de/até);
+     - registro ausente ou alterado falha fechado, sem gravar nada;
+     - depois da ação, só ficam carregadas as que algum pino passou a exigir, como as citadas pelo resultado gravado;
+     - as outras ações não leem o arquivo;
+     - o leitor sob demanda devolve cada id uma vez (vale o segmento mais novo).
+- **Testes:** `tests/measurement-archive-actions.test.mjs` (novo, 3 testes). Usa a ação de produção empacotada com esbuild: lado fixado exato, ação `outcome` sobre medições arquivadas (só as janelas pedidas, pino depois de gravar, ausente ou alterado falha fechado) e busca estreita do `decisionHistoryOutcome`. Bateria 1758/1758, typecheck ok e build completo.
+- **Outros consumidores conferidos:**
+  - revalidação do `learning-cycle` e `processAutonomousLearning`: cobertos pelos pinos de resultado e de aplicação recente;
+  - recall do `external-learning`: coberto pelo pino das janelas dos resultados externos.
+- **Não testado:** a ação `decisionHistoryOutcome` completa, ponta a ponta, sobre medições frias; só a busca estreita dela foi testada.
+- **Site legado:** a fonte real (`0cbe2fe`) é anterior ao diário e não foi executada nem alterada nesta rodada. O campo novo é aditivo.
