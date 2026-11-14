@@ -1384,3 +1384,31 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
 - **Relógios da Edge e do banco:** se forem diferentes, um recibo gravado perto do prazo pode ir para verificação sem envio. É conservador; acompanhar.
 - **App do Mac:** o instalado era `eaac3c5`. Esta publicação reinstala com a frescura da origem na aba Dias, feita em `9de2511`.
 - **Navegador:** o painel Autonomia (aviso de leitura) e a confirmação do Escritório ainda não foram vistos num navegador.
+
+## Persistência das coletas: diagnóstico seguro da etapa `persist` (registro escrito às 2026-11-14 15:47:38 UTC por `date -u`)
+
+- **Pedido:** Erik, rodada delimitada coordenada pelo Codex.
+- **Leitura real às 15:38Z, revisão 12183:**
+  - Gabe, Murilo e Nico: `CLOUD_COLLECTION_FAILED` na etapa `persist`;
+  - John e Leandro: `SOURCE_STALE_OR_IDENTITY` na etapa `campaigns`;
+  - Ronald: concluído às 15:37Z.
+- **Por que não dava para diagnosticar:** `collectionFailure` só guardava `error.code`. Um `Error` comum lançado na gravação vira o genérico `CLOUD_COLLECTION_FAILED`. Erros com código (`STORAGE_LIMIT`, `STORAGE_INTEGRITY`, prazo da reserva expirado, `CONFLICT`) já saíam com nome próprio. Por isso o genérico em `persist` só pode vir de um `Error` sem código. Os candidatos no código:
+  - a validação do pacote (`validateAnalysisBundle`: base anterior à salva, sincronização no futuro, identidade indisponível, escopo, período);
+  - a conclusão da rodada (`updateRun`: leituras anteriores ao início, reserva expirada, rodada substituída);
+  - o codec de leituras (`snapshot-storage`: "Leituras armazenadas inválidas: …"), tanto ao reler a central quanto ao gravar.
+- **Medição real, somente leitura:** o pacote de leituras gravado tem 9,84 MB brutos, de um limite de 16 MB, e 1,13 M caracteres comprimidos, de um limite de 1,75 M. Ao todo, 72 leituras e 13.715 linhas. O codec não está perto do teto com o tamanho atual; limite não alterado.
+- **Mudança, só diagnóstico:**
+  - `lib/cloud-engine.mjs` dá nome a cada subetapa da gravação antes de executá-la: `read`, `reservation`, `priority`, `history`, `import`, `learning`, `research`, `conclude`, `commit`.
+  - `lib/cloud-failure-diagnostics.mjs` acrescenta:
+    - `step`, de uma lista permitida;
+    - `cause` e `causeDetail`: códigos estáticos reconhecidos pelo início fixo das mensagens que o próprio Bunker lança. Texto desconhecido vira `unclassified`;
+    - `errorKind`, também de uma lista fixa (Error, TypeError, RangeError…).
+  - A nota da rodada falha passa a dizer "etapa persist · subetapa X · causa Y".
+  - Nenhuma mensagem, valor, nome ou chave é guardado. Nenhuma regra, limite, reserva, cadência ou ação mudou.
+- **Testes:** `tests/cloud-persist-diagnostics.test.mjs` (novo).
+  - Cada mensagem conhecida vira a causa certa; os validadores reais alimentam causas reconhecidas, sem desvio de texto.
+  - O motor real, com falha em `read`, `import`, `conclude`, `commit` e com um TypeError desconhecido, dá a subetapa e a causa certas, mantém os dados antigos e marca a rodada como falha.
+  - Erro com segredo (`mck_`, `sb_secret_`, JWT, nome de campanha, valor, conta) não vaza no diário, na nota, no erro lançado nem no status de execução.
+  - Atualizados: formato exato em `cloud-failure-diagnostics.test.mjs`; regex de código-fonte em `shared-view-readonly.test.mjs`, que continua exigindo a liberação das cópias antes da gravação.
+  - Bateria 1746/1746, typecheck ok e build completo.
+- **Próximo passo:** observar a próxima coleta da agenda de Gabe, Murilo e Nico (lendo `cloudCollectionFailures` da central, somente leitura). Corrigir só a causa confirmada, com teste, em no máximo uma publicação a mais. John e Leandro (`SOURCE_STALE_OR_IDENTITY`) ficam pendentes; a proteção não foi relaxada.

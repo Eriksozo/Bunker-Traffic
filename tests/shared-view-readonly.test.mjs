@@ -64,7 +64,7 @@ test('The engine releases its first copy before rereading the central (never two
  const src=fs.readFileSync(new URL('../lib/cloud-engine.mjs',import.meta.url),'utf8');
  assert.match(src,/let s=\(await read\(\)\)\.state;const work=cloudNext\(s,/);
  assert.match(src,/phase='reservation';s=null;let collectionState=\(await read\(\)\)\.state;/);
- assert.match(src,/phase='persist';collectionState=null;draft=null;\n\s*const committed=await write\(/,'the collection copies are released before its commit');
+ assert.match(src,/phase='persist';collectionState=null;draft=null;step='read';\n\s*const committed=await write\(/,'the collection copies are released before its commit');
  assert.match(src,/s=null;const claim=await write\(st=>claimCollaboration\(st,claimArgs,now\(\)\)\);let latest=\(await read\(\)\)\.state;/);
  // During the model wait only the readings, rounds and messages of the same read are kept (what the answer is checked
  // against); the full copy is released before runCloudAnalyst and is never read again in this unit.
