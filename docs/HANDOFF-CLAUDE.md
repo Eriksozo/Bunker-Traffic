@@ -1412,3 +1412,50 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - Atualizados: formato exato em `cloud-failure-diagnostics.test.mjs`; regex de código-fonte em `shared-view-readonly.test.mjs`, que continua exigindo a liberação das cópias antes da gravação.
   - Bateria 1746/1746, typecheck ok e build completo.
 - **Próximo passo:** observar a próxima coleta da agenda de Gabe, Murilo e Nico (lendo `cloudCollectionFailures` da central, somente leitura). Corrigir só a causa confirmada, com teste, em no máximo uma publicação a mais. John e Leandro (`SOURCE_STALE_OR_IDENTITY`) ficam pendentes; a proteção não foi relaxada.
+
+## Persistência: causa confirmada (teto de 1.200 medições) e arquivo frio sem perda (registro escrito às 2026-11-14 16:20:38 UTC por `date -u`)
+
+- **Evidência real:**
+  - Primeira falha instrumentada (John, 15:57:35Z, job `70eb6b1e…`): `persist`, subetapa `commit`, causa `unclassified`, `Error`.
+  - Leitura de metadados pelo Codex: `knowledgeMeasurements` com exatamente 1.200 itens.
+  - O Codex reproduziu com motor, validação, retenção e commit reais em SQLite na memória: 1.199+1 conclui; 1.200+1 falha no commit; 1.200 sem alvo novo conclui (o caso do Ronald).
+- **Medição real minha, só contagens:**
+  - 1.200 medições somando 1,24 MB, cerca de 1 KB cada, capturadas de 03/11 a 12/11;
+  - só 163 janelas distintas e 269 pares distintos de janela e métricas, ou seja, 931 eram releituras idênticas;
+  - por projeto: John 732, Gabe 184, Nico 151, Leandro 68, Murilo 65.
+- **Correção (após a revisão do Codex, que rejeitou o diário carregado inteiro):**
+  - **Releitura idêntica:** a mesma janela, conta, objeto e métricas da leitura mais recente vira um item de `reads: [{fetchedAt, lastSyncAt}]` na medição existente (máximo de 24), não uma evidência nova. Ids, chaves, primeira busca e métricas nunca mudam. Métricas diferentes, outra conta ou outra janela abrem medição nova.
+  - **Fim do teto global:** a retenção não recusa nem descarta nada.
+  - **Conjunto carregado limitado** (`lib/measurement-archive.mjs`, no commit): até 200 medições por projeto e nada com mais de 14 dias. O que é fixado nunca sai:
+    - janela ainda nos snapshots;
+    - medição citada por resultado, aprendizado ou tentativa;
+    - dias a até 7 dias de uma aplicação confirmada nos últimos 30 dias;
+    - janelas citadas por resultado externo.
+  - **Arquivo frio:** o resto vai inteiro para registros selados `history-measurements:<sha256>`, no formato gzip e endereçamento por conteúdo do `history-storage`, gravados na mesma transação do CAS. O índice fica em `knowledgeMeasurementArchive.segments`: projeto, período, objetos e cortes de ações externas.
+  - **Leitura sob demanda:** `loadArchivedMeasurements` devolve as medições exatas e falha fechado (`STORAGE_INTEGRITY`) se um registro faltar ou estiver alterado. A regra de um corte por lado das ações externas também conta os cortes arquivados.
+  - **Leitores:**
+    - `outcomeWindow` e `decision-history-outcomes` aceitam a leitura exata citada, seja a primeira busca ou uma de `reads`;
+    - `learning-outcomes` usa a leitura mais nova e preserva `lastSyncAt: null` quando a releitura não informa a sincronização (bug apontado pelo Codex, corrigido).
+  - **Diagnóstico:** novas causas estáticas `knowledge-measurement-limit` e `knowledge-measurement-diverges`.
+- **Compatibilidade, sem precisar publicar o leitor antes:**
+  - leitores antigos (Worker em transição, Site privado, Edge) ignoram o campo novo e os registros novos; nenhum nome de diário novo;
+  - um escritor antigo não recria medição arquivada, porque a janela dela já não está nos snapshots;
+  - a retenção só apaga `snapshots:%`; o diário existente não mudou.
+- **Testes:**
+  - `tests/knowledge-measurement-archive.test.mjs` (novo, 9 testes):
+    - distribuição real de 1.200 mais uma releitura idêntica: conclui, as 1.200 voltam exatas e o conjunto carregado fica limitado;
+    - 1.200 no mesmo projeto mais métricas novas: conclui, 1.201;
+    - duas contas com o mesmo id;
+    - idempotência da retenção e do arquivo, e CAS real perdido sem nenhum registro gravado;
+    - memória no pior caso (6 projetos × 1.200 × 24 releituras): o carregado fica abaixo de 1/5 do total e dentro de 6×200×3 KB;
+    - fixação;
+    - carga sob demanda mais revalidação de resultado antigo por `outcomeWindow`, inclusive a releitura, com falha fechada para registro ausente ou alterado;
+    - corte externo arquivado;
+    - `lastSyncAt` nulo.
+  - Teste antigo de capacidade trocado para "nunca recusa".
+  - Bateria 1755/1755, typecheck ok e build completo.
+  - Checagem privada com a base real (`outputs/`, fora do Git, digest `f2ad24e2…` conferido): as 1.200 voltam exatas; 668 ficam carregadas e 532 vão para 4 registros (42 KB comprimidos, índice de 7 KB).
+- **Pendências:**
+  - confirmar a próxima coleta da agenda de Gabe, Murilo, Nico e John depois do deploy;
+  - John e Leandro também falham por `SOURCE_STALE_OR_IDENTITY` (fonte), o que não é tratado aqui;
+  - risco do mesmo tipo: `campaignChanges` tem teto de 2.000 (reprodução do Codex); a contagem real não foi lida nesta rodada.

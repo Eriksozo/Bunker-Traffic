@@ -29,6 +29,9 @@ test('failureCause: each local message the Bunker throws maps to a static cause,
   ['Leituras armazenadas inválidas: tamanho das leituras acima do limite.','snapshot-codec','raw-limit'],
   ['Leituras armazenadas inválidas: quantidade de linhas.','snapshot-codec','row-count'],
   ['Limite de armazenamento da central atingido. Nenhum dado foi descartado.','storage-limit','central'],
+  ['Limite de 1200 medições atingido; nenhuma evidência necessária foi descartada. Exporte o arquivo antes de continuar.','knowledge-measurement-limit'],
+  ['Limite de medições do projeto atingido; nenhuma evidência necessária foi descartada. Exporte o arquivo antes de continuar.','knowledge-measurement-limit'],
+  ['Medição já preservada diverge da mesma leitura; não substituir evidência.','knowledge-measurement-diverges'],
  ];
  // The CAS loss is exactly "CONFLICT" (lib/persistence.mjs).
  assert.equal(failureCause(Error('CONFLICT')).cause,'revision-conflict');

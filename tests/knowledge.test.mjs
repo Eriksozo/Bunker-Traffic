@@ -93,12 +93,14 @@ test('measurement retention is exact-once, closed-window, scoped, and restricted
  const pending=outcomeSetup();pending.s.decisions[0].status='Proposta';retainKnowledgeMeasurements(pending.s,now);assert.equal(pending.s.knowledgeMeasurements.length,0);
 });
 
-test('measurement capacity refuses new readings without evicting existing action evidence',()=>{
+test('measurement retention never refuses nor evicts: past 1,200 a new reading is kept (the commit archives, lib/measurement-archive)',()=>{
  const s=state();s.proposals=[{id:'approved',project:'john',status:'Aprovada',payload:{objectId:'one',adAccountId:'account',level:'campaign'}}];
  const day=86400000,start=Date.parse('2020-01-01T00:00:00.000Z');
- for(let i=0;i<knowledgeLimits.measurements;i++)s.snapshots.push({projectId:'john',source:'Malva MCP',complete:true,level:'campaign',from:new Date(start+i*day).toISOString(),to:new Date(start+(i+1)*day).toISOString(),fetchedAt:now,rows:[{externalId:'one',adAccountId:'account',spend:i}]});
+ for(let i=0;i<1200;i++)s.snapshots.push({projectId:'john',source:'Malva MCP',complete:true,level:'campaign',from:new Date(start+i*day).toISOString(),to:new Date(start+(i+1)*day).toISOString(),fetchedAt:now,rows:[{externalId:'one',adAccountId:'account',spend:i}]});
  retainKnowledgeMeasurements(s,now);assert.equal(s.knowledgeMeasurements.length,1200);const first=structuredClone(s.knowledgeMeasurements[0]);
- s.snapshots.push({...s.snapshots[0],from:'2025-01-01T00:00:00.000Z',to:'2025-01-02T00:00:00.000Z'});assert.throws(()=>retainKnowledgeMeasurements(s,now),/1200 medições/);assert.equal(s.knowledgeMeasurements.length,1200);assert.deepEqual(s.knowledgeMeasurements[0],first);
+ s.snapshots.push({...s.snapshots[0],from:'2025-01-01T00:00:00.000Z',to:'2025-01-02T00:00:00.000Z'});retainKnowledgeMeasurements(s,now);
+ assert.equal(s.knowledgeMeasurements.length,1201);assert.deepEqual(s.knowledgeMeasurements[0],first);
+ assert.ok(knowledgeLimits.hotMeasurementsPerProject>0&&knowledgeLimits.readsPerMeasurement>0);
 });
 
 test('External history retains only a closed daily cut on each side, never action-day or hourly clones',()=>{
