@@ -1477,3 +1477,29 @@ Estudo rastreável registrado no aprendizado privado do John, com pausas e contr
   - recall do `external-learning`: coberto pelo pino das janelas dos resultados externos.
 - **Não testado:** a ação `decisionHistoryOutcome` completa, ponta a ponta, sobre medições frias; só a busca estreita dela foi testada.
 - **Site legado:** a fonte real (`0cbe2fe`) é anterior ao diário e não foi executada nem alterada nesta rodada. O campo novo é aditivo.
+
+## Central em 86%: resultados medidos fora da central e válvula automática (registro escrito às 2026-11-16 10:45:45 UTC por `date -u`)
+
+- **Relato do dono em 16/11:** o notch mostrou "Armazenamento central em 86% do limite: acima de 100% o Bunker recusa gravações" — "isso nunca pode acontecer, crie uma solução". O mesmo aviso já tinha aparecido em 09/11 (87%).
+- **Medição real, somente leitura (revisão 13608, 10:34Z):**
+  - central com 1.501.494 de 1.750.000 caracteres (85,8%);
+  - `decisionHistoryOutcomes` era 46% da central: 417 resultados medidos. A prova de cada um já ficava fora, mas o resumo de cada resultado continuava dentro, e só a lista `otherChangeKeys` dele somava 26% da central;
+  - crescimento: de 318 para 417 resultados entre 12/11 e 16/11, cerca de 25 por dia, ou 2,5 pontos percentuais por dia. Todo o resto da central ficou praticamente parado nesses dias.
+- **Correção 1, a causa:** `decisionHistoryOutcomes` virou um diário como os outros (`journalStorage.per`, 40 por segmento). Na central fica só o índice dos segmentos. A prova de cada resultado continua no próprio registro `history-outcome:`. A leitura busca primeiro os segmentos e depois as provas, numa segunda consulta. A lista só cresce, então cada resultado novo regrava apenas o último segmento.
+- **Correção 2, a garantia:** válvula `overflowStorage` (`lib/history-storage.mjs`, aplicada no commit de `lib/persistence.mjs`).
+  - **Como age:** quando a central passaria de 60% do limite, a gravação move inteiro, para segmentos selados, o maior campo da lista permitida, e repete até voltar abaixo de 60%. Um campo movido não volta para dentro da central.
+  - **Lista permitida:** `campaignReviewCoverage`, `cloudAttemptFailures`, `externalLearningChecks`, `cloudResearch`, `knowledgeMeasurements`, `knowledge`, `agentEpisodes`, `ownerChoices`, `learningReviews`, `collaborationMessages`, `collaborationRounds`, `cardSuggestions`, `cloudCollectionFailures`, `events` e `jobs`. Os mapas guardam a ordem das chaves.
+  - **O que nunca sai da central:** o que o Edge lê para o envio (execuções, propostas, `paused`, autonomia), a configuração e a cadência.
+  - **Acima do limite:** a válvula também age quando o codec da central recusaria a gravação por tamanho. Só se nada da lista resolver é que a recusa antiga (`STORAGE_LIMIT`) vale, sem gravar nada.
+  - **Leituras:** a leitura leve (notch e painel) carrega os campos movidos; os resultados medidos ela não carrega, como nenhum leitor de exibição os usa (`tests/lean-view.test.mjs`). O diagnóstico mostra `storage.history.overflow`.
+- **Compatibilidade:** um leitor anterior a esta versão falha fechado (`STORAGE_INTEGRITY`, "diário desconhecido") e nunca lê esses campos como vazios. Rollback para antes deste commit para a coleta, e por isso foi registrado no `CLAUDE.md`. O Edge (`malva-mcp`) lê só o núcleo e não muda.
+- **Ensaio com a central real**, cópia dos 1.722 registros numa base SQLite em memória, fora do Git:
+  - o leitor novo devolve exatamente o mesmo estado que o leitor publicado;
+  - a gravação leva a central de 85,8% para 46,3%, com 11 registros novos em 0,5 s;
+  - o estado gravado é o mesmo da próxima leitura, e o estado lógico não muda;
+  - os 417 resultados voltam com a prova;
+  - a segunda gravação não escreve nada;
+  - o leitor antigo, diante da central nova, falha fechado;
+  - com 1,8 M caracteres extras simulados num campo da lista, a válvula moveu `campaignReviewCoverage` e a central ficou em 40,5% (gravação de 1,05 s).
+- **Testes:** `tests/central-overflow.test.mjs` (novo, 6 testes), mais os testes de armazenamento e de leitura leve ajustados ao diário. Bateria 1764/1764, typecheck ok e build completo.
+- **Margem:** depois da mudança, a parte da central que a válvula não pode mover fica perto de 11% do limite. Os resultados medidos deixam de pesar na central.

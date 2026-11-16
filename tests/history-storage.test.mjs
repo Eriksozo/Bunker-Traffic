@@ -17,12 +17,15 @@ test('Round trip is exact: ledger and measured-result evidence come back identic
  const logical={historyLearning:{version:1,scopes:{s:{a:1}},failures:{},changes:[change(1,P,1),change(2,Q,2,true),change(3,P,1,false,{key:'custom-key'}),change(4,P,0)]},decisionHistoryOutcomes:[outcome('o1'),{id:'legacy',classification:'x'}],other:{keep:true}};
  const db=store(),packed=await packHistoryState(logical,now);db.put(packed.archives);
  assert.equal(packed.state.historyLearning.changes,undefined,'the ledger left the central state');
- assert.equal(packed.state.decisionHistoryOutcomes[0].request,undefined);assert.ok(packed.state.decisionHistoryOutcomes[0].partsStorage.key.startsWith('history-outcome:'));
- assert.deepEqual(packed.state.decisionHistoryOutcomes[1],{id:'legacy',classification:'x'},'a result without evidence fields stays as it is');
+ // Measured results are a journal now (owner report of 16/11: central at 86%); their evidence keeps its own record.
+ assert.equal(packed.state.decisionHistoryOutcomes,undefined,'the results left the central state');
+ assert.equal(packed.state.journalStorage.journals.decisionHistoryOutcomes.length,1);
+ assert.equal(packed.archives.filter(a=>a.key.startsWith('history-outcome:')).length,1,'one evidence record: a result without evidence fields stays as it is');
  const back=await hydrateHistoryState(packed.state,db.fetch);
- const {historyStorage,...rest}=back;
- assert.equal(JSON.stringify(rest),JSON.stringify(canon(logical)),'byte-identical, ledger in canonical order, outcome keys in original order');
- assert.deepEqual(historyStorage.known.sort(),historyKeys(packed.state).sort());
+ const {historyStorage,...rest}=back,expected=canon(logical);
+ assert.deepEqual(Object.keys(rest).sort(),Object.keys(expected).sort());
+ for(const k of Object.keys(expected))assert.equal(JSON.stringify(rest[k]),JSON.stringify(expected[k]),'byte-identical '+k+': ledger in canonical order, outcome keys in original order');
+ assert.deepEqual(historyStorage.known,[...historyKeys(packed.state),...packed.archives.filter(a=>a.key.startsWith('history-outcome:')).map(a=>a.key)].sort());
 });
 
 test('Unchanged records are not resent; a new change writes only its own group', async () => {
@@ -56,12 +59,13 @@ test('A missing, altered or foreign record fails closed instead of reading as an
  const [ledgerKey]=packed.state.historyLearning.changesStorage.entries.map(e=>e.key);
  const missing=store();missing.put(packed.archives.filter(a=>a.key!==ledgerKey));
  await assert.rejects(hydrateHistoryState(packed.state,missing.fetch),e=>e.code==='STORAGE_INTEGRITY');
- const swappedRow=store();swappedRow.put(packed.archives);const outcomeKey=packed.state.decisionHistoryOutcomes[0].partsStorage.key;
+ const swappedRow=store();swappedRow.put(packed.archives);const outcomeKey=packed.archives.find(a=>a.key.startsWith('history-outcome:')).key;
  swappedRow.rows.set(ledgerKey,swappedRow.rows.get(outcomeKey));
  await assert.rejects(hydrateHistoryState(packed.state,swappedRow.fetch),e=>e.code==='STORAGE_INTEGRITY','a valid record under the wrong key');
  const corrupt=store();corrupt.put(packed.archives);const env=JSON.parse(corrupt.rows.get(ledgerKey));env.data=env.data.slice(0,-8)+'AAAAAAAA';corrupt.rows.set(ledgerKey,JSON.stringify(env));
  await assert.rejects(hydrateHistoryState(packed.state,corrupt.fetch),e=>e.code==='STORAGE_INTEGRITY','corrupted bytes');
- const swapped=structuredClone(packed.state);swapped.decisionHistoryOutcomes[0].id='other';
+ // A result whose id does not match its evidence: inline (an older writer) or journaled.
+ const inline=await packHistoryState(logical,now,{journals:false}),swapped=structuredClone(inline.state);db.put(inline.archives);swapped.decisionHistoryOutcomes[0].id='other';
  await assert.rejects(hydrateHistoryState(swapped,db.fetch),e=>e.code==='STORAGE_INTEGRITY');
  const badKey=structuredClone(packed.state);badKey.historyLearning.changesStorage.entries[0].key='central';
  await assert.rejects(hydrateHistoryState(badKey,db.fetch),e=>e.code==='STORAGE_INTEGRITY');

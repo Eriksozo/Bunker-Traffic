@@ -25,10 +25,10 @@ test('A lean read loads only the display journals and keeps every index',async()
  assert.equal(lean.historyLearning.changes,undefined,'the change ledger stays in its records');
  assert.ok(lean.historyLearning.changesStorage.entries.length>0,'its index stays');
  assert.deepEqual(lean.historyLearning.scopes,input.historyLearning.scopes);
- assert.equal(lean.decisionHistoryOutcomes[0].request,undefined,'outcome evidence stays in its record');
- assert.equal(lean.decisionHistoryOutcomes[0].summary,'s','outcome summary stays');
+ // Measured results are a journal (16/11): no display reader names them, so a lean read leaves them in their records.
+ assert.equal(lean.decisionHistoryOutcomes,undefined,'measured results stay in their journal');
  assert.equal(lean.decisionHistoryImports,undefined);assert.equal(lean.externalHistoryMeasurements,undefined);
- assert.deepEqual(Object.keys(lean.journalStorage.journals).sort(),['decisionHistoryImports','externalHistoryMeasurements']);
+ assert.deepEqual(Object.keys(lean.journalStorage.journals).sort(),['decisionHistoryImports','decisionHistoryOutcomes','externalHistoryMeasurements']);
  assert.ok(db.fetched.every(k=>k.startsWith('history-journal:')),'no ledger or outcome record fetched');
  assert.equal(lean.historyStorage.lean,true);
  assert.deepEqual(leanHistory.journals,['decisionHistory','campaignChanges']);
