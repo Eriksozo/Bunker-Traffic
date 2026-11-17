@@ -39,10 +39,31 @@ test('Coverage cannot fabricate zero rows, omit a declared gap, duplicate one or
 });
 
 test('Live refresh and analytical refresh share the unavailable identity queue and preserve it after historical windows expire',async()=>{
- const out=await collectCloudProject(source(),project,{now:()=>now,tracked:[missing]}),today=out.snapshots.find(s=>s.period==='today'&&s.level==='campaign'),state={snapshots:[today]},targets=trackedCloudCampaigns(state,project.id);assert.deepEqual(targets.map(t=>t.externalId),['active','missing']);assert.equal(trackedCloudCampaigns(state,'foreign').length,0);
+ const out=await collectCloudProject(source(),project,{now:()=>now,tracked:[missing]}),today=out.snapshots.find(s=>s.period==='today'&&s.level==='campaign'),state={snapshots:[today]},targets=trackedCloudCampaigns(state,project.id,now);assert.deepEqual(targets.map(t=>t.externalId),['active','missing']);assert.equal(trackedCloudCampaigns(state,'foreign').length,0);
  const live=await collectCloudProject(source(),project,{now:()=>now,tracked:targets,purpose:'live',periodsWanted:['today'],levels:['campaign']});assert.equal(live.snapshots[0].coverage.trackedComplete,false);assert.equal(live.snapshots[0].coverage.unavailableTracked[0].externalId,'missing');assert.equal(live.snapshots[0].rows.some(r=>r.externalId==='missing'),false);
 });
 test('A truncated account listing still searches the exact tracked name and restores the returned native row',async()=>{
  const base=source();let queries=0;const client={read:async(tool,a)=>{if(tool==='tracking_campaigns'&&a.preset==='custom'&&a.from===ranges.today.from&&a.status==='all'&&a.accountIds){const r=await base.read(tool,a);if(a.q){queries++;return {...r,rows:[{...missing,spend:0}]};}return {...r,truncated:{shown:r.rows.length,total:r.rows.length+1}};}return base.read(tool,a);}};
  const out=await collectCloudProject(client,project,{now:()=>now,tracked:[missing]});assert.equal(queries,1);assert.equal(base.details,0);const today=out.snapshots.find(s=>s.period==='today'&&s.level==='campaign');assert.equal(today.analysisScope.trackedComplete,true);assert.equal(today.rows.find(r=>r.externalId==='missing').spend,0);
+});
+
+// Owner report of 17/11/2026 ("o Bunk não fez quase nada hoje"): Gabe and John failed every round because tracked
+// campaigns belonged to ad accounts taken out of the project; Leandro because the queue only grew (674 campaigns).
+test('From a previous day only running or spending campaigns stay tracked; the same day keeps everything',async()=>{
+ const out=await collectCloudProject(source(),project,{now:()=>now,tracked:[missing]}),today=out.snapshots.find(s=>s.period==='today'&&s.level==='campaign');
+ const dead={...active,id:'55555555-5555-4555-8555-555555555555',externalId:'dead',status:'PAUSED',effectiveStatus:'PAUSED',spend:0},spent={...dead,id:'66666666-6666-4666-8666-666666666666',externalId:'spent',spend:3};
+ const state={snapshots:[{...today,rows:[...today.rows,dead,spent]}]};
+ assert.deepEqual(trackedCloudCampaigns(state,project.id,now).map(t=>t.externalId).sort(),['active','dead','missing','spent'],'same day: all of it, gaps included');
+ const tomorrow=now+86400000;
+ assert.deepEqual(trackedCloudCampaigns(state,project.id,tomorrow).map(t=>t.externalId).sort(),['active','spent'],'next day: only what ran or spent');
+ assert.throws(()=>trackedCloudCampaigns({snapshots:[{...today,rows:[...today.rows,{...active,id:dead.id}]}]},project.id,now),e=>e.code==='SOURCE_TRACKED_IDENTITY','a different id for the same campaign still fails');
+});
+test('A tracked campaign of an ad account taken out of the project leaves the queue instead of failing the collection',async()=>{
+ const gone={...missing,id:'77777777-7777-4777-8777-777777777777',externalId:'gone',adAccountId:'88888888-8888-4888-8888-888888888888'};
+ const client=source(),out=await collectCloudProject(client,project,{now:()=>now,tracked:[gone]}),today=out.snapshots.find(s=>s.period==='today'&&s.level==='campaign');
+ const plain=source(),without=await collectCloudProject(plain,project,{now:()=>now,tracked:[]}),base=without.snapshots.find(s=>s.period==='today'&&s.level==='campaign');
+ assert.equal(out.snapshots.length,12,'the collection finishes');assert.equal(client.details,plain.details,'nothing more is read for it');
+ assert.equal(today.rows.some(r=>r.externalId==='gone'),false);
+ assert.deepEqual(today.analysisScope,base.analysisScope,'same scope and count as if it had never been tracked');
+ await assert.rejects(collectCloudProject(source(),project,{now:()=>now,tracked:[{...gone,id:'not-a-uuid'}]}),e=>e.code==='SOURCE_TRACKED_IDENTITY','a malformed identity still fails');
 });
